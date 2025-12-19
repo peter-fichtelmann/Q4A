@@ -386,6 +386,14 @@ class GameLogicSystem:
             return False
         else:
             player.is_knocked_out = True
+            if player.has_ball: # drop ball if holding one
+                ball = self.state.get_ball(player.has_ball)
+                ball.holder_id = None
+                ball.velocity.x = 0
+                ball.velocity.y = 0
+                ball.possession = None
+                print(f"[GAME] Player {player.id} dropped ball {ball.id} due to knockout")
+                player.has_ball = None
             dodgeball.possession = None
             normal = Vector2(
                 dodgeball.position.x - player.position.x,
