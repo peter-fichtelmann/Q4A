@@ -12,23 +12,34 @@ class GameLogicSystem:
     """
     
     def __init__(self, game_state: GameState):
+        """
+        Initialize the game logic system with a reference to the game state.
+        
+        Sets up distance tracking structures used for efficient collision detection
+        and interaction checks between entities (players and balls).
+        
+        Args:
+            game_state: The GameState instance that this system will manage
+        """
         self.state = game_state
-        self.squared_distances = {}  # Placeholder for any precomputed distances if needed of the form {entity_id_1: [(entity_id_2: squared_distance)]} with sorted tuples
-        self.squared_distances_dicts = {} # Placeholder for any precomputed distances if needed of the dict nested form {entity_id_1: {entity_id_2: squared_distance}}
+        # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
+        self.squared_distances = {}
+        # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
+        self.squared_distances_dicts = {}
+        
+        # Initialize distance dictionaries for all entities
         entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
         for entity in entities_list:
             self.squared_distances_dicts[entity.id] = {}
     
     def update(self, dt: float) -> None:
         """
-        Update game logic each frame.
-        - Check collisions
-        - Update player knockouts
-        - Check for goals
-        - Validate all state changes
+        Update game logic each frame (SERVER-AUTHORITATIVE).
+        
+        This method executes the complete game state update in a carefully ordered sequence.
         
         Args:
-            dt: Delta game time in seconds
+            dt: Delta game time in seconds since last frame
         """
         # Update game time
         self.state.update_game_time(dt)
@@ -63,9 +74,21 @@ class GameLogicSystem:
 
 
     def update_player_velocities(self, dt: float) -> None:
+        """
+        Update player velocities based on their current direction and role.
+        
+        Handles special behaviors such as:
+        - Knocked out players moving toward their team's hoop for recovery
+        - Dead volleyball keeper movement toward midline
+        - Inbounding players pursuing the ball
+        - Standard acceleration/deceleration based on direction input
+        
+        Args:
+            dt: Delta game time (game time since last frame) in seconds
+        """
         volleyball = self.state.get_volleyball()
         for player in self.state.players.values():
-            # Update player velocity based on direction
+            # Update player velocity based on direction and current state
             
             if player.is_knocked_out:
                 player.direction.x = self.state.hoops[f'hoop_{player.team}_center'].position.x - player.position.x
@@ -112,8 +135,6 @@ class GameLogicSystem:
             # norm player.direction
             mag_dir = (player.direction.x**2 + player.direction.y**2) ** 0.5
             # on stick reset check before direction norm
-            if player.is_knocked_out:
-                print('mag dir', mag_dir, 'to hoop', player.radius + self.state.hoops[f'hoop_{player.team}_center'].thickness)
             if player.is_knocked_out and (mag_dir < player.radius + self.state.hoops[f'hoop_{player.team}_center'].thickness):
                 player.is_knocked_out = False
                 print(f"[GAME] Player {player.id} has recovered from knockout")
@@ -135,11 +156,24 @@ class GameLogicSystem:
             # print('speed', (player.velocity.x**2 + player.velocity.y**2) ** 0.5)
 
     def update_ball_velocities(self, dt: float) -> None:
+        """
+        Update ball velocities based on friction or holder's movement.
+        
+        If a ball is not held:
+            - Apply deceleration to simulate friction/air resistance
+        If a ball is held by a player:
+            - Ball velocity matches the holder's velocity exactly
+        
+        Args:
+            dt: Delta game time (game time since last frame) in seconds
+        """
         for ball in self.state.balls.values():
             if ball.holder_id is None:
+                # Free balls experience friction/deceleration
                 ball.velocity.x = ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt
                 ball.velocity.y = ball.velocity.y - ball.deacceleration_rate * ball.velocity.y * dt
             else:
+                # Held balls move with the player holding them
                 holder = self.state.get_player(ball.holder_id)
                 if holder:
                     ball.velocity.x = holder.velocity.x
@@ -174,28 +208,44 @@ class GameLogicSystem:
             ball.position.y += ball.velocity.y * dt
 
     def make_volleyball_alive(self) -> None:
+        """
+        Make the dead volleyball alive when the keeper brings it back into play.
+        
+        The volleyball becomes alive when:
+        - It is held by the keeper of the team that possesses it (was scored against) in their own half
+        """
         volleyball = self.state.get_volleyball()
         if volleyball is None:
             return
         if not volleyball.is_dead:
-            return
+            return  # Already alive
         if volleyball.holder_id is None:
-            return
+            return  # No one holding it
+        
         player = self.state.players[volleyball.holder_id]
         if player.role == PlayerRole.KEEPER and player.team == volleyball.possession:
             midline_x = self.state.boundaries_x[1] / 2
+            # Check if keeper has crossed into opponent's half
             if player.team == self.state.team_0:
                 if player.position.x > midline_x:
-                    return
+                    return  # Team 0 keeper must be on left side (x < midline)
             else:
                 if player.position.x < midline_x:
-                    return
+                    return  # Team 1 keeper must be on right side (x > midline)
+            
+            # Keeper is in own half, ball becomes alive
             volleyball.is_dead = False
         
     def _enforce_hoop_blockage(self) -> None:
-        """Chasers cannot come their own hoops to close to prevent goaltending"""
-        # only for players which are not knocked out
-        # TODO
+        """
+        Prevent chasers from getting too close to their own hoops (no goaltending).
+        
+        Chasers that stray too close to their team's hoop are pushed back outside
+        the protected area. Only applies to non-knocked-out players who are not currently inbounding.
+        
+        Protected zone: hoop center ± (player_radius + volleyball_radius)
+        """
+        # Only for players which are not knocked out
         # if player in same team as hoop and within player.radius of the square of hoop thickness and hoop radius
         # reset position to previous position
         volleyball = self.state.get_volleyball()
@@ -236,7 +286,20 @@ class GameLogicSystem:
                                 # print(f'Player {player.id} blocked from going too close to own hoop')
 
     def _calculate_distances(self) -> None:
-        """Precompute distances between players and balls if needed."""
+        """
+        Precompute squared distances between all relevant entity pairs.
+        
+        Builds two representations of entity distances:
+        1. Nested dict for O(1) lookups between two specific entities
+        2. Sorted list of nearby entities for each entity (nearest-first)
+        
+        Skips distance calculations for:
+        - Knocked out players
+        - Keeper-Beater and Chaser-Beater pairs (no collision yet)
+        - Beater-Volleyball pairs (beaters don't interact with volleyball)
+        
+        This precomputation enables efficient collision detection in subsequent methods.
+        """
         entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
         for i, entity_1 in enumerate(entities_list):
             if i+1 == len(entities_list):
@@ -308,7 +371,20 @@ class GameLogicSystem:
     #     return sorted_tuples
     
     def _check_volleyball_possessions(self) -> None:
-        """Check if players can pick up the volleyball."""
+        """
+        Check and process volleyball pickups by chasers and keepers.
+        
+        A player can pick up the volleyball if:
+        - Player is a Chaser or Keeper (beaters cannot hold it)
+        - Player is not knocked out
+        - Player's catch cooldown after throwing has expired (so no immedate re-catch)
+        - Volleyball is within collision distance (proximity check)
+        - Special conditions are met:
+          * Dead volleyball: Only the possessing team's keeper can pick it up
+          * Live volleyball: Any chaser/keeper can pick it up (no inbounder restriction)
+        
+        Once picked up, volleyball follows the player's movement.
+        """
         volleyball = self.state.get_volleyball()
         if not volleyball or volleyball.holder_id is not None:
             return  # Volleyball either doesn't exist or is held
@@ -334,6 +410,21 @@ class GameLogicSystem:
                                 break
 
     def _check_dodgeball_possession_of_player(self, player: Player, dodgeball: Ball) -> bool:
+        """
+        Attempt to assign a dodgeball to a player (beater only).
+        
+        A player can pick up a dodgeball if:
+        - The player is a Beater
+        - The player is not currently holding a ball (one per beater)
+        - The player's catch cooldown has expired (prevents immediate re-catches after throwing)
+        
+        Args:
+            player: The player attempting to pick up the dodgeball
+            dodgeball: The dodgeball to pick up
+            
+        Returns:
+            True if pickup was successful, False otherwise
+        """
         if player.catch_cooldown <= 0.0:
             if player.role == PlayerRole.BEATER:
                 if not player.has_ball:
@@ -346,9 +437,19 @@ class GameLogicSystem:
         return False
 
     def _check_dodgeball_interactions(self) -> None:
+        """
+        Check and handle all dodgeball interactions with players.
+        
+        For each dodgeball, processes interactions with nearby players:
+        - Dead/slow dodgeballs: Allow pickup by beaters
+        - Fast moving dodgeballs: Check if they hit opponent players (beats)
+        
+        Collision detection uses precomputed distances sorted nearest-first
+        for efficiency. Stops checking a dodgeball once an interaction occurs.
+        """
         dodgeballs = self.state.get_dodgeballs()
         if len(dodgeballs) == 0:
-            return # no dodgeball exist
+            return  # No dodgeballs exist
         for dodgeball in dodgeballs:
             # for other_id, distance in self._get_sorted_distances(dodgeball.id).items():
             for other_id, distance in self.squared_distances.get(dodgeball.id, []):
@@ -366,7 +467,31 @@ class GameLogicSystem:
                                         break
 
     def _check_beats(self, player: Player, dodgeball: Ball) -> bool:
-        """Check for dodgeball hits on players."""
+        """
+        Check if a dodgeball hits (beats) a player and handle the knockout.
+        
+        A beat occurs when a thrown dodgeball hits an opponent player who:
+        - Is not knocked out
+        - Is not immune (immune during inbounding or in keeper zone)
+        - Is on the opposing team
+        - Is not the player who just threw the ball (catch cooldown active)
+        
+        On a successful beat:
+        - Player is marked as knocked out
+        - Any held ball is dropped
+        - Dodgeball is reflected off the player
+        - Team possession of dodgeball is cleared
+        
+        On a reflection (same team or immunity):
+        - Dodgeball is reflected but possession is not cleared
+        
+        Args:
+            player: The player that might be hit
+            dodgeball: The dodgeball that might hit the player
+            
+        Returns:
+            True if player was knocked out, False otherwise
+        """
         if dodgeball.holder_id is not None: # only thrown dodgeballs can beat
             return False
         if player.team == dodgeball.possession or player.dodgeball_immunity: # no friendly beats or immune
@@ -416,7 +541,19 @@ class GameLogicSystem:
     #                         continue
 
     def _check_ball_collisions(self):
-        # check if balls close enough to other balls to collide
+        """
+        Detect and resolve collisions between balls.
+        
+        Only processes collisions between free (unheld) balls. When two balls
+        collide, their velocities are reflected along the collision normal and
+        adjusted based on their relative speeds to create realistic bouncing.
+        
+        Handles edge cases:
+        - One stationary ball: Transfers moving ball's velocity to stationary one
+        - Both stationary: No collision processing (prevents unnecessary computation)
+        - Zero collision normal: Skips to avoid division by zero
+        """
+        # Check if balls are close enough to other balls to collide
         balls = list(self.state.balls.values())
         for i, ball_1 in enumerate(balls):
             for ball_2 in balls[i+1:]:
@@ -464,6 +601,17 @@ class GameLogicSystem:
                         print(f"[GAME] Ball {ball_1.id} collided with Ball {ball_2.id}")
 
     def _check_player_collisions(self) -> None:
+        """
+        Detect and resolve collisions between players.
+        
+        When two active (non-knocked-out) players of similar positions collide:
+        - Separates their velocity components along and perpendicular to collision normal
+        - Averages the velocity component along the collision line
+        - Preserves each player's perpendicular (tangential) velocity
+        
+        This creates realistic elastic collisions where players don't stick together
+        but bounce off each other naturally.
+        """
         for i, player in enumerate(list(self.state.players.values())[:-1]):
             if player.is_knocked_out:
                 continue
@@ -537,7 +685,23 @@ class GameLogicSystem:
                         # TODO: deal with boundaries close to players
 
     def _check_goals(self) -> None:
-        """Check if ball passes through a hoop."""
+        """
+        Check if the volleyball passes through a hoop and award points.
+        
+        Goal scoring process:
+        1. Detect when volleyball crosses the hoop's x-coordinate from outside to inside
+        2. Record crossing point if ball is at hoop height (within hoop radius)
+        3. Track the crossing using 'crossed_hoop' attribute
+        4. If ball is crossed back before passing through completely, reset tracking
+        5. Award 10 points when entire ball has passed through the hoop
+        
+        After scoring:
+        - Ball becomes dead and assigned to the opposing team's keeper (possession team)
+        - Prevents immediate re-scoring through defensive play
+        - Keeper must bring ball back into play to continue the game
+        
+        Dead volleyball cannot score.
+        """
         volleyball = self.state.get_volleyball()
         if not volleyball:
             return  # Volleyball doesn't exist
@@ -600,7 +764,17 @@ class GameLogicSystem:
             # volleyball.holder_id = None
             # print(f"[GAME] Goal! Team {hoop.team} scores 10 points")
 
+    # not implemented yet
+    # TODO: test and implement
     def _check_third_dodgeball(self) -> None:
+        """
+        Enforce the rule that only 2 dodgeballs can be held by one team at once.
+        
+        When 3 dodgeballs exist and one team holds 2 of them:
+        - The third (free) dodgeball is automatically assigned to the other team
+        - This prevents one team from accumulating all balls and denying the other team play
+        - The assigned possession lasts until a player picks it up or game state changes
+        """
         dodgeballs = self.state.get_dodgeballs()
         # if len(dodgeballs) == 0:
         #     return # no dodgeball exist
@@ -630,7 +804,18 @@ class GameLogicSystem:
             # if third_dodgeball -> check if still third: if not picked up by new possession team or beat-attempt two bludger team
 
     def _enforce_pitch_boundaries(self) -> None:
-        """Keep players and balls within pitch bounds."""        
+        """
+        Enforce pitch boundary constraints for all entities.
+        
+        Ensures no entity moves beyond the play area. When an entity exceeds boundaries:
+        - Position is clamped to stay within bounds (accounting for entity radius)
+        - Velocity is zeroed to prevent continued motion into boundary
+        - Special handling for volleyball: Triggers inbounding procedure if out of bounds
+        - Special handling for held volleyball: Drops ball and triggers inbounding
+        
+        This is called after all position updates to ensure physics doesn't
+        push entities out of the play area.
+        """        
         # Check all entities
         for moving_entity in list(list(self.state.players.values()) + list(self.state.balls.values())):
             new_position_x = min(max(self.state.boundaries_x[0] + moving_entity.radius, moving_entity.position.x), self.state.boundaries_x[1] - moving_entity.radius)
@@ -662,11 +847,25 @@ class GameLogicSystem:
 
     
     def _start_inbounding_procedure(self):
+        """
+        Start the inbounding procedure when volleyball goes out of bounds.
+        
+        Selects the nearest opposing team player (chaser or keeper) to inbound the ball:
+        - Player must not already be inbounding another ball
+        - Player must not be knocked out
+        - Player must be on the opposing team
+        - Only chasers and keepers can inbound (beaters cannot)
+        
+        Once started:
+        - Inbounder becomes immune to dodgeball hits
+        - Volleyball holder is cleared (ball becomes free)
+        - Inbounder must travel to the ball and bring it back into play
+        """
         volleyball = self.state.get_volleyball()
         if not volleyball:
             return
         elif volleyball.inbounder is not None:
-            return # volleyball already inbounded procedure
+            return  # Inbounding procedure already started
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.squared_distances.get(volleyball.id, []):
             if other_id in self.state.players.keys():
@@ -684,7 +883,23 @@ class GameLogicSystem:
                                     break
 
     def _inbounding_free_way(self, dt: float) -> None:
-        """Moves players too close to the inbounding player and volleyball away from them."""
+        """
+        Create and enforce a free zone around the inbounder and volleyball.
+        
+        Ensures opponents cannot interfere with the inbounding player by:
+        - Moving nearby players away from the inbounder (priority)
+        - Moving nearby players away from the volleyball (secondary)
+        - Removing velocity component toward the inbounder/ball
+        - Adding small perpendicular velocity if players would deadlock
+        
+        Free zone radius: 4× player radius (approximate)
+        
+        This allows the inbounder time and space to retrieve the ball without
+        being immediately influenced by opponents.
+        
+        Args:
+            dt: Delta game time since last frame in seconds
+        """
         volleyball = self.state.get_volleyball()
         if not volleyball:
             return
@@ -755,7 +970,7 @@ class GameLogicSystem:
         if not volleyball:
             return
         if not volleyball.is_dead:
-            return # volleyball not dead
+            return  # Volleyball not dead, no free way needed
         keeper = None
         for player in self.state.players.values():
             if player.role == PlayerRole.KEEPER and player.team == volleyball.possession:
@@ -776,7 +991,27 @@ class GameLogicSystem:
         
 
     def _calculate_move_away_vector(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> Optional[tuple[Vector2, Vector2]]:
-        """Calculate the movement vector to move an entity away from another entity."""
+        """
+        Calculate the movement vector to move an entity away from another entity.
+        
+        Used for free way creation during inbounding. Computes the vector that will:
+        - Push the entity away along the line between them (normal vector)
+        - Remove any velocity component toward the fixed entity
+        - Apply maximum move away speed in the normal direction
+        - Add small random jitter to prevent deadlock situations
+        
+        Args:
+            move_free_entity: The entity creating the free zone (inbounder/keeper)
+            move_away_entity: The entity that needs to move away
+            dt: Delta game time since last frame in seconds
+            move_away_speed: Maximum speed to move away at
+            
+        Returns:
+            Tuple of (move_vector, normal) where:
+                - move_vector: The position offset to apply (scaled by dt)
+                - normal: The unit normal from fixed entity to moving entity
+            Returns None if entities are at same position (division by zero)
+        """
         # push player away from the entity
         normal = Vector2(
             move_away_entity.position.x - move_free_entity.position.x,
@@ -806,32 +1041,75 @@ class GameLogicSystem:
         )
         return Vector2(move_away_vector.x * dt, move_away_vector.y * dt), normal
 
-    def _move_away(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> None:
-        """Legacy method - applies movement directly."""
-        move_vector = self._calculate_move_away_vector(move_free_entity, move_away_entity, dt, move_away_speed)
-        if move_vector is not None:
-            move_away_entity.position.x += move_vector.x
-            move_away_entity.position.y += move_vector.y                    
-                
-
-
-
+    # def _move_away(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> None:
+    #     """
+    #     Legacy method - applies movement directly to an entity.
+        
+    #     Wrapper around _calculate_move_away_vector that directly modifies the entity's
+    #     position. Deprecated in favor of collecting moves and applying them atomically.
+        
+    #     Args:
+    #         move_free_entity: The entity creating the free zone
+    #         move_away_entity: The entity that needs to move away
+    #         dt: Delta time since last frame in seconds
+    #         move_away_speed: Maximum speed to move away at
+    #     """
+    #     move_vector = self._calculate_move_away_vector(move_free_entity, move_away_entity, dt, move_away_speed)
+    #     if move_vector is not None:
+    #         move_away_entity.position.x += move_vector.x
+    #         move_away_entity.position.y += move_vector.y                    
     
     @staticmethod
     def _squared_distance(pos1: Vector2, pos2: Vector2) -> float:
-        """Calculate Euclidean distance between two positions."""
+        """
+        Calculate squared Euclidean distance between two positions.
+        
+        Returns the squared distance (avoids expensive square root) for use in
+        collision detection comparisons where only relative distances matter.
+        
+        Args:
+            pos1: First position vector
+            pos2: Second position vector
+            
+        Returns:
+            The squared distance between the two positions
+        """
         dx = pos1.x - pos2.x
         dy = pos1.y - pos2.y
         return (dx**2 + dy**2)
     
     @staticmethod
     def _distance(pos1: Vector2, pos2: Vector2) -> float:
+        """
+        Calculate Euclidean distance between two positions.
+        
+        More expensive than _squared_distance due to square root computation.
+        Should be used sparingly; prefer _squared_distance for collision checks.
+        
+        Args:
+            pos1: First position vector
+            pos2: Second position vector
+            
+        Returns:
+            The distance between the two positions
+        """
         return GameLogicSystem._squared_distance(pos1, pos2) ** 0.5
     
     def process_throw_action(self, player_id: str) -> bool:
         """
         Process a throw action by a player.
-        Returns True if throw was successful.
+        
+        When a player throws:
+        - Ball is released from their possession
+        - Ball velocity is set based on player's throw velocity and current direction
+        - Catch cooldown is imposed (prevents immediately re-catching the ball)
+        - Ball's previous_thrower_id is recorded (prevents bouncing off thrower immediately (dodgeballs only))
+        
+        Args:
+            player_id: The ID of the player throwing the ball
+            
+        Returns:
+            True if throw was successful, False if player has no ball or doesn't exist
         """
         player = self.state.get_player(player_id)
         if not player or not player.has_ball:
@@ -862,4 +1140,10 @@ class GameLogicSystem:
         return True
     
     def process_tackle_action(self):
+        """
+        Process a tackle action (currently unimplemented).
+        
+        Placeholder for future tackling/blocking mechanics.
+        TODO: Implement tackle logic
+        """
         pass
