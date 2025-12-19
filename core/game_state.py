@@ -1,0 +1,110 @@
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+import json
+from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType
+
+@dataclass
+class GameState:
+    """Central repository for all game data."""
+    boundaries_x: List[float] = field(default_factory=lambda: [0.0, 60])
+    boundaries_y: List[float] = field(default_factory=lambda: [0.0, 33])
+    keeper_zone_x_0: float = 19.0
+    keeper_zone_x_1: float = 41.0
+    team_0 = 0
+    team_1 = 1
+    players: Dict[str, Player] = field(default_factory=dict)  # player_id -> Player
+    balls: Dict[str, Ball] = field(default_factory=dict)       # ball_id -> Ball
+    hoops: Dict[str, Hoop] = field(default_factory=dict)       # hoop_id -> Hoop
+    score: List[int] = field(default_factory=lambda: [0, 0])  # [team0, team1]
+    game_time: float = 0.0                                    # Seconds elapsed
+    seeker_on_pitch: bool = False                        # Seeker enters after 20 min
+    set_score: Optional[int] = None                           # Snitch capture score
+    game_phase: str = "waiting"  # waiting, active, ended
+    seeker_floor_seconds: int = 1200  # Time before seeker can enter
+    
+    def add_player(self, player: Player) -> None:
+        """Add a player to the game state."""
+        self.players[player.id] = player
+    
+    def remove_player(self, player_id: str) -> None:
+        """Remove a player from the game state."""
+        if player_id in self.players:
+            del self.players[player_id]
+    
+    def get_player(self, player_id: str) -> Optional[Player]:
+        """Retrieve a player by ID."""
+        return self.players.get(player_id)
+    
+    def get_players_by_team(self, team: int) -> List[Player]:
+        """Get all players on a specific team."""
+        return [p for p in self.players.values() if p.team == team]
+    
+    def get_players_by_role(self, role: PlayerRole, team: Optional[int] = None) -> List[Player]:
+        """Get players with a specific role, optionally filtered by team."""
+        players = [p for p in self.players.values() if p.role == role]
+        if team is not None:
+            players = [p for p in players if p.team == team]
+        return players
+    
+    def add_ball(self, ball: Ball) -> None:
+        """Add a ball to the game state."""
+        self.balls[ball.id] = ball
+    
+    def get_ball(self, ball_id: str) -> Optional[Ball]:
+        """Retrieve a ball by ID."""
+        return self.balls.get(ball_id)
+    
+    def get_volleyball(self) -> Optional[Ball]:
+        """Get the volleyball (returns first one found)."""
+        for ball in self.balls.values():
+            if ball.ball_type == BallType.VOLLEYBALL:
+                return ball
+        return None
+    
+    def get_dodgeballs(self) -> List[Ball]:
+        """Get all dodgeballs."""
+        return [b for b in self.balls.values() if b.ball_type == BallType.DODGEBALL]
+    
+    def update_score(self, team: int, points: int) -> None:
+        """Add points to a team's score."""
+        if team in [0, 1]:
+            self.score[team] += points
+    
+    def update_game_time(self, dt: float) -> None:
+        """Update elapsed game time."""
+        self.game_time += dt
+        # Seeker enters after 20 minutes (1200 seconds)
+        if self.game_time >= self.seeker_floor_seconds and not self.seeker_on_pitch:
+            self.seeker_on_pitch = True
+
+    def update_player(self, player: Player) -> None:
+        """Update player data in the game state."""
+        if player.id in self.players:
+            self.players[player.id] = player
+    
+    def serialize(self) -> dict:
+        """Convert entire game state to JSON-serializable dict."""
+        return {
+            "players": {pid: p.serialize() for pid, p in self.players.items()},
+            "balls": {bid: b.serialize() for bid, b in self.balls.items()},
+            "hoops": {hid: h.serialize() for hid, h in self.hoops.items()},
+            "score": self.score,
+            "game_time": self.game_time,
+            "seeker_on_pitch": self.seeker_on_pitch,
+            "set_score": self.set_score,
+            "game_phase": self.game_phase
+        }
+    
+    @staticmethod
+    def deserialize(data: dict) -> 'GameState':
+        """Reconstruct game state from serialized dict."""
+        state = GameState()
+        state.players = {pid: Player.deserialize(p) for pid, p in data.get("players", {}).items()}
+        state.balls = {bid: Ball.deserialize(b) for bid, b in data.get("balls", {}).items()}
+        state.hoops = {hid: Hoop.deserialize(h) for hid, h in data.get("hoops", {}).items()}
+        state.score = data.get("score", [0, 0])
+        state.game_time = data.get("game_time", 0.0)
+        state.seeker_on_pitch = data.get("seeker_on_pitch", False)
+        state.set_score = data.get("set_score")
+        state.game_phase = data.get("game_phase", "waiting")
+        return state

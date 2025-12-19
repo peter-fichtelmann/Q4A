@@ -1,0 +1,256 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #333;
+}
+
+/* Game-specific body styling when in game mode */
+body:has(.game-container) {
+    background: #1a1a1a;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.container {
+    background: white;
+    border-radius: 10px;
+    padding: 40px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 600px;
+    width: 100%;
+}
+
+h1 {
+    text-align: center;
+    color: #667eea;
+    margin-bottom: 12px;
+    font-size: 2.5em;
+}
+
+h2 {
+    color: #764ba2;
+    margin-top: 20px;
+    margin-bottom: 15px;
+}
+
+.subtitle {
+    text-align: center;
+    color: #764ba2;
+    margin-bottom: 40px;
+}
+
+.lobby-section {
+    margin-bottom: 20px;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0;
+    border: 2px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 1em;
+    transition: border-color 0.3s;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 30px 0;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 5px;
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: bold;
+}
+
+.btn-primary {
+    background: #667eea;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5568d3;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary {
+    background: #764ba2;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #63408b;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 0.9em;
+}
+
+.room-status {
+    background: #e8f5e9;
+    border: 2px solid #4caf50;
+    padding: 20px;
+    border-radius: 5px;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.room-status h3 {
+    color: #2e7d32;
+}
+
+.room-status strong {
+    color: #1976d2;
+    font-size: 1.1em;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 5% auto;
+    padding: 30px;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: #000;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.status {
+    margin-top: 20px;
+    padding: 15px;
+    text-align: center;
+    min-height: 20px;
+}
+
+.waiting-room {
+    background: #f5f5f5;
+    padding: 20px;
+    border-radius: 5px;
+    margin-top: 20px;
+}
+
+#playersList {
+    background: white;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 15px 0;
+}
+
+.player-item {
+    padding: 8px;
+    margin: 5px 0;
+    background: #e3f2fd;
+    border-left: 4px solid #667eea;
+}
+
+.game-container {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    background: #1a1a1a;
+    /* center children (canvas) */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+#gameCanvas {
+    display: block;
+    /* size is controlled by JS to preserve aspect ratio and pixel buffer */
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+/* e.g score and time */
+.game-ui { 
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 10px;
+    color: white;
+    font-size: 1.2em;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+}
+
+.scorebug {
+    display: flex;
+    gap: 0px;
+    justify-content: center;
+    align-items: center;
+    background: rgba(68, 68, 68, 0.2);
+    /* border-radius: 3px; */
+}
+
+.scorebug .time {
+    background: rgba(66, 66, 66, 0.3);
+    padding: 4px 8px;
+    /* border-radius: 3px; */
+    font-weight: bold;
+}
+
+.scorebug span:not(.time) {
+    background: rgba(114, 114, 114, 0.4);
+    padding: 4px 8px;
+    /* border-radius: 3px; */
+    font-weight: bold;
+}
+
+.controls {
+    text-align: center;
+    margin-top: 10px;
+}

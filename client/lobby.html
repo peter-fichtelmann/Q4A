@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadball - Lobby</title>
+    <link rel="stylesheet" href="/client/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🏐 Q4A - Quadball for All</h1>
+        <h3 class="subtitle">An online Quadball game</h3>
+
+        
+        <div class="lobby-section">
+            <h2>Player Setup</h2>
+            <input type="text" id="playerName" placeholder="Enter your name" value="Player">
+            <p class="hint">Select team and role after you create or join a room.</p>
+        </div>
+
+        <div class="actions">
+            <button onclick="createRoom()" class="btn btn-primary">Create Room</button>
+            <button onclick="showJoinRoom()" class="btn btn-secondary">Join Room</button>
+        </div>
+
+        <!-- Inline quick-join form that appears when user clicks Join Room -->
+        <div id="inlineJoinForm" class="inline-join hidden">
+            <h3>Join a Room</h3>
+            <label for="joinPlayerNameInline">Your name</label>
+            <input type="text" id="joinPlayerNameInline" placeholder="Enter your name">
+
+            <label for="joinRoomIdInline">Room ID</label>
+            <input type="text" id="joinRoomIdInline" placeholder="Room ID">
+
+
+            <div class="inline-actions">
+                <button onclick="joinRoom()" class="btn btn-primary">Join Room</button>
+                <button onclick="hideInlineJoin()" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+
+        <div id="roomStatus" class="room-status hidden">
+            <h3>Room Created!</h3>
+            <p>Room ID: <strong id="roomId"></strong>
+               <button onclick="copyRoomId()" class="btn btn-small">Copy Room ID</button>
+            </p>
+            <p class="hint">Share the Room ID with other players to let them join.</p>
+        </div>
+
+        <div id="joinRoomModal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close" onclick="closeJoinRoom()">&times;</span>
+                <h3>Join a Room</h3>
+                <label for="joinPlayerName">Your name</label>
+                <input type="text" id="joinPlayerName" placeholder="Enter your name">
+
+                <label for="joinRoomId">Room ID</label>
+                <input type="text" id="joinRoomId" placeholder="Room ID">
+
+                <!-- Passkey removed; only Room ID is required to join -->
+
+                <!-- Team/Role selection moved to waiting room after join/create -->
+
+                <button onclick="joinRoom()" class="btn btn-primary">Join</button>
+
+                <h4>Available Rooms:</h4>
+                <div id="availableRooms"></div>
+            </div>
+        </div>
+
+        <div id="waitingRoom" class="waiting-room hidden">
+            <h2>Waiting for players...</h2>
+            <div id="playersList"></div>
+            <div class="selection">
+                <h3>Your selection</h3>
+                <label for="waitingTeamSelect">Team</label>
+                <select id="waitingTeamSelect">
+                    <option value="0">Team 0</option>
+                    <option value="1">Team 1</option>
+                </select>
+
+                <label for="waitingRoleSelect">Role</label>
+                <select id="waitingRoleSelect">
+                    <option value="chaser">Chaser</option>
+                    <option value="keeper">Keeper</option>
+                    <option value="beater">Beater</option>
+                    <!-- <option value="seeker">Seeker</option> -->
+                </select>
+
+                <button id="saveSelectionBtn" onclick="updatePlayerSelection()" class="btn btn-secondary">Save Selection</button>
+            </div>
+
+            <button id="startBtn" onclick="startGame()" class="btn btn-primary hidden">Start Game</button>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script src="/client/lobby_client.js"></script>
+</body>
+</html>

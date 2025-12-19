@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadball</title>
+    <link rel="stylesheet" href="/client/styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="1280" height="720"></canvas> <!-- Game canvas with initial size - will be resized dynamically -->
+        <div class="game-ui">
+            <div class="scorebug">
+                <span class="time" id="gameTime">0:00</span>
+                <span>A <strong id="score0">0</strong> - <strong id="score1">0</strong> B</span>
+            </div>
+            <!-- <div class="controls">
+                <p>Arrow Keys to move | Space to throw</p>
+                <button onclick="returnToLobby()" class="btn btn-small">Leave Game</button>
+            </div> -->
+        </div>
+    </div>
+
+    <script type="module" src="/client/js_game-client/main.js"></script>
+</body>
+</html>

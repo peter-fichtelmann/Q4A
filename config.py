@@ -1,0 +1,30 @@
+class Config:
+    FPS = 20 # frame rate per 
+    GAME_TIME_TO_REAL_TIME_RATIO = 3 # 1 second real time = 3 seconds game time
+    PITCH_WIDTH = 33
+    PITCH_LENGTH = 60
+    HOOP_X = 13.5
+    KEEPER_ZONE_X = 19
+    HOOP_DISTANCES = 2.75
+    HOOP_RADIUS = 0.86/2 #  The inner diameter of each hoop loop must be between 81 centimeters and 86 centimeters
+    HOOP_THICKNESS = 0.1
+    VOLLEYBALL_RADIUS = 0.67 / 2 / 3.14 # 65 centimeters to 67 centimeters in circumference (approximately 0.106 m)
+    DODGEBALL_RADIUS = 0.70 / 2 / 3.14 # 68 centimeters and 70 centimeters in circumference (approximately 0.111 m)
+    PLAYER_RADIUS = 0.3
+
+    PLAYER_MAX_SPEED_REAL = 3 # m/s per real second
+    PLAYER_MIN_SPEED_REAL = 1 # m/s per real second
+    PLAYER_THROW_VELOCITY_REAL = 12 # m/s per real second
+    PLAYER_ACCELERATION_REAL = 3 # m/s2 per real second
+    PLAYER_DEACCELERATION_RATE = 0.5 # ratio of speed lost per second
+    PLAYER_MAX_SPEED = PLAYER_MAX_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    PLAYER_MIN_SPEED = PLAYER_MIN_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    PLAYER_THROW_VELOCITY = PLAYER_THROW_VELOCITY_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    PLAYER_ACCELERATION = PLAYER_ACCELERATION_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    PLAYER_MIN_DIR = 0.6 # of 1 
+
+    BALL_DEACCELERATION_RATE = 0.15# ratio of speed lost per second
+    BALL_REFLECT_VELOCITY_LOSS = 0.4 # ratio of velocity lost on reflection with player
+
+    VOLLEYBALL_RUNNER_STARTING_Y = 8.25
+    SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter
