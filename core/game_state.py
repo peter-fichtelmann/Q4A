@@ -10,6 +10,7 @@ class GameState:
     boundaries_y: List[float] = field(default_factory=lambda: [0.0, 33])
     keeper_zone_x_0: float = 19.0
     keeper_zone_x_1: float = 41.0
+    midline_x: float = 30.0
     team_0 = 0
     team_1 = 1
     players: Dict[str, Player] = field(default_factory=dict)  # player_id -> Player

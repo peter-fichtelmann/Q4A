@@ -112,15 +112,10 @@ class Ball:
     previous_position: Vector2 = field(default_factory=lambda: Vector2(0, 0))  # Previous position
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
     deacceleration_rate: float = 0.0          # Deacceleration rate
-    possession: str|int|None = None                   # None, "dead" or team which made alive
+    possession_team: str|int|None = None                   # None, or team who possesses the ball last
     holder_id: Optional[str] = None  # Player ID if held, None if in flight
     previous_thrower_id: Optional[str] = None  # Player ID who last threw the ball
     reflect_velocity_loss: float = 0.3  # Percentage of velocity lost on reflection with player
-    crossed_hoop: Optional[Tuple[str, float]] = None  # (hoop_id, y_position) if crossed a hoop
-    is_dead: Optional[bool] = False
-    inbounder: None|str = None       # if ball is inbounded, if true then id of player
-
-
     
     def serialize(self) -> dict:
         """Convert ball to JSON-serializable dict."""
@@ -141,6 +136,46 @@ class Ball:
             position=Vector2.from_dict(data["position"]),
             velocity=Vector2.from_dict(data["velocity"]),
             holder_id=data.get("holder_id")
+        )
+
+
+class VolleyBall(Ball):
+    """Represents the quaffle (volleyball) in quadball."""
+    def __init__(self,
+                id: str,
+                radius: float,
+                position: Vector2,
+                crossed_hoop: Optional[Tuple[str, float]] = None,  # (hoop_id, y_position) if crossed a hoop
+                inbounder: None|str = None,       # if ball is inbounded, if true then id of player
+                is_dead: Optional[bool] = False,
+                **ball_kwargs
+                ):
+        super().__init__(
+            id=id,
+            radius=radius,
+            position=position,
+            ball_type=BallType.VOLLEYBALL,
+            **ball_kwargs
+        )
+        self.crossed_hoop = crossed_hoop
+        self.inbounder = inbounder
+        self.is_dead = is_dead
+
+
+class DodgeBall(Ball):
+    """Represents a dodgeball (bludger) in quadball."""
+    def __init__(self,
+                id: str,
+                radius: float,
+                position: Vector2,
+                **ball_kwargs
+                ):
+        super().__init__(
+            id=id,
+            radius=radius,
+            position=position,
+            ball_type=BallType.DODGEBALL,
+            **ball_kwargs
         )
 
 @dataclass

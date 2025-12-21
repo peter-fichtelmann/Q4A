@@ -70,9 +70,6 @@ class GameLogicSystem:
         # Check pitch boundaries
         self._enforce_pitch_boundaries() # at least after free ways and position updates
 
-
-
-
     def update_player_velocities(self, dt: float) -> None:
         """
         Update player velocities based on their current direction and role.
@@ -95,7 +92,7 @@ class GameLogicSystem:
                 player.direction.y = self.state.hoops[f'hoop_{player.team}_center'].position.y - player.position.y
             elif volleyball is not None:
                 if volleyball.is_dead:
-                    if volleyball.possession == player.team and player.role == PlayerRole.KEEPER:
+                    if volleyball.possession_team == player.team and player.role == PlayerRole.KEEPER:
                         if volleyball.holder_id is None:
                             player.direction.x = volleyball.position.x - player.position.x
                             player.direction.y = volleyball.position.y - player.position.y
@@ -223,7 +220,7 @@ class GameLogicSystem:
             return  # No one holding it
         
         player = self.state.players[volleyball.holder_id]
-        if player.role == PlayerRole.KEEPER and player.team == volleyball.possession:
+        if player.role == PlayerRole.KEEPER and player.team == volleyball.possession_team:
             midline_x = self.state.boundaries_x[1] / 2
             # Check if keeper has crossed into opponent's half
             if player.team == self.state.team_0:
@@ -396,14 +393,14 @@ class GameLogicSystem:
                 player = self.state.players[other_id]
                 if not player.is_knocked_out:
                     if player.catch_cooldown <= 0.0:
-                        if volleyball.is_dead and not (player.role == PlayerRole.KEEPER and volleyball.possession == player.team):
+                        if volleyball.is_dead and not (player.role == PlayerRole.KEEPER and volleyball.possession_team == player.team):
                             continue # only keeper possess dead volleyball
                         if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
                             if distance < (player.radius + volleyball.radius) ** 2:
                                 if volleyball.inbounder is None or player.id == volleyball.inbounder: # no inbounding or inbounding player
                                     # Player picks up the volleyball
                                     volleyball.holder_id = player.id
-                                    volleyball.possession = player.team
+                                    volleyball.possession_team = player.team
                                     player.has_ball = volleyball.id
                                     # volleyball.position = player.position
                                     print(f"[GAME] Player {player.id} picked up the volleyball")
@@ -430,7 +427,7 @@ class GameLogicSystem:
                 if not player.has_ball:
                     # Player picks up dodgeball
                     dodgeball.holder_id = player.id
-                    dodgeball.possession = player.team
+                    dodgeball.possession_team = player.team
                     player.has_ball = dodgeball.id
                     print(f"[GAME] Player {player.id} picked up a dodgeball")
                     return True
@@ -459,7 +456,7 @@ class GameLogicSystem:
                         if distance < (player.radius + dodgeball.radius) ** 2:
                             if distance < (player.radius + dodgeball.radius) **2:
                                 dodgeball_mag_velocity = (dodgeball.velocity.x**2 + dodgeball.velocity.y**2) ** 0.5
-                                if dodgeball.possession is None or dodgeball_mag_velocity < 0.1 * player.throw_velocity: # ball pickup with dead dodgeball or slow moving one
+                                if dodgeball.possession_team is None or dodgeball_mag_velocity < 0.1 * player.throw_velocity: # ball pickup with dead dodgeball or slow moving one
                                     if self._check_dodgeball_possession_of_player(player, dodgeball):
                                         break
                                 else: # beat checks
@@ -494,10 +491,10 @@ class GameLogicSystem:
         """
         if dodgeball.holder_id is not None: # only thrown dodgeballs can beat
             return False
-        if player.team == dodgeball.possession or player.dodgeball_immunity: # no friendly beats or immune
+        if player.team == dodgeball.possession_team or player.dodgeball_immunity: # no friendly beats or immune
             if player.id == dodgeball.previous_thrower_id and player.catch_cooldown > 0.0:
                 return False # beater still throwing dodgeball
-            dodgeball.possession = None
+            dodgeball.possession_team = None
             # reflecting dodgeball even by own player
             normal = Vector2(
                 dodgeball.position.x - player.position.x,
@@ -516,10 +513,10 @@ class GameLogicSystem:
                 ball.holder_id = None
                 ball.velocity.x = 0
                 ball.velocity.y = 0
-                ball.possession = None
+                ball.possession_team = None
                 print(f"[GAME] Player {player.id} dropped ball {ball.id} due to knockout")
                 player.has_ball = None
-            dodgeball.possession = None
+            dodgeball.possession_team = None
             normal = Vector2(
                 dodgeball.position.x - player.position.x,
                 dodgeball.position.y - player.position.y
@@ -556,49 +553,52 @@ class GameLogicSystem:
         # Check if balls are close enough to other balls to collide
         balls = list(self.state.balls.values())
         for i, ball_1 in enumerate(balls):
+            if ball_1.is_dead if hasattr(ball_1, "is_dead") else False:
+                continue # dead balls do not collide
             for ball_2 in balls[i+1:]:
-                if not ball_1.is_dead and not ball_1.is_dead:
-                    if ball_1.holder_id is not None or ball_2.holder_id is not None:
-                        continue # only check free balls
-                    # dist_sq = GameLogicSystem._squared_distance(ball_1.position, ball_2.position)
-                    dist_sq = self.squared_distances_dicts[ball_1.id][ball_2.id]
-                    collision_dist_sq = (ball_1.radius + ball_2.radius) ** 2
-                    if dist_sq < collision_dist_sq:
-                        # Collision occurred
-                        ball_1_velocity_mag = (ball_1.velocity.x**2 + ball_1.velocity.y**2) ** 0.5
-                        ball_2_velocity_mag = (ball_2.velocity.x**2 + ball_2.velocity.y**2) ** 0.5
-                        if ball_1_velocity_mag == 0 and ball_2_velocity_mag == 0:
-                            continue # avoid divide by zero
-                        if ball_1_velocity_mag == 0:
-                            ball_1.velocity.x = ball_2.velocity.x
-                            ball_1.velocity.y = ball_2.velocity.y
-                            ball_2.velocity.x = 0
-                            ball_2.velocity.y = 0
-                            continue
-                        if ball_2_velocity_mag == 0:
-                            ball_2.velocity.x = ball_1.velocity.x
-                            ball_2.velocity.y = ball_1.velocity.y
-                            ball_1.velocity.x = 0
-                            ball_1.velocity.y = 0
-                            continue # avoid divide by zero
-                        normal = Vector2(
-                            ball_2.position.x - ball_1.position.x,
-                            ball_2.position.y - ball_1.position.y
-                        )
-                        normal_mag = (normal.x**2 + normal.y**2) ** 0.5
-                        if normal_mag == 0:
-                            continue # avoid divide by zero
-                        normal.x /= normal_mag
-                        normal.y /= normal_mag
-                        # Reflect velocities
-                        ball_1.velocity = ball_1.velocity.reflect(normal)
-                        ball_2.velocity = ball_2.velocity.reflect(Vector2(-normal.x, -normal.y))
-                        mag_velocity_ratio = ball_1_velocity_mag / ball_2_velocity_mag
-                        ball_1.velocity.x *= 1 / mag_velocity_ratio
-                        ball_1.velocity.y *= 1 / mag_velocity_ratio
-                        ball_2.velocity.x *= mag_velocity_ratio
-                        ball_2.velocity.y *= mag_velocity_ratio
-                        print(f"[GAME] Ball {ball_1.id} collided with Ball {ball_2.id}")
+                if ball_2.is_dead if hasattr(ball_2, "is_dead") else False:
+                    continue # dead balls do not collide
+                if ball_1.holder_id is not None or ball_2.holder_id is not None:
+                    continue # only check free balls
+                # dist_sq = GameLogicSystem._squared_distance(ball_1.position, ball_2.position)
+                dist_sq = self.squared_distances_dicts[ball_1.id][ball_2.id]
+                collision_dist_sq = (ball_1.radius + ball_2.radius) ** 2
+                if dist_sq < collision_dist_sq:
+                    # Collision occurred
+                    ball_1_velocity_mag = (ball_1.velocity.x**2 + ball_1.velocity.y**2) ** 0.5
+                    ball_2_velocity_mag = (ball_2.velocity.x**2 + ball_2.velocity.y**2) ** 0.5
+                    if ball_1_velocity_mag == 0 and ball_2_velocity_mag == 0:
+                        continue # avoid divide by zero
+                    if ball_1_velocity_mag == 0:
+                        ball_1.velocity.x = ball_2.velocity.x
+                        ball_1.velocity.y = ball_2.velocity.y
+                        ball_2.velocity.x = 0
+                        ball_2.velocity.y = 0
+                        continue
+                    if ball_2_velocity_mag == 0:
+                        ball_2.velocity.x = ball_1.velocity.x
+                        ball_2.velocity.y = ball_1.velocity.y
+                        ball_1.velocity.x = 0
+                        ball_1.velocity.y = 0
+                        continue # avoid divide by zero
+                    normal = Vector2(
+                        ball_2.position.x - ball_1.position.x,
+                        ball_2.position.y - ball_1.position.y
+                    )
+                    normal_mag = (normal.x**2 + normal.y**2) ** 0.5
+                    if normal_mag == 0:
+                        continue # avoid divide by zero
+                    normal.x /= normal_mag
+                    normal.y /= normal_mag
+                    # Reflect velocities
+                    ball_1.velocity = ball_1.velocity.reflect(normal)
+                    ball_2.velocity = ball_2.velocity.reflect(Vector2(-normal.x, -normal.y))
+                    mag_velocity_ratio = ball_1_velocity_mag / ball_2_velocity_mag
+                    ball_1.velocity.x *= 1 / mag_velocity_ratio
+                    ball_1.velocity.y *= 1 / mag_velocity_ratio
+                    ball_2.velocity.x *= mag_velocity_ratio
+                    ball_2.velocity.y *= mag_velocity_ratio
+                    print(f"[GAME] Ball {ball_1.id} collided with Ball {ball_2.id}")
 
     def _check_player_collisions(self) -> None:
         """
@@ -735,10 +735,10 @@ class GameLogicSystem:
                 for player in self.state.players.values():
                     if player.team == hoop.team:
                         if player.role == PlayerRole.KEEPER: # only if a keeper exists dead volleyball
-                            volleyball.possession = player.team
+                            volleyball.possession_team = player.team
                             volleyball.is_dead = True
                             return
-                volleyball.possession = None # if no keeper
+                volleyball.possession_team = None # if no keeper
                 # TODO: Dead volleyball -> make alive process by keeper
                 
 
@@ -794,12 +794,12 @@ class GameLogicSystem:
             if len(dodgeballs_per_team[self.state.team_0]) == 2 and len(dodgeballs_per_team[self.state.team_1]) == 0:
                 third_dodgeball_id = dodgeballs_per_team['not_hold'][0]
                 third_dodgeball = self.state.balls[third_dodgeball_id]
-                third_dodgeball.possession = self.state.team_1
+                third_dodgeball.possession_team = self.state.team_1
                 # print(f'[GAME] Third dodgeball {third_dodgeball.id} assigned to team {self.state.team_1}')
             elif len(dodgeballs_per_team[self.state.team_0]) == 0 and len(dodgeballs_per_team[self.state.team_1]) == 2:
                 third_dodgeball_id = dodgeballs_per_team['not_hold'][0]
                 third_dodgeball = self.state.balls[third_dodgeball_id]
-                third_dodgeball.possession = self.state.team_1
+                third_dodgeball.possession_team = self.state.team_1
                 # print(f'[GAME] Third dodgeball {third_dodgeball.id} assigned to team {self.state.team_1}')
             # if third_dodgeball -> check if still third: if not picked up by new possession team or beat-attempt two bludger team
 
@@ -870,7 +870,7 @@ class GameLogicSystem:
         for other_id, distance in self.squared_distances.get(volleyball.id, []):
             if other_id in self.state.players.keys():
                 player = self.state.players[other_id]
-                if player.team != volleyball.possession: # inbounding player other team
+                if player.team != volleyball.possession_team: # inbounding player other team
                     if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
                         if player.inbounding is None:
                             if not player.has_ball:
@@ -973,7 +973,7 @@ class GameLogicSystem:
             return  # Volleyball not dead, no free way needed
         keeper = None
         for player in self.state.players.values():
-            if player.role == PlayerRole.KEEPER and player.team == volleyball.possession:
+            if player.role == PlayerRole.KEEPER and player.team == volleyball.possession_team:
                 keeper = player
                 break
         for player in self.state.players.values():
@@ -1057,7 +1057,30 @@ class GameLogicSystem:
     #     move_vector = self._calculate_move_away_vector(move_free_entity, move_away_entity, dt, move_away_speed)
     #     if move_vector is not None:
     #         move_away_entity.position.x += move_vector.x
-    #         move_away_entity.position.y += move_vector.y                    
+    #         move_away_entity.position.y += move_vector.y         
+
+    def _check_delay_of_game(self) -> None:
+        """Check if volleyball not advanced enough in own half and enforce delay of game penalty."""
+        volleyball = self.state.get_volleyball()
+        if not volleyball:
+            return
+        if volleyball.is_dead:
+            return  # Dead volleyball cannot incur delay of game
+        if volleyball.possession_team is None:
+            return  # So far unpossessed volleyball cannot incur delay of game
+        # only check if volleyball in own half
+        if volleyball.possession_team == self.state.team_0 and volleyball.position.x > self.state.midline_x:
+            return # Team 0's volleyball is in Team 1's half
+        elif volleyball.possession_team == self.state.team_1 and volleyball.position.x < self.state.midline_x:
+            return # Team 1's volleyball is in Team 0's half
+        
+            volleyball.delay_of_game_timer += self.state.dt
+            if volleyball.delay_of_game_timer >= 10.0:
+                # Penalty for delay of game
+                self.state.update_score(self.state.team_1, 5)
+                volleyball.delay_of_game_timer = 0.0
+                print(f"[GAME] Delay of game penalty on Team {self.state.team_0}, Team {self.state.team_1} awarded 5 points")
+
     
     @staticmethod
     def _squared_distance(pos1: Vector2, pos2: Vector2) -> float:
@@ -1077,23 +1100,6 @@ class GameLogicSystem:
         dx = pos1.x - pos2.x
         dy = pos1.y - pos2.y
         return (dx**2 + dy**2)
-    
-    @staticmethod
-    def _distance(pos1: Vector2, pos2: Vector2) -> float:
-        """
-        Calculate Euclidean distance between two positions.
-        
-        More expensive than _squared_distance due to square root computation.
-        Should be used sparingly; prefer _squared_distance for collision checks.
-        
-        Args:
-            pos1: First position vector
-            pos2: Second position vector
-            
-        Returns:
-            The distance between the two positions
-        """
-        return GameLogicSystem._squared_distance(pos1, pos2) ** 0.5
     
     def process_throw_action(self, player_id: str) -> bool:
         """

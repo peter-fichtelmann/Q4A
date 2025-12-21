@@ -19,7 +19,7 @@ from collections import deque
 
 # Import your game modules
 from core.game_state import GameState
-from core.entities import Player, Ball, Vector2, PlayerRole, BallType, Hoop
+from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop
 from core.game_logic import GameLogicSystem
 from config import Config
 import logging
@@ -64,6 +64,7 @@ class GameRoom:
         self.game_state.boundaries_y = [0, Config.PITCH_WIDTH]
         self.game_state.keeper_zone_x_0 = Config.KEEPER_ZONE_X
         self.game_state.keeper_zone_x_1 = Config.PITCH_LENGTH - Config.KEEPER_ZONE_X
+        self.game_state.midline_x = Config.PITCH_LENGTH / 2
         self.game_state.seeker_floor_seconds = Config.SEEKER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO
         self.game_logic = GameLogicSystem(self.game_state)
         self.client_connections: Dict[str, WebSocket] = {}
@@ -107,9 +108,8 @@ class GameRoom:
         )
         
         # Add quaffle
-        volleyball = Ball(
+        volleyball = VolleyBall(
             id="volleyball",
-            ball_type=BallType.VOLLEYBALL,
             position=Vector2(Config.PITCH_LENGTH / 2, Config.PITCH_WIDTH / 2),
             radius=Config.VOLLEYBALL_RADIUS,
             deacceleration_rate=Config.BALL_DEACCELERATION_RATE,
@@ -123,9 +123,8 @@ class GameRoom:
             (Config.KEEPER_ZONE_X, Config.PITCH_WIDTH / 2), 
             (Config.PITCH_LENGTH - Config.KEEPER_ZONE_X, Config.PITCH_WIDTH / 2)
             ]):
-            dodgeball = Ball(
+            dodgeball = DodgeBall(
                 id=f"dodgeball_{i}",
-                ball_type=BallType.DODGEBALL,
                 position=Vector2(position[0], position[1]),
                 radius=Config.DODGEBALL_RADIUS,
                 deacceleration_rate=Config.BALL_DEACCELERATION_RATE,
