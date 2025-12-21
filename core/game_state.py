@@ -18,7 +18,11 @@ class GameState:
     hoops: Dict[str, Hoop] = field(default_factory=dict)       # hoop_id -> Hoop
     score: List[int] = field(default_factory=lambda: [0, 0])  # [team0, team1]
     game_time: float = 0.0                                    # Seconds elapsed
-    seeker_on_pitch: bool = False                        # Seeker enters after 20 min
+    delay_of_game_time_limit: float = 10.0                     # Time limit before delay of game penalty
+    delay_of_game_velocity_x_threshold: float = 0.5              # Velocity threshold in x direction the volleyball must exceed to avoid delay of game
+    max_delay_of_game_warnings: int = 1                        # Number of warnings before penalty per team
+    delay_of_game_warnings: Dict[int|str, int] = field(default_factory=lambda: {0: 0, 1: 0})  # Track warnings for each team
+    seeker_on_pitch: bool = False                         # Seeker enters after 20 min
     set_score: Optional[int] = None                           # Snitch capture score
     game_phase: str = "waiting"  # waiting, active, ended
     seeker_floor_seconds: int = 1200  # Time before seeker can enter

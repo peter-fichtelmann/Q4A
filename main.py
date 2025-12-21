@@ -66,6 +66,9 @@ class GameRoom:
         self.game_state.keeper_zone_x_1 = Config.PITCH_LENGTH - Config.KEEPER_ZONE_X
         self.game_state.midline_x = Config.PITCH_LENGTH / 2
         self.game_state.seeker_floor_seconds = Config.SEEKER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO
+        self.game_state.delay_of_game_time_limit = Config.DELAY_OF_GAME_TIME_LIMIT
+        self.game_state.delay_of_game_velocity_x_threshold = Config.DELAY_OF_GAME_VELOCITY_X_THRESHOLD
+        self.game_state.max_delay_of_game_warnings = Config.MAX_DELAY_OF_GAME_WARNINGS
         self.game_logic = GameLogicSystem(self.game_state)
         self.client_connections: Dict[str, WebSocket] = {}
         self.player_to_client: Dict[str, str] = {}

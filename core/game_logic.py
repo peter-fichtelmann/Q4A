@@ -1,5 +1,5 @@
 from typing import Optional, Tuple
-from core.entities import Player, Ball, Vector2, PlayerRole, BallType
+from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 from core.game_state import GameState
 import random
 from operator import itemgetter # faster dict sorting performance
@@ -66,6 +66,7 @@ class GameLogicSystem:
         self._check_goals()
 
         self._check_third_dodgeball()
+        self._check_delay_of_game(dt)
         
         # Check pitch boundaries
         self._enforce_pitch_boundaries() # at least after free ways and position updates
@@ -1059,27 +1060,71 @@ class GameLogicSystem:
     #         move_away_entity.position.x += move_vector.x
     #         move_away_entity.position.y += move_vector.y         
 
-    def _check_delay_of_game(self) -> None:
-        """Check if volleyball not advanced enough in own half and enforce delay of game penalty."""
-        volleyball = self.state.get_volleyball()
-        if not volleyball:
-            return
-        if volleyball.is_dead:
-            return  # Dead volleyball cannot incur delay of game
-        if volleyball.possession_team is None:
-            return  # So far unpossessed volleyball cannot incur delay of game
-        # only check if volleyball in own half
-        if volleyball.possession_team == self.state.team_0 and volleyball.position.x > self.state.midline_x:
-            return # Team 0's volleyball is in Team 1's half
-        elif volleyball.possession_team == self.state.team_1 and volleyball.position.x < self.state.midline_x:
-            return # Team 1's volleyball is in Team 0's half
+    def _check_delay_of_game(self, dt: float) -> None:
+        """
+        Check if volleyball not advanced enough in own half and enforce delay of game penalty.
         
-            volleyball.delay_of_game_timer += self.state.dt
-            if volleyball.delay_of_game_timer >= 10.0:
-                # Penalty for delay of game
-                self.state.update_score(self.state.team_1, 5)
+        Args:
+            dt: Delta game time since last frame in seconds
+        """
+        volleyball = self.state.get_volleyball()
+
+        def _check_if_delay(volleyball: VolleyBall) -> bool:
+            """
+            Check if the volleyball is causing a delay of game.
+             Returns True if delay of game conditions are met, False otherwise.
+
+             Args:
+                 volleyball: The volleyball to check
+            
+             Returns:
+                 True if delay of game conditions are met, False otherwise.
+            """
+            if not volleyball:
+                return False
+            if volleyball.is_dead:
+                return  False # Dead volleyball cannot incur delay of game
+            if volleyball.possession_team is None:
+                return False # So far unpossessed volleyball cannot incur delay of game
+            
+            if volleyball.possession_team == self.state.team_0 and volleyball.position.x < self.state.midline_x: # if volleyball in own half
+                if volleyball.velocity.x > self.state.delay_of_game_velocity_x_threshold: # if volleyball moving forward enough
+                    return False
+            elif volleyball.possession_team == self.state.team_1 and volleyball.position.x > self.state.midline_x: # if volleyball in own half
+                if volleyball.velocity.x < -self.state.delay_of_game_velocity_x_threshold: # if volleyball moving forward enough + use the inverse for team 1
+                    return False
+            else:
+                 return False # volleyball not in own half
+            for other_id, distance in self.squared_distances[volleyball.id]:
+                if other_id in self.state.players.keys():
+                    player = self.state.players[other_id]
+                    if player.team != volleyball.possession_team:
+                        if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
+                            if distance < 2:
+                                return False # opponent player close enough to volleyball to prevent delay of game
+                        elif player.role == PlayerRole.BEATER and player.has_ball is not None:
+                            if distance < 4:
+                                return False # opponent loaded beater close enough to volleyball to prevent delay of game
+                            else:
+                                break # no need to check further players
+            return True
+            
+        if _check_if_delay(volleyball):
+            volleyball.delay_of_game_timer += dt
+            if volleyball.delay_of_game_timer >= self.state.delay_of_game_time_limit:
+                if self.state.delay_of_game_warnings.get(volleyball.possession_team) is None:
+                    self.state.delay_of_game_warnings[volleyball.possession_team] = 0
+                self.state.delay_of_game_warnings[volleyball.possession_team] += 1
+                if self.state.delay_of_game_warnings[volleyball.possession_team] <= self.state.max_delay_of_game_warnings:
+                    print(f'[GAME] Warning {self.state.delay_of_game_warnings[volleyball.possession_team]} for delay of game on team {volleyball.possession_team}')
+                else:
+                    # Delay of game penalty
+                    print(f'[GAME] Delay of game penalty on team {volleyball.possession_team}')
+                    # TODO implement volleyball turnover
+                    # TODO implement blue card penalty
                 volleyball.delay_of_game_timer = 0.0
-                print(f"[GAME] Delay of game penalty on Team {self.state.team_0}, Team {self.state.team_1} awarded 5 points")
+        else:
+            volleyball.delay_of_game_timer = 0.0
 
     
     @staticmethod

@@ -26,5 +26,10 @@ class Config:
     BALL_DEACCELERATION_RATE = 0.15# ratio of speed lost per second
     BALL_REFLECT_VELOCITY_LOSS = 0.4 # ratio of velocity lost on reflection with player
 
+    DELAY_OF_GAME_TIME_LIMIT = 10.0  # game seconds before delay of game warning/penalty
+    DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL = 1  # m/s in x direction the volleyball must exceed to avoid delay of game; should be normal walking speed
+    DELAY_OF_GAME_VELOCITY_X_THRESHOLD = DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    MAX_DELAY_OF_GAME_WARNINGS = 1  # Number of warnings before penalty per team
+    
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
     SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter

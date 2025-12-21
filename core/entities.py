@@ -148,6 +148,7 @@ class VolleyBall(Ball):
                 crossed_hoop: Optional[Tuple[str, float]] = None,  # (hoop_id, y_position) if crossed a hoop
                 inbounder: None|str = None,       # if ball is inbounded, if true then id of player
                 is_dead: Optional[bool] = False,
+                delay_of_game_timer: float = 0.0,
                 **ball_kwargs
                 ):
         super().__init__(
@@ -160,6 +161,7 @@ class VolleyBall(Ball):
         self.crossed_hoop = crossed_hoop
         self.inbounder = inbounder
         self.is_dead = is_dead
+        self.delay_of_game_timer = delay_of_game_timer
 
 
 class DodgeBall(Ball):
