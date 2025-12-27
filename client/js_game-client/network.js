@@ -87,6 +87,8 @@ export function handleMessage(message) {
       }
       if (incoming.game_time !== undefined) State.gameState.game_time = incoming.game_time;
       if (incoming.score !== undefined) State.gameState.score = incoming.score;
+      if (incoming.delay_bin !== undefined) State.gameState.delay_bin = incoming.delay_bin;
+      if (incoming.possession_code !== undefined) State.gameState.possession_code = incoming.possession_code;
     }
   }
 }
@@ -136,7 +138,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version !== 1) { console.warn('Unknown binary state version', version); return null; }
+    if (version !== 1 && version !== 2) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -177,7 +179,13 @@ export function parseBinaryState(arrayBuffer) {
       let id = (State.ballsOrder && State.ballsOrder[i]) ? State.ballsOrder[i] : `b_${i}`;
       balls[id] = { id, position: { x, y }, velocity: { x: vx, y: vy }, holder_id: holder_flag ? true : null, is_dead: is_dead_flag ? true : null };
     }
-    return { players, balls, game_time: gameTime, score };
+    let delay_bin;
+    let possession_code = 0;
+    if (version === 2) {
+      delay_bin = dv.getUint8(off, true); off += 1;
+      possession_code = dv.getUint8(off, true); off += 1;
+    }
+    return { players, balls, game_time: gameTime, score, delay_bin, possession_code };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }
 

@@ -705,8 +705,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header
-        buf += struct.pack('<B', 1)
+        # header (version 2 adds delay_bin after balls)
+        buf += struct.pack('<B', 2)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -743,6 +743,48 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             buf += struct.pack('<eeee', bx, by, bvx, bvy)
             buf += struct.pack('<B', 1 if getattr(b, 'holder_id', None) else 0)
             buf += struct.pack('<B', 1 if getattr(b, 'is_dead', None) else 0)
+
+        # compute and append an 8-bin delay-of-game indicator for volleyball
+        try:
+            # remaining time until delay-of-game limit
+            delay_limit = float(getattr(gs, 'delay_of_game_time_limit', 0.0) or 0.0)
+            volleyball = None
+            # prefer GameState helper if available
+            try:
+                volleyball = gs.get_volleyball()
+            except Exception:
+                volleyball = None
+            v_delay = float(getattr(volleyball, 'delay_of_game_timer', 0.0) or 0.0) if volleyball else 0.0
+            print('v_delay:', v_delay)
+            if delay_limit > 0.0:
+                remaining = max(0.0, delay_limit - v_delay)
+                frac = remaining / delay_limit
+                # bin 0 means no significant delay (safe), 7 means near limit
+                bin_index = int((1.0 - frac) * 8.0)
+                if bin_index < 0:
+                    bin_index = 0
+                if bin_index > 7:
+                    bin_index = 7
+                print('delay bin:', bin_index)
+            else:
+                bin_index = 0
+        except Exception:
+            bin_index = 0
+
+        # encode volleyball possession: 0=None, 1=team_0, 2=team_1
+        possession_code = 0
+        try:
+            if volleyball:
+                poss = getattr(volleyball, 'possession_team', None)
+                if poss == 0:
+                    possession_code = 1
+                elif poss == 1:
+                    possession_code = 2
+        except Exception:
+            pass
+
+        buf += struct.pack('<B', int(bin_index))
+        buf += struct.pack('<B', int(possession_code))
 
         return bytes(buf)
 

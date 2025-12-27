@@ -166,6 +166,104 @@ export function renderGame() {
       else if (ball.ball_type === 'volleyball' || ball.ball_type === 'VOLLEYBALL' || ball.ball_type === 'quaffle') { color = colour_quaffle; sizePx = Config.VOLLEYBALL_RADIUS * xScale; }
       ctx.fillStyle = color; ctx.save(); if (ball.is_dead) { ctx.globalAlpha = is_dead_alpha; } else { ctx.globalAlpha = 1.0; }
       ctx.beginPath(); ctx.arc(bx, by, Math.max(1, sizePx), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+      // render delay-of-game indicator near volleyball when bin > 0
+      const delayBin = (State.gameState && State.gameState.delay_bin !== undefined) ? State.gameState.delay_bin : 0;
+      const possessionCode = (State.gameState && State.gameState.possession_code !== undefined) ? State.gameState.possession_code : 0;
+      const isVolley = (ball.ball_type === 'volleyball' || ball.ball_type === 'VOLLEYBALL' || ball.ball_type === 'quaffle');
+      if (isVolley && delayBin > 0) {
+        const indicatorRadius = Math.max(3, Config.VOLLEYBALL_RADIUS * xScale * 5);
+        const baseOffsetX = Math.max(6, Config.VOLLEYBALL_RADIUS * xScale * 10);
+        // positive offset if team_0 (possession_code=1), negative if team_1 (possession_code=2)
+        const offsetDirection = (possessionCode === 1) ? 1 : -1;
+        // const offsetX = (possessionCode === 2) ? -baseOffsetX : baseOffsetX;
+        const offsetX = offsetDirection * baseOffsetX;
+        // draw arrow from volleyball through clock indicator center
+        try {
+          // line from ball to clock edge
+          const dx1 = offsetX - offsetDirection * indicatorRadius; const dy1 = 0;
+          const startX1 = bx;
+          const startY1 = by;
+          const endX1 = bx + dx1;
+          const endY1 = by;
+          ctx.save();
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = Math.max(1, 2 * lineThickness);
+          ctx.beginPath();
+          ctx.moveTo(startX1, startY1);
+          ctx.lineTo(endX1, endY1);
+          ctx.stroke();
+          // line from clock edge to arrow head
+          const dx2 = 2 * offsetX; const dy2 = 0;
+          const startX2 = bx + offsetX + offsetDirection * indicatorRadius;
+          const startY2 = by;
+          const endX2 = bx + dx2;
+          const endY2 = by;
+          const angle = Math.atan2(dy2, dx2);
+          const arrowHead = Math.max(3, 0.8 * indicatorRadius);
+          ctx.beginPath();
+          ctx.moveTo(startX2, startY2);
+          ctx.lineTo(endX2, endY2);
+          ctx.stroke();
+          // arrow head
+          ctx.translate(endX2 + offsetDirection * arrowHead, endY2);
+          ctx.rotate(angle);
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(-arrowHead, arrowHead * 0.5);
+          ctx.lineTo(-arrowHead, -arrowHead * 0.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        } catch (e) {console.log('Error drawing delay-of-game arrow:', e); }
+        const endAngle = (Math.PI * 2) * (Math.min(7, delayBin) / 8);
+        const startAngle = -Math.PI / 2;
+        const fillAngle = startAngle + endAngle;
+        const cx = bx + offsetX;
+        const cy = by;
+        // draw faint circle outline of the clock
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1, indicatorRadius * 0.1);
+        ctx.beginPath();
+        ctx.arc(cx, cy, indicatorRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // draw filled wedge corresponding to the delay bin in the clock
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#808080';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, indicatorRadius, startAngle, fillAngle, false);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // draw clock quarter marks
+        for (let i = 0; i < 8; i++) {
+          const angle = startAngle + (i * Math.PI / 4);
+          const innerRadius = indicatorRadius * 0.75;
+          const outerRadius = indicatorRadius;
+          const x1 = cx + innerRadius * Math.cos(angle);
+          const y1 = cy + innerRadius * Math.sin(angle);
+          const x2 = cx + outerRadius * Math.cos(angle);
+          const y2 = cy + outerRadius * Math.sin(angle);
+          ctx.save();
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = Math.max(1, indicatorRadius * 0.1);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
     }
   }
 
