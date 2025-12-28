@@ -116,6 +116,7 @@ class Ball:
     holder_id: Optional[str] = None  # Player ID if held, None if in flight
     previous_thrower_id: Optional[str] = None  # Player ID who last threw the ball
     reflect_velocity_loss: float = 0.3  # Percentage of velocity lost on reflection with player
+    turnover_to_player: Optional[str] = None  # Player ID who ball is turned over to, if any
     
     def serialize(self) -> dict:
         """Convert ball to JSON-serializable dict."""

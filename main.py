@@ -755,7 +755,6 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             except Exception:
                 volleyball = None
             v_delay = float(getattr(volleyball, 'delay_of_game_timer', 0.0) or 0.0) if volleyball else 0.0
-            print('v_delay:', v_delay)
             if delay_limit > 0.0:
                 remaining = max(0.0, delay_limit - v_delay)
                 frac = remaining / delay_limit
@@ -765,7 +764,6 @@ async def broadcast_to_room(room: GameRoom, message: dict):
                     bin_index = 0
                 if bin_index > 7:
                     bin_index = 7
-                print('delay bin:', bin_index)
             else:
                 bin_index = 0
         except Exception:

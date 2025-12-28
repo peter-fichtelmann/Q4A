@@ -166,7 +166,24 @@ class GameLogicSystem:
             dt: Delta game time (game time since last frame) in seconds
         """
         for ball in self.state.balls.values():
-            if ball.holder_id is None:
+            if ball.turnover_to_player is not None:
+                print('[GAME] Ball turnover to player velocity', ball.turnover_to_player)
+                player = self.state.players.get(ball.turnover_to_player)
+                # reset turnover to other eligible player if player unavailable
+                if player is None:
+                    self._designate_turnover(ball)
+                elif player.is_knocked_out:
+                    self._designate_turnover(ball)
+                player = self.state.players.get(ball.turnover_to_player)
+                if player is not None:
+                    if not player.is_knocked_out:
+                        ball.velocity.x = player.position.x - ball.position.x
+                        ball.velocity.y = player.position.y - ball.position.y
+                        mag_dir = (ball.velocity.x**2 + ball.velocity.y**2) ** 0.5
+                        if mag_dir > player.throw_velocity:
+                            ball.velocity.x = ball.velocity.x / mag_dir * player.throw_velocity
+                            ball.velocity.y = ball.velocity.y / mag_dir * player.throw_velocity  
+            elif ball.holder_id is None:
                 # Free balls experience friction/deceleration
                 ball.velocity.x = ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt
                 ball.velocity.y = ball.velocity.y - ball.deacceleration_rate * ball.velocity.y * dt
@@ -392,6 +409,8 @@ class GameLogicSystem:
         for other_id, distance in self.squared_distances.get(volleyball.id, []):
             if other_id in self.state.players.keys():
                 player = self.state.players[other_id]
+                if volleyball.turnover_to_player is not None and volleyball.turnover_to_player != player.id:
+                    continue # volleyball in turnover can only be picked up by designated player
                 if not player.is_knocked_out:
                     if player.catch_cooldown <= 0.0:
                         if volleyball.is_dead and not (player.role == PlayerRole.KEEPER and volleyball.possession_team == player.team):
@@ -404,8 +423,12 @@ class GameLogicSystem:
                                     volleyball.possession_team = player.team
                                     player.has_ball = volleyball.id
                                     # volleyball.position = player.position
+                                    if volleyball.turnover_to_player is not None:
+                                        volleyball.turnover_to_player = None
                                     print(f"[GAME] Player {player.id} picked up the volleyball")
-                                break
+                                    break
+                            else:
+                                break  # Beyond pickup range, stop checking further players
 
     def _check_dodgeball_possession_of_player(self, player: Player, dodgeball: Ball) -> bool:
         """
@@ -556,9 +579,13 @@ class GameLogicSystem:
         for i, ball_1 in enumerate(balls):
             if ball_1.is_dead if hasattr(ball_1, "is_dead") else False:
                 continue # dead balls do not collide
+            if ball_1.turnover_to_player is not None:
+                continue # balls in turnover do not collide
             for ball_2 in balls[i+1:]:
                 if ball_2.is_dead if hasattr(ball_2, "is_dead") else False:
                     continue # dead balls do not collide
+                if ball_2.turnover_to_player is not None:
+                    continue # balls in turnover do not collide
                 if ball_1.holder_id is not None or ball_2.holder_id is not None:
                     continue # only check free balls
                 # dist_sq = GameLogicSystem._squared_distance(ball_1.position, ball_2.position)
@@ -708,6 +735,8 @@ class GameLogicSystem:
             return  # Volleyball doesn't exist
         if volleyball.is_dead:
             return # Dead volleyball cannot score
+        if volleyball.turnover_to_player is not None:
+            return # volleyball in turnover cannot score
         for team in [0, 1]:
             hoop_x = self.state.hoops[f'hoop_{team}_center'].position.x
             steps_to_hoops = (hoop_x - volleyball.previous_position.x) / (volleyball.position.x - volleyball.previous_position.x) if volleyball.previous_position.x != volleyball.position.x else float('inf')
@@ -1086,6 +1115,8 @@ class GameLogicSystem:
                 return  0 # Dead volleyball cannot incur delay of game
             if volleyball.inbounder is not None:
                 return 0 # Inbounding volleyball cannot incur delay of game
+            if volleyball.turnover_to_player is not None:
+                return 0 # volleyball in turnover cannot incur delay of game
             if volleyball.possession_team is None:
                 return 0 # So far unpossessed volleyball cannot incur delay of game
             if volleyball.possession_team == self.state.team_0 and volleyball.position.x < self.state.midline_x: # if volleyball in own half
@@ -1126,7 +1157,8 @@ class GameLogicSystem:
                 else:
                     # Delay of game penalty
                     print(f'[GAME] Delay of game penalty on team {volleyball.possession_team}')
-                    # TODO implement volleyball turnover
+                    # initiate volleyball turnover
+                    self._designate_turnover(volleyball)
                     # TODO implement blue card penalty
                 volleyball.delay_of_game_timer = 0.0
         else:
@@ -1139,6 +1171,34 @@ class GameLogicSystem:
                         protected_keeper = True
             if not protected_keeper:
                 volleyball.delay_of_game_timer = 0.0
+
+    def _designate_turnover(self, ball: Ball) -> None:
+        """
+        Designate a turnover for the ball to the opposing team.
+        
+        Selects the nearest eligible opposing player (volleyball: chaser or keeper, dodgeball: beater) to receive
+        the volleyball as a turnover. The selected player must not be knocked out
+        and must not already hold a ball.
+        
+        Args:
+            volleyball: The volleyball to designate turnover for
+        """
+        for other_id, distance in self.squared_distances.get(ball.id, []):
+            if other_id in self.state.players.keys():
+                player = self.state.players[other_id]
+                if player.team != ball.possession_team:
+                    if ball.ball_type == BallType.VOLLEYBALL:
+                        if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
+                            if not player.has_ball:
+                                ball.turnover_to_player = player.id
+                                if ball.holder_id is not None:
+                                    holder = self.state.players.get(ball.holder_id)
+                                    holder.has_ball = False
+                                    ball.holder_id = None
+                                break
+                    elif ball.ball_type == BallType.DODGEBALL:
+                        raise Warning("Dodgeball turnover to beater not implemented yet")
+                        # TODO: implement dodgeball turnover to beater
 
     
     @staticmethod
