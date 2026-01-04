@@ -70,9 +70,6 @@ class GameLogicSystem:
         # Check pitch boundaries
         self._enforce_pitch_boundaries() # at least after free ways and position updates
 
-        # self._check_player_collisions() # ?after enforcing pitch boundaries and hoop blockage and potentially setting velocities to 0
-        # self.update_ball_velocities(dt) # ?after player velocities and player_collisions because ball velocity depends on player velocity
-
     def update_player_velocities(self, dt: float) -> None:
         """
         Update player velocities based on their current direction and role.
@@ -659,6 +656,8 @@ class GameLogicSystem:
                     collision_dist_sq = (player.radius + other_player.radius) ** 2
                     if distance < collision_dist_sq:
                         # Collision occurred
+                        player.in_contact_player_ids.append(other_player.id)
+                        other_player.in_contact_player_ids.append(player.id)
                         normal = Vector2(
                             other_player.position.x - player.position.x,
                             other_player.position.y - player.position.y
@@ -708,8 +707,7 @@ class GameLogicSystem:
                         other_player.velocity.x = combined_velocity_along_normal.x + other_velocity_perpendicular.x
                         other_player.velocity.y = combined_velocity_along_normal.y + other_velocity_perpendicular.y
                         # add contact_player_id for potential reset when enforcing hoop blockage or boundary
-                        player.in_contact_player_ids.append(other_player.id)
-                        other_player.in_contact_player_ids.append(player.id)
+
 
                         # print('player vel along normal', player_velocity_along_normal.x, player_velocity_along_normal.y)
                         # print('player vel perp', player_velocity_perpendicular.x, player_velocity_perpendicular.y)
@@ -1295,5 +1293,3 @@ class GameLogicSystem:
 
 
 # Bugs:
-# player_collision and resetting positions with boundaries or hoop blockage can lead to players at same positions if pushing player less velocity than player before reset
-# - Solution: 
