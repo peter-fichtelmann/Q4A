@@ -48,7 +48,6 @@ class GameLogicSystem:
         self._check_player_collisions()
         self.update_ball_velocities(dt)
         
-
         # Update player positions and ball positions
         self.update_positions(dt)
         # free way for volleyball inbounder
@@ -70,6 +69,9 @@ class GameLogicSystem:
         
         # Check pitch boundaries
         self._enforce_pitch_boundaries() # at least after free ways and position updates
+
+        # self._check_player_collisions() # ?after enforcing pitch boundaries and hoop blockage and potentially setting velocities to 0
+        # self.update_ball_velocities(dt) # ?after player velocities and player_collisions because ball velocity depends on player velocity
 
     def update_player_velocities(self, dt: float) -> None:
         """
@@ -294,9 +296,11 @@ class GameLogicSystem:
                                         ball = self.state.get_ball(player.has_ball)
                                         if ball:
                                             ball.position.x = ball.position.x + reset_vector
-                                            ball.position.y = ball.position.y
                                             ball.velocity.x = 0
                                             ball.velocity.y = 0
+                                    for contact_player_id in player.in_contact_player_ids:
+                                        contact_player = self.state.players[contact_player_id]
+                                        contact_player.position.x = contact_player.position.x + reset_vector
                                     break
                                 # print(f'Player {player.id} blocked from going too close to own hoop')
 
@@ -640,6 +644,9 @@ class GameLogicSystem:
         This creates realistic elastic collisions where players don't stick together
         but bounce off each other naturally.
         """
+        # reset in contact player ids from last update (in separate loop because in other loop attributes of other players set)
+        for player in self.state.players.values():
+            player.in_contact_player_ids = []
         for i, player in enumerate(list(self.state.players.values())[:-1]):
             if player.is_knocked_out:
                 continue
@@ -681,17 +688,17 @@ class GameLogicSystem:
                             other_player.velocity.x - other_velocity_along_normal.x,
                             other_player.velocity.y - other_velocity_along_normal.y
                         )
-                        if dot_player > 0 and dot_other > 0: # player moves towards other
+                        if dot_player > 0 and dot_other > 0: # player moves towards other player
                             mag_player_vel_along_normal = (player_velocity_along_normal.x**2 + player_velocity_along_normal.y**2) ** 0.5
                             mag_other_vel_along_normal = (other_velocity_along_normal.x**2 + other_velocity_along_normal.y**2) ** 0.5
-                            if mag_player_vel_along_normal < mag_other_vel_along_normal: # player slower than not pushing other
+                            if mag_player_vel_along_normal < mag_other_vel_along_normal: # player slower than other so no pushing
                                 continue
-                        elif dot_player < 0 and dot_other < 0: # other moves towards player
+                        elif dot_player < 0 and dot_other < 0: # other player moves towards player
                             mag_player_vel_along_normal = (player_velocity_along_normal.x**2 + player_velocity_along_normal.y**2) ** 0.5
                             mag_other_vel_along_normal = (other_velocity_along_normal.x**2 + other_velocity_along_normal.y**2) ** 0.5
-                            if mag_player_vel_along_normal > mag_other_vel_along_normal: # other slower than not pushing player
+                            if mag_player_vel_along_normal > mag_other_vel_along_normal: # other player slower than player so no pushing
                                 continue
-                         # else both moving away from towards each other or one stationary
+                         # else both moving towards each other or one stationary
                         combined_velocity_along_normal = Vector2(
                             (player_velocity_along_normal.x + other_velocity_along_normal.x) / 2,
                             (player_velocity_along_normal.y + other_velocity_along_normal.y) / 2
@@ -700,6 +707,9 @@ class GameLogicSystem:
                         player.velocity.y = combined_velocity_along_normal.y + player_velocity_perpendicular.y
                         other_player.velocity.x = combined_velocity_along_normal.x + other_velocity_perpendicular.x
                         other_player.velocity.y = combined_velocity_along_normal.y + other_velocity_perpendicular.y
+                        # add contact_player_id for potential reset when enforcing hoop blockage or boundary
+                        player.in_contact_player_ids.append(other_player.id)
+                        other_player.in_contact_player_ids.append(player.id)
 
                         # print('player vel along normal', player_velocity_along_normal.x, player_velocity_along_normal.y)
                         # print('player vel perp', player_velocity_perpendicular.x, player_velocity_perpendicular.y)
@@ -853,6 +863,7 @@ class GameLogicSystem:
             if new_position_x != moving_entity.position.x or new_position_y != moving_entity.position.y:
                 # print('boundary enforcement for entity', moving_entity.id, new_position_x, moving_entity.position.x, new_position_y, moving_entity.position.y)
                 if hasattr(moving_entity, "ball_type"):
+                    # ball
                     # stopp balls at boundary
                     moving_entity.velocity.x = 0
                     moving_entity.velocity.y = 0
@@ -861,6 +872,7 @@ class GameLogicSystem:
                             # volleyball going out of bounds only if not hold
                             self._start_inbounding_procedure()
                 if hasattr(moving_entity, "has_ball"):
+                    # player
                     if moving_entity.has_ball:
                         ball = self.state.get_ball(moving_entity.has_ball)
                         if ball.ball_type == BallType.VOLLEYBALL:
@@ -872,6 +884,14 @@ class GameLogicSystem:
                             moving_entity.has_ball = None
                             ball.holder_id = None
                             self._start_inbounding_procedure()
+
+                    for contact_player_id in moving_entity.in_contact_player_ids:
+                        reset_vector = Vector2(0, 0)
+                        reset_vector.x = new_position_x - moving_entity.position.x
+                        reset_vector.y = new_position_y - moving_entity.position.y
+                        contact_player = self.state.players[contact_player_id]
+                        contact_player.position.x += reset_vector.x
+                        contact_player.position.y += reset_vector.y
                 moving_entity.position.x = new_position_x
                 moving_entity.position.y = new_position_y
 
@@ -1272,3 +1292,8 @@ class GameLogicSystem:
         TODO: Implement tackle logic
         """
         pass
+
+
+# Bugs:
+# player_collision and resetting positions with boundaries or hoop blockage can lead to players at same positions if pushing player less velocity than player before reset
+# - Solution: 

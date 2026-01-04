@@ -62,8 +62,6 @@ class Player:
     direction: Vector2 = field(default_factory=lambda: Vector2(0, 0))   # Current movement direction
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
     radius: float = 0.3                  # Collision radius in meters
-
-    
     is_knocked_out: bool = False             # True if knocked out by dodgeball
     has_ball: bool = False                    # True if holding a
     max_speed: float = 2               # Meters per second
@@ -75,6 +73,7 @@ class Player:
     catch_cooldown: float = 0.0        # Seconds until can catch ball again
     dodgeball_immunity: bool = False      # Temporary immunity to being knocked out by dodgeballs
     inbounding: None|str = None       # if player is inbounding, if true then id of ball
+    in_contact_player_ids: list[str] = field(default_factory=list)   # player ids where the player is in physical contact
 
     def serialize(self) -> dict:
         """Convert player to JSON-serializable dict."""
