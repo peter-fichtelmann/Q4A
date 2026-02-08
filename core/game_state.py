@@ -22,6 +22,11 @@ class GameState:
     delay_of_game_velocity_x_threshold: float = 0.5              # Velocity threshold in x direction the volleyball must exceed to avoid delay of game
     max_delay_of_game_warnings: int = 1                        # Number of warnings before penalty per team
     delay_of_game_warnings: Dict[int|str, int] = field(default_factory=lambda: {0: 0, 1: 0})  # Track warnings for each team
+    third_dodgeball: str = None # third dodgeball id if third dodgeball
+    third_dodgeball_team: str = None # team which is assigned the third dodgeball
+    potential_third_dodgeball_interference_kwargs: Dict[str, str] = None # third dodgeball id and player id if potential interferenece if not beat attempt
+
+    beat_attempt_time_limit: float = 10.0
     seeker_on_pitch: bool = False                         # Seeker enters after 20 min
     set_score: Optional[int] = None                           # Snitch capture score
     game_phase: str = "waiting"  # waiting, active, ended

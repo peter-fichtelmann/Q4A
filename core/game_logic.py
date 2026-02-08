@@ -3,8 +3,9 @@ from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRo
 from core.game_state import GameState
 import random
 from operator import itemgetter # faster dict sorting performance
+import warnings
 
-class GameLogicSystem:
+class GameLogic:
     """
     Implements the core game rules for quadball.
     This system is SERVER-AUTHORITATIVE, meaning the server runs this logic
@@ -64,7 +65,7 @@ class GameLogicSystem:
 
         self._check_goals()
 
-        self._check_third_dodgeball()
+        self._check_third_dodgeball(dt)
         self._check_delay_of_game(dt)
         
         # Check pitch boundaries
@@ -186,6 +187,11 @@ class GameLogicSystem:
                 # Free balls experience friction/deceleration
                 ball.velocity.x = ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt
                 ball.velocity.y = ball.velocity.y - ball.deacceleration_rate * ball.velocity.y * dt
+                # if dodgeball below threshold then dead
+                if ball.ball_type == BallType.DODGEBALL:
+                    squared_velocity_mag = (ball.velocity.x**2 + ball.velocity.y**2)
+                    if squared_velocity_mag < ball.dead_velocity_threshold **2:
+                        ball.possession_team = None                    
             else:
                 # Held balls move with the player holding them
                 holder = self.state.get_player(ball.holder_id)
@@ -346,8 +352,8 @@ class GameLogicSystem:
                 #     continue
 
                 # Store squared distance for the pair
-                # self.squared_distances[(entity_1.id, entity_2.id)] = GameLogicSystem._squared_distance(entity_1.position, entity_2.position)
-                squared_distance = GameLogicSystem._squared_distance(entity_1.position, entity_2.position)
+                # self.squared_distances[(entity_1.id, entity_2.id)] = GameLogic._squared_distance(entity_1.position, entity_2.position)
+                squared_distance = GameLogic._squared_distance(entity_1.position, entity_2.position)
                 self.squared_distances_dicts[entity_1.id][entity_2.id] = squared_distance
                 self.squared_distances_dicts[entity_2.id][entity_1.id] = squared_distance
                 # Store or use the distance as needed
@@ -450,11 +456,15 @@ class GameLogicSystem:
         if player.catch_cooldown <= 0.0:
             if player.role == PlayerRole.BEATER:
                 if not player.has_ball:
+                    if self.state.third_dodgeball == dodgeball.id and self.state.third_dodgeball_team != player.team:
+                        # third dodgeball and player in already dodgeball possesing team
+                        self._third_dodgeball_interference(player, dodgeball)
+                    else:
                     # Player picks up dodgeball
-                    dodgeball.holder_id = player.id
-                    dodgeball.possession_team = player.team
-                    player.has_ball = dodgeball.id
-                    print(f"[GAME] Player {player.id} picked up a dodgeball")
+                        dodgeball.holder_id = player.id
+                        dodgeball.possession_team = player.team
+                        player.has_ball = dodgeball.id
+                        print(f"[GAME] Player {player.id} picked up a dodgeball")
                     return True
         return False
 
@@ -481,12 +491,17 @@ class GameLogicSystem:
                         if distance < (player.radius + dodgeball.radius) ** 2:
                             if distance < (player.radius + dodgeball.radius) **2:
                                 dodgeball_mag_velocity = (dodgeball.velocity.x**2 + dodgeball.velocity.y**2) ** 0.5
-                                if dodgeball.possession_team is None or dodgeball_mag_velocity < 0.1 * player.throw_velocity: # ball pickup with dead dodgeball or slow moving one
+                                # check if loose dead dodgeball or beater of same team
+                                if dodgeball.possession_team is None or (
+                                    dodgeball.possession_team == player.team and player.role == PlayerRole.BEATER
+                                    ): # ball pickup with dead dodgeball or slow moving one
                                     if self._check_dodgeball_possession_of_player(player, dodgeball):
                                         break
                                 else: # beat checks
-                                    if self._check_beats(player, dodgeball):
-                                        break
+                                    self._check_beats(player, dodgeball)
+                                    # if self._check_beats(player, dodgeball):
+                                        # break only one beat allowed?
+
 
     def _check_beats(self, player: Player, dodgeball: Ball) -> bool:
         """
@@ -541,7 +556,7 @@ class GameLogicSystem:
                 ball.possession_team = None
                 print(f"[GAME] Player {player.id} dropped ball {ball.id} due to knockout")
                 player.has_ball = None
-            dodgeball.possession_team = None
+            # dodgeball.possession_team = None # Only one beat at once?
             normal = Vector2(
                 dodgeball.position.x - player.position.x,
                 dodgeball.position.y - player.position.y
@@ -551,6 +566,11 @@ class GameLogicSystem:
             normal.y /= normal_mag
             dodgeball.velocity = dodgeball.velocity.reflect(normal, dodgeball.reflect_velocity_loss)
             print(f"[GAME] Player {player.id} was knocked out by dodgeball {dodgeball.id}")
+            for dodgeball in self.state.get_dodgeballs():
+                dodgeball.beat_attempt_time = 0.0 # reset beat attempt time
+            self.state.potential_third_dodgeball_interference_kwargs = None # reset third dodgeball interference kwargs
+            self.state.third_dodgeball = None
+            self.state.third_dodgeball_team = None
             return True
         
 
@@ -589,7 +609,7 @@ class GameLogicSystem:
                     continue # balls in turnover do not collide
                 if ball_1.holder_id is not None or ball_2.holder_id is not None:
                     continue # only check free balls
-                # dist_sq = GameLogicSystem._squared_distance(ball_1.position, ball_2.position)
+                # dist_sq = GameLogic._squared_distance(ball_1.position, ball_2.position)
                 dist_sq = self.squared_distances_dicts[ball_1.id][ball_2.id]
                 collision_dist_sq = (ball_1.radius + ball_2.radius) ** 2
                 if dist_sq < collision_dist_sq:
@@ -804,7 +824,18 @@ class GameLogicSystem:
 
     # not implemented yet
     # TODO: test and implement
-    def _check_third_dodgeball(self) -> None:
+
+    def _is_dodgeball_third(self, dodgeballs_per_team) -> bool:
+        if len(dodgeballs_per_team['dead_dodgeballs']) == 1:
+            if len(dodgeballs_per_team[f'hold_dodgeballs_{self.state.team_0}']) == 2 and len(dodgeballs_per_team[f'hold_dodgeballs_{self.state.team_1}']) == 0:
+                self.state.third_dodgeball_team = self.state.team_1
+                return True
+            elif len(dodgeballs_per_team[f'hold_dodgeballs_{self.state.team_0}']) == 0 and len(dodgeballs_per_team[f'hold_dodgeballs_{self.state.team_1}']) == 2:
+                self.state.third_dodgeball_team = self.state.team_0
+                return True
+        return False
+
+    def _check_third_dodgeball(self, dt) -> None:
         """
         Enforce the rule that only 2 dodgeballs can be held by one team at once.
         
@@ -813,33 +844,117 @@ class GameLogicSystem:
         - This prevents one team from accumulating all balls and denying the other team play
         - The assigned possession lasts until a player picks it up or game state changes
         """
+
+        def is_still_third_dodgeball(dodgeballs_per_team):
+            if len(dodgeballs_per_team[f'hold_dodgeballs_{self.state.third_dodgeball_team}'] + dodgeballs_per_team[f'thrown_dodgeballs_{self.state.third_dodgeball_team}']) > 0:
+                # team without dodgeball got one
+                return False
+            else:
+                if self.state.third_dodgeball_team == self.state.team_0:
+                    dodgeball_possessing_team = self.state.team_1
+                else:
+                    dodgeball_possessing_team = self.state.team_0
+                # if len(dodgeballs_per_team[dodgeball_possessing_team]) == 0:
+                #     # not holding dodgeballs anymore. Is it really loosing third dodgeball after rulebook? -> No third dodgeball still exists
+                #     return False
+                # when thrown still possesion
+                thrown_dodgeball_ids = dodgeballs_per_team[f'thrown_dodgeballs_{dodgeball_possessing_team}']
+                for thrown_dodgeball_id in thrown_dodgeball_ids:
+                    thrown_dodgeball = self.state.balls[thrown_dodgeball_id]
+                    if thrown_dodgeball.holder_id is None: # thrown
+                        if thrown_dodgeball.beat_attempt_time == 0.0:
+                            # "initialize" beat_attempt_time
+                            thrown_dodgeball.beat_attempt_time = dt
+                            print(f'Initiating beat attempt time for {thrown_dodgeball.id}')
+
+                
+                    # reasonable beat attempt 
+                    # get thrown bludger in dodgeball_team possesion
+                    # 
+                    #  and check if throw line to certain length close enough to nearest chaser
+                    # option 1: check distance throw to chaser positions at throw
+                    # option 2: include their current velocity at throw
+                    ## favorite option 3: monitor closest distance until beat or velocity below threshold
+                    pass
+            return True
+
         dodgeballs = self.state.get_dodgeballs()
         # if len(dodgeballs) == 0:
         #     return # no dodgeball exist
         if len(dodgeballs) == 3:
         # potential_number_third_dodgeballs = len(dodgeballs) // 2
+            
+        # check for third dodgeballs
             dodgeballs_per_team = {
-                self.state.team_0: [],
-                self.state.team_1: [],
-                'not_hold': []
+                f'hold_dodgeballs_{self.state.team_0}': [],
+                f'hold_dodgeballs_{self.state.team_1}': [],
+                f'thrown_dodgeballs_{self.state.team_0}': [],
+                f'thrown_dodgeballs_{self.state.team_1}': [],
+                'dead_dodgeballs': [],
                 }
             for dodgeball in dodgeballs:
-                if dodgeball.holder_id is None:
-                    dodgeballs_per_team['not_hold'].append(dodgeball.id)
-                else:
+                if dodgeball.beat_attempt_time > 0:
+                    dodgeball.beat_attempt_time += dt
+                    if dodgeball.beat_attempt_time > self.state.beat_attempt_time_limit:
+                        if self.state.potential_third_dodgeball_interference_kwargs is not None:
+                            # third dodgeball interference
+                            player = self.state.players[self.state.potential_third_dodgeball_interference_kwargs['player_id']]
+                            # reset beat attempt times
+                            dodgeball = self.state.balls[self.state.potential_third_dodgeball_interference_kwargs['dodgeball_id']]
+                            # set beat attempt time to 0 to allow interference
+                            dodgeball.beat_attempt_time = 0.0
+                            self._third_dodgeball_interference(player, dodgeball)
+                if dodgeball.possession_team is None:
+                    dodgeballs_per_team['dead_dodgeballs'].append(dodgeball.id)
+                elif dodgeball.holder_id is not None:
                     holder = self.state.players[dodgeball.holder_id]
-                    dodgeballs_per_team[holder.team].append(dodgeball.id)
-            if len(dodgeballs_per_team[self.state.team_0]) == 2 and len(dodgeballs_per_team[self.state.team_1]) == 0:
-                third_dodgeball_id = dodgeballs_per_team['not_hold'][0]
-                third_dodgeball = self.state.balls[third_dodgeball_id]
-                third_dodgeball.possession_team = self.state.team_1
-                # print(f'[GAME] Third dodgeball {third_dodgeball.id} assigned to team {self.state.team_1}')
-            elif len(dodgeballs_per_team[self.state.team_0]) == 0 and len(dodgeballs_per_team[self.state.team_1]) == 2:
-                third_dodgeball_id = dodgeballs_per_team['not_hold'][0]
-                third_dodgeball = self.state.balls[third_dodgeball_id]
-                third_dodgeball.possession_team = self.state.team_1
-                # print(f'[GAME] Third dodgeball {third_dodgeball.id} assigned to team {self.state.team_1}')
-            # if third_dodgeball -> check if still third: if not picked up by new possession team or beat-attempt two bludger team
+                    dodgeballs_per_team[f'hold_dodgeballs_{holder.team}'].append(dodgeball.id)
+                else:
+                    dodgeballs_per_team[f'thrown_dodgeballs_{dodgeball.possession_team}'].append(dodgeball.id)
+            if self.state.third_dodgeball is None:
+                if self._is_dodgeball_third(dodgeballs_per_team):
+                    third_dodgeball_id = dodgeballs_per_team['dead_dodgeballs'][0]
+                    # third_dodgeball = self.state.balls[third_dodgeball_id]
+                    self.state.third_dodgeball = third_dodgeball_id
+                    print(f'[GAME] Third dodgeball {third_dodgeball_id} assigned to team {self.state.third_dodgeball_team}')
+            else:
+                # third dodgeball exists
+                # checks if still third dodgeball
+                if not is_still_third_dodgeball(dodgeballs_per_team):
+                    self.state.third_dodgeball = None
+                    self.state.third_dodgeball_team = None
+                    # reset beat attempt times and potential interference
+                    for dodgeball in dodgeballs:
+                        dodgeball.beat_attempt_time = 0.0
+                    self.state.potential_third_dodgeball_interference_kwargs = None
+                    print('[GAME] No longer third dodgeball situation')
+
+
+            # -> check for other events:
+
+    def _third_dodgeball_interference(self, player, dodgeball):
+        if dodgeball.beat_attempt_time > 0:
+            self.state.potential_third_dodgeball_interference_kwargs = {
+                'dodgeball_id': dodgeball.id,
+                'player_id': player.id,
+            }
+            print(f'[GAME] Potential third dodgeball interference if beat attempt not succesful')
+        else:
+            print(f'[GAME] Third dodgeball interference by team {player.team} of player {player.id} with dodgeball {dodgeball.id}')
+            volleyball = self.state.get_volleyball()
+            # Back to hoops for player
+            player.is_knocked_out = True
+            # Volleyball and double dodgeball turnover
+            self._designate_turnover(volleyball)
+            self._designate_turnover(dodgeball)
+            # TODO also designate second dodgeball turnover
+
+            self.state.third_dodgeball = None
+            self.state.third_dodgeball_team = None
+            self.state.potential_third_dodgeball_interference_kwargs = None
+            for dodgeball in self.state.get_dodgeballs():
+                dodgeball.beat_attempt_time = 0.0 # reset beat attempt time
+            pass
 
     def _enforce_pitch_boundaries(self) -> None:
         """
@@ -863,6 +978,7 @@ class GameLogicSystem:
                 if hasattr(moving_entity, "ball_type"):
                     # ball
                     # stopp balls at boundary
+                    print(f'ball {moving_entity.id} hit boundary at position')
                     moving_entity.velocity.x = 0
                     moving_entity.velocity.y = 0
                     if moving_entity.ball_type == BallType.VOLLEYBALL:
@@ -1180,15 +1296,16 @@ class GameLogicSystem:
                     # TODO implement blue card penalty
                 volleyball.delay_of_game_timer = 0.0
         else:
-            possessing_player = self.state.players.get(volleyball.holder_id)
-            # check if protected keeper, if yes no reset of timer (protected keeper has to advance directly)
-            protected_keeper = False
-            if possessing_player is not None:
-                if possessing_player.role == PlayerRole.KEEPER:
-                    if possessing_player.dodgeball_immunity:
-                        protected_keeper = True
-            if not protected_keeper:
-                volleyball.delay_of_game_timer = 0.0
+            if volleyball is not None:
+                possessing_player = self.state.players.get(volleyball.holder_id)
+                # check if protected keeper, if yes no reset of timer (protected keeper has to advance directly)
+                protected_keeper = False
+                if possessing_player is not None:
+                    if possessing_player.role == PlayerRole.KEEPER:
+                        if possessing_player.dodgeball_immunity:
+                            protected_keeper = True
+                if not protected_keeper:
+                    volleyball.delay_of_game_timer = 0.0
 
     def _designate_turnover(self, ball: Ball) -> None:
         """
@@ -1215,7 +1332,7 @@ class GameLogicSystem:
                                     ball.holder_id = None
                                 break
                     elif ball.ball_type == BallType.DODGEBALL:
-                        raise Warning("Dodgeball turnover to beater not implemented yet")
+                        warnings.warn("Dodgeball turnover to beater not implemented yet")
                         # TODO: implement dodgeball turnover to beater
 
     

@@ -170,6 +170,8 @@ class DodgeBall(Ball):
                 id: str,
                 radius: float,
                 position: Vector2,
+                beat_attempt_time: float = 0.0,
+                dead_velocity_threshold: float = 0.0,
                 **ball_kwargs
                 ):
         super().__init__(
@@ -179,6 +181,8 @@ class DodgeBall(Ball):
             ball_type=BallType.DODGEBALL,
             **ball_kwargs
         )
+        self.beat_attempt_time = beat_attempt_time
+        self.dead_velocity_threshold = dead_velocity_threshold
 
 @dataclass
 class Hoop:
