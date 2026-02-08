@@ -80,6 +80,7 @@ export function handleMessage(message) {
           existing.position = bdata.position || existing.position;
           existing.velocity = bdata.velocity || existing.velocity;
           if (bdata.holder_id !== undefined) existing.holder_id = bdata.holder_id;
+          if (bdata.possession_team !== undefined) existing.possession_team = bdata.possession_team;
           existing.id = id;
           if (bdata.is_dead !== undefined) existing.is_dead = bdata.is_dead;
           State.gameState.balls[id] = existing;
@@ -138,7 +139,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version !== 1 && version !== 2) { console.warn('Unknown binary state version', version); return null; }
+    if (version !== 1 && version !== 2 && version !== 3) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -176,8 +177,15 @@ export function parseBinaryState(arrayBuffer) {
       const vy = halfToFloat(vyh);
       const holder_flag = dv.getUint8(off, true); off += 1;
       const is_dead_flag = dv.getUint8(off, true); off += 1;
+      let possession_team = null;
+      if (version >= 3) {
+        const poss_code = dv.getUint8(off, true); off += 1;
+        if (poss_code === 1) possession_team = 'team_0';
+        else if (poss_code === 2) possession_team = 'team_1';
+        else possession_team = null;
+      }
       let id = (State.ballsOrder && State.ballsOrder[i]) ? State.ballsOrder[i] : `b_${i}`;
-      balls[id] = { id, position: { x, y }, velocity: { x: vx, y: vy }, holder_id: holder_flag ? true : null, is_dead: is_dead_flag ? true : null };
+      balls[id] = { id, position: { x, y }, velocity: { x: vx, y: vy }, holder_id: holder_flag ? true : null, is_dead: is_dead_flag ? true : null, possession_team };
     }
     let delay_bin;
     let possession_code = 0;

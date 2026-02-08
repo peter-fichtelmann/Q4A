@@ -20,7 +20,7 @@ from collections import deque
 # Import your game modules
 from core.game_state import GameState
 from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop
-from core.game_logic import GameLogicSystem
+from core.game_logic import GameLogic
 from config import Config
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -69,7 +69,8 @@ class GameRoom:
         self.game_state.delay_of_game_time_limit = Config.DELAY_OF_GAME_TIME_LIMIT
         self.game_state.delay_of_game_velocity_x_threshold = Config.DELAY_OF_GAME_VELOCITY_X_THRESHOLD
         self.game_state.max_delay_of_game_warnings = Config.MAX_DELAY_OF_GAME_WARNINGS
-        self.game_logic = GameLogicSystem(self.game_state)
+        self.game_state.beat_attempt_time_limit = Config.BEAT_ATTEMPT_TIME_LIMIT
+        self.game_logic = GameLogic(self.game_state)
         self.client_connections: Dict[str, WebSocket] = {}
         self.player_to_client: Dict[str, str] = {}
         # Lobby websocket connections (for waiting-room updates)
@@ -131,7 +132,8 @@ class GameRoom:
                 position=Vector2(position[0], position[1]),
                 radius=Config.DODGEBALL_RADIUS,
                 deacceleration_rate=Config.BALL_DEACCELERATION_RATE,
-                reflect_velocity_loss=Config.BALL_REFLECT_VELOCITY_LOSS
+                reflect_velocity_loss=Config.BALL_REFLECT_VELOCITY_LOSS,
+                dead_velocity_threshold=Config.DODGEBALL_DEAD_VELOCITY_THRESHOLD
             )
             self.game_state.add_ball(dodgeball)
 
@@ -485,7 +487,7 @@ async def websocket_lobby(websocket: WebSocket):
 
                     room.game_started = True
                     # reinitialize game logic system with all players and balls
-                    room.game_logic = GameLogicSystem(room.game_state)
+                    room.game_logic = GameLogic(room.game_state)
 
                     # Broadcast start to all lobby connections in the room so every client
                     # receives their assigned player_id (if any) and can open the game page.
@@ -705,8 +707,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header (version 2 adds delay_bin after balls)
-        buf += struct.pack('<B', 2)
+        # header (version 3 adds per-ball possession_team)
+        buf += struct.pack('<B', 3)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -734,7 +736,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             flags = (1 if getattr(p, 'is_knocked_out', False) else 0) | ((1 if getattr(p, 'has_ball', False) else 0) << 1)
             buf += struct.pack('<B', flags)
 
-        # balls: x,y,vx,vy + holder_flag
+        # balls: x,y,vx,vy + holder_flag + is_dead + possession_team
         for b in balls:
             bx = float(getattr(b.position, 'x', 0.0))
             by = float(getattr(b.position, 'y', 0.0))
@@ -743,6 +745,17 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             buf += struct.pack('<eeee', bx, by, bvx, bvy)
             buf += struct.pack('<B', 1 if getattr(b, 'holder_id', None) else 0)
             buf += struct.pack('<B', 1 if getattr(b, 'is_dead', None) else 0)
+            # encode possession team: 0=None, 1=team_0, 2=team_1
+            poss_code = 0
+            try:
+                poss = getattr(b, 'possession_team', None)
+                if poss == 0:
+                    poss_code = 1
+                elif poss == 1:
+                    poss_code = 2
+            except Exception:
+                poss_code = 0
+            buf += struct.pack('<B', int(poss_code))
 
         # compute and append an 8-bin delay-of-game indicator for volleyball
         try:

@@ -162,10 +162,45 @@ export function renderGame() {
       }
       const bs = worldToScreen(bpos.x, bpos.y); const bx = bs.x, by = bs.y;
       let color = colour_quaffle; let sizePx = xScale * 0.3;
-      if (ball.ball_type === 'dodgeball' || ball.ball_type === 'DODGEBALL' || ball.ball_type === 'bludger') { color = colour_bludger; sizePx = Config.DODGEBALL_RADIUS * xScale; }
+      const isDodgeball = (ball.ball_type === 'dodgeball' || ball.ball_type === 'DODGEBALL' || ball.ball_type === 'bludger');
+      if (isDodgeball) {
+        // // interesting concept to change ball color based on possession team, but can lead to confusion since possession can be ambiguous and rapidly changing for dodgeballs
+        // if (ball.possession_team === 'team_0') color = colour_player_A;
+        // else if (ball.possession_team === 'team_1') color = colour_player_B;
+        // else color = colour_bludger;
+        color = colour_bludger;
+        sizePx = Config.DODGEBALL_RADIUS * xScale;
+      }
       else if (ball.ball_type === 'volleyball' || ball.ball_type === 'VOLLEYBALL' || ball.ball_type === 'quaffle') { color = colour_quaffle; sizePx = Config.VOLLEYBALL_RADIUS * xScale; }
       ctx.fillStyle = color; ctx.save(); if (ball.is_dead) { ctx.globalAlpha = is_dead_alpha; } else { ctx.globalAlpha = 1.0; }
       ctx.beginPath(); ctx.arc(bx, by, Math.max(1, sizePx), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+      let possessionEdgeColor = null;
+      if (isDodgeball) {
+        const hasHolder = ball.holder_id !== undefined && ball.holder_id !== null && ball.holder_id !== false;
+        if (hasHolder && ball.holder_id !== true && gs.players && gs.players[ball.holder_id]) {
+          const holder = gs.players[ball.holder_id];
+          const team = (holder.team === 'A' || holder.team === 0 || holder.team === '0' || holder.team === 'team_0') ? 'A' : 'B';
+          possessionEdgeColor = (team === 'A') ? colour_player_A : colour_player_B;
+          if (State.debug && State.debug.enabled) {
+            console.log('Dodgeball edge: holder_id', ball.holder_id, 'holder.team', holder.team, 'edgeColor', possessionEdgeColor);
+          }
+        } else if (ball.possession_team !== undefined && ball.possession_team !== null) {
+          const team = (ball.possession_team === 'A' || ball.possession_team === 0 || ball.possession_team === '0' || ball.possession_team === 'team_0') ? 'A' : 'B';
+          possessionEdgeColor = (team === 'A') ? colour_player_A : colour_player_B;
+          if (State.debug && State.debug.enabled) {
+            console.log('Dodgeball edge: possession_team', ball.possession_team, 'edgeColor', possessionEdgeColor);
+          }
+        } else if (State.debug && State.debug.enabled) {
+          console.log('Dodgeball edge: no holder or possession_team', { holder_id: ball.holder_id, possession_team: ball.possession_team });
+        }
+      }
+      if (possessionEdgeColor) {
+        const edgeWidth = Math.max(1, sizePx * 0.5);
+        ctx.save(); ctx.strokeStyle = possessionEdgeColor; ctx.lineWidth = edgeWidth;
+        if (ball.is_dead) { ctx.globalAlpha = is_dead_alpha; } else { ctx.globalAlpha = 1.0; }
+        ctx.beginPath(); ctx.arc(bx, by, Math.max(1 + edgeWidth, sizePx + edgeWidth), 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
 
       // render delay-of-game indicator near volleyball when bin > 0
       const delayBin = (State.gameState && State.gameState.delay_bin !== undefined) ? State.gameState.delay_bin : 0;
