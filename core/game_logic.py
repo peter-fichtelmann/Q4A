@@ -432,6 +432,7 @@ class GameLogic:
                                     # volleyball.position = player.position
                                     if volleyball.turnover_to_player is not None:
                                         volleyball.turnover_to_player = None
+                                        player.is_receiving_turnover_ball = False
                                     print(f"[GAME] Player {player.id} picked up the volleyball")
                                     break
                             else:
@@ -464,6 +465,9 @@ class GameLogic:
                         dodgeball.holder_id = player.id
                         dodgeball.possession_team = player.team
                         player.has_ball = dodgeball.id
+                        if dodgeball.turnover_to_player is not None:
+                            dodgeball.turnover_to_player = None
+                            player.is_receiving_turnover_ball = False
                         print(f"[GAME] Player {player.id} picked up a dodgeball")
                     return True
         return False
@@ -489,12 +493,15 @@ class GameLogic:
                     player = self.state.players[other_id]
                     if not player.is_knocked_out:
                         if distance < (player.radius + dodgeball.radius) ** 2:
-                            if distance < (player.radius + dodgeball.radius) **2:
-                                dodgeball_mag_velocity = (dodgeball.velocity.x**2 + dodgeball.velocity.y**2) ** 0.5
+                            if dodgeball.turnover_to_player is not None and dodgeball.turnover_to_player != player.id:
+                                continue # dodgeball in turnover can only be picked up by designated player
+                            else:
                                 # check if loose dead dodgeball or beater of same team
                                 if dodgeball.possession_team is None or (
                                     dodgeball.possession_team == player.team and player.role == PlayerRole.BEATER
-                                    ): # ball pickup with dead dodgeball or slow moving one
+                                    ) or (
+                                    dodgeball.turnover_to_player is not None and dodgeball.possession_team != player.team and player.is_receiving_turnover_ball
+                                    ): # ball pickup with dead dodgeball or beater own team or ball in turnover to other team
                                     if self._check_dodgeball_possession_of_player(player, dodgeball):
                                         break
                                 else: # beat checks
@@ -944,11 +951,39 @@ class GameLogic:
             volleyball = self.state.get_volleyball()
             # Back to hoops for player
             player.is_knocked_out = True
-            # Volleyball and double dodgeball turnover
-            self._designate_turnover(volleyball)
+            second_dodgeball_priority = {}
+            for second_dodgeball in self.state.get_dodgeballs():
+                if second_dodgeball.id == dodgeball.id:
+                    continue
+                priority = 0.0
+                if second_dodgeball.possession_team is None: # slight priority turnover
+                    priority += 1
+                elif second_dodgeball.possession_team != player.team: # dodgeball already in possession other team, high priority turnover
+                    priority += 2
+                if second_dodgeball.holder_id is None: # dodgeball not hold very slight priority turnover
+                    priority += 0.5
+                second_dodgeball_priority[second_dodgeball.id] = priority
+            second_dodgeball_priority_values = list(second_dodgeball_priority.values())
+            second_dodgeball_priority_keys = list(second_dodgeball_priority.keys())
+            if len(second_dodgeball_priority_values) < 2:
+                raise ValueError('Missing second dodgeball in third dodgeball interference.')
+            if second_dodgeball_priority_values[0] > second_dodgeball_priority_values[1]:
+                dodgeball_to_turnover_id = second_dodgeball_priority_keys[0]
+            elif second_dodgeball_priority_values[0] < second_dodgeball_priority_values[1]:
+                dodgeball_to_turnover_id = second_dodgeball_priority_keys[1]
+            else: #same priority: random assignment
+                random_index = random.randint(0, 1)
+                dodgeball_to_turnover_id = second_dodgeball_priority_keys[random_index]
+             # Volleyball and double dodgeball turnover
+            dodgeball_to_turnover = self.state.balls[dodgeball_to_turnover_id]
+            if volleyball is not None:
+                volleyball.possession_team = player.team # turnover volleyball to other team
+                self._designate_turnover(volleyball)
+            dodgeball.possession_team = player.team # turnover dodgeball to other team
+            dodgeball_to_turnover.possession_team = player.team # turnover dodgeball to other team
             self._designate_turnover(dodgeball)
-            # TODO also designate second dodgeball turnover
-
+            self._designate_turnover(dodgeball_to_turnover)
+            print(f'[GAME] Back to hoops, volleyball, and double dodgeball turnover.')
             self.state.third_dodgeball = None
             self.state.third_dodgeball_team = None
             self.state.potential_third_dodgeball_interference_kwargs = None
@@ -1312,11 +1347,11 @@ class GameLogic:
         Designate a turnover for the ball to the opposing team.
         
         Selects the nearest eligible opposing player (volleyball: chaser or keeper, dodgeball: beater) to receive
-        the volleyball as a turnover. The selected player must not be knocked out
+        the ball as a turnover. The selected player must not be knocked out
         and must not already hold a ball.
         
         Args:
-            volleyball: The volleyball to designate turnover for
+            ball: The ball to designate turnover for
         """
         for other_id, distance in self.squared_distances.get(ball.id, []):
             if other_id in self.state.players.keys():
@@ -1332,8 +1367,18 @@ class GameLogic:
                                     ball.holder_id = None
                                 break
                     elif ball.ball_type == BallType.DODGEBALL:
-                        warnings.warn("Dodgeball turnover to beater not implemented yet")
-                        # TODO: implement dodgeball turnover to beater
+                        if player.role == PlayerRole.BEATER:
+                            if not player.has_ball:
+                                if not player.is_receiving_turnover_ball: # prevent multiple turnover balls to same player
+                                    ball.turnover_to_player = player.id
+                                    player.is_receiving_turnover_ball = True
+                                    if ball.holder_id is not None:
+                                        holder = self.state.players.get(ball.holder_id)
+                                        holder.has_ball = False
+                                        ball.holder_id = None
+                                    break
+        # if no egliglibe player: no turnover
+
 
     
     @staticmethod
