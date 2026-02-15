@@ -1,4 +1,7 @@
+from typing import Dict, List, Optional
 import asyncio
+import random
+from turtle import position
 import uuid
 import json
 import secrets
@@ -6,7 +9,6 @@ try:
     import orjson as _orjson  # optional fast, compact serializer
 except Exception:
     _orjson = None
-from typing import Dict, Set, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +23,7 @@ from collections import deque
 from core.game_state import GameState
 from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop
 from core.game_logic.game_logic import GameLogic
+from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer
 from config import Config
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -57,6 +60,7 @@ class GameRoom:
         self.game_started = False
         self.max_players = 12
         self.created_at = datetime.now()
+        self.cpu_player_ids: List[str] = []
         
         # Game state for this room
         self.game_state = GameState()
@@ -85,9 +89,12 @@ class GameRoom:
         # internal counter for broadcast logging
         self._broadcast_count = 0
 
-        self._initialize_field()
+        self._initialize_pitch()
+        self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
+        self.computer_player: ComputerPlayer = None # initialized later
+
     
-    def _initialize_field(self):
+    def _initialize_pitch(self):
         """Initialize game field with hoops"""
         # Add hoops for team 0
         self.game_state.hoops["hoop_0_left"] = Hoop(
@@ -136,6 +143,32 @@ class GameRoom:
                 dead_velocity_threshold=Config.DODGEBALL_DEAD_VELOCITY_THRESHOLD
             )
             self.game_state.add_ball(dodgeball)
+
+    def add_cpu_player(self, team: int, role: str):
+        cpu_id = str(uuid.uuid4())
+        self.cpu_player_ids.append(cpu_id)
+        self.players[cpu_id] = {
+            "id": cpu_id,
+            "name": f"CPUFadd_{cpu_id[:4]}",
+            "team": team,
+            "role": role
+        }
+        self.game_state.add_player(Player(
+            id=cpu_id,
+            team=team,
+            role=PlayerRole(role),
+            radius=Config.PLAYER_RADIUS,
+            position=Vector2(
+                random.uniform(10, 30) if team == 0 else random.uniform(Config.PITCH_LENGTH - 30, Config.PITCH_LENGTH - 10),
+                random.uniform(10, Config.PITCH_WIDTH - 10)
+            ),
+            max_speed=Config.PLAYER_MAX_SPEED,
+            min_speed=Config.PLAYER_MIN_SPEED,
+            acceleration=Config.PLAYER_ACCELERATION,
+            deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
+            min_dir=Config.PLAYER_MIN_DIR,
+            throw_velocity=Config.PLAYER_THROW_VELOCITY
+        ))
 
 # ==================== LOBBY STATE ====================
 
@@ -485,9 +518,49 @@ async def websocket_lobby(websocket: WebSocket):
                             "role": "chaser"
                         }
 
+                    # add computer players for all missing players
+                    n_players_per_role_per_team = {
+                        0: {
+                            "chaser": 0,
+                            "keeper": 0,
+                            "beater": 0
+                        },
+                        1: {
+                            "chaser": 0,
+                            "keeper": 0,
+                            "beater": 0
+                        }
+                    }
+                    for player_id, player_data in room.players.items():
+                        n_players_per_role_per_team[player_data["team"]][player_data["role"]] += 1
+
+
+
+                    if n_players_per_role_per_team[0]["chaser"] < Config.N_CHASERS_TEAM_0:
+                        for _ in range(Config.N_CHASERS_TEAM_0 - n_players_per_role_per_team[0]["chaser"]):
+                            room.add_cpu_player(team=0, role="chaser")
+                    if n_players_per_role_per_team[1]["chaser"] < Config.N_CHASERS_TEAM_1:
+                        for _ in range(Config.N_CHASERS_TEAM_1 - n_players_per_role_per_team[1]["chaser"]):
+                            room.add_cpu_player(team=1, role="chaser")
+                    if n_players_per_role_per_team[0]["keeper"] < Config.N_KEEPERS_TEAM_0:
+                        for _ in range(Config.N_KEEPERS_TEAM_0 - n_players_per_role_per_team[0]["keeper"]):
+                            room.add_cpu_player(team=0, role="keeper")
+                    if n_players_per_role_per_team[1]["keeper"] < Config.N_KEEPERS_TEAM_1:
+                        for _ in range(Config.N_KEEPERS_TEAM_1 - n_players_per_role_per_team[1]["keeper"]):
+                            room.add_cpu_player(team=1, role="keeper")
+                    if n_players_per_role_per_team[0]["beater"] < Config.N_BEATERS_TEAM_0:
+                        for _ in range(Config.N_BEATERS_TEAM_0 - n_players_per_role_per_team[0]["beater"]):
+                            room.add_cpu_player(team=0, role="beater")
+                    if n_players_per_role_per_team[1]["beater"] < Config.N_BEATERS_TEAM_1:
+                        for _ in range(Config.N_BEATERS_TEAM_1 - n_players_per_role_per_team[1]["beater"]):
+                            room.add_cpu_player(team=1, role="beater")
+
                     room.game_started = True
                     # reinitialize game logic system with all players and balls
                     room.game_logic = GameLogic(room.game_state)
+
+                    # initialize computer player: has to be done after adding CPU players to the game state so it can find them
+                    room.computer_player = room.computer_player_class(room.game_logic, room.cpu_player_ids)
 
                     # Broadcast start to all lobby connections in the room so every client
                     # receives their assigned player_id (if any) and can open the game page.
@@ -866,6 +939,7 @@ async def game_loop_manager():
     """Manage game loops for all active rooms"""
     clock_tick = 1.0 / Config.FPS
     clock_tick_game = clock_tick * Config.GAME_TIME_TO_REAL_TIME_RATIO
+    computer_player_tick_counter = 0
     while True:
         start_time = time.monotonic()
         if len(list(lobby_manager.rooms.items())) == 0:
@@ -876,12 +950,15 @@ async def game_loop_manager():
             if room.game_started:
                 # Update game logic
                 room.game_logic.update(clock_tick_game)
+                if room.computer_player is not None and (computer_player_tick_counter % Config.COMPUTER_PLAYER_TICK_RATE == 0):
+                    room.computer_player.make_move()
 
                 # Broadcast state
                 await broadcast_to_room(room, {
                     "type": "state_update",
                     "game_state": room.game_state.serialize()
                 })
+        computer_player_tick_counter += 1
         elapsed_time = time.monotonic() - start_time
         to_sleep = max(0.0, clock_tick - elapsed_time)  
         # print(clock_tick, elapsed_time, to_sleep)     

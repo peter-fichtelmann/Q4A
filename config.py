@@ -1,6 +1,7 @@
 class Config:
     FPS = 20 # frame rate per 
     GAME_TIME_TO_REAL_TIME_RATIO = 3 # 1 second real time = 3 seconds game time
+    COMPUTER_PLAYER_TICK_RATE = 5 # number of game ticks between computer player updates
     PITCH_WIDTH = 33
     PITCH_LENGTH = 60
     HOOP_X = 13.5
@@ -38,3 +39,12 @@ class Config:
     
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
     SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter
+
+    N_CHASERS_TEAM_0 = 3
+    N_CHASERS_TEAM_1 = 3
+    N_KEEPERS_TEAM_0 = 1
+    N_KEEPERS_TEAM_1 = 1
+    N_BEATERS_TEAM_0 = 2
+    N_BEATERS_TEAM_1 = 2
+
+  
