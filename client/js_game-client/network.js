@@ -189,7 +189,7 @@ export function parseBinaryState(arrayBuffer) {
     }
     let delay_bin;
     let possession_code = 0;
-    if (version === 2) {
+    if (version >= 2) {
       delay_bin = dv.getUint8(off, true); off += 1;
       possession_code = dv.getUint8(off, true); off += 1;
     }
