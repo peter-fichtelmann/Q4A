@@ -2,7 +2,22 @@ from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
 class BasicLogic:
+    """
+    Handles baseline movement, velocity updates, and ball collisions.
+
+    Attributes:
+        state: Shared GameState instance for entity access and configuration.
+        penalty_logic: Optional PenaltyLogic for turnover decisions.
+    """
+
     def __init__(self, game_state: GameState, penalty_logic=None):
+        """
+        Initialize the basic movement and physics logic.
+
+        Args:
+            game_state: The active GameState instance.
+            penalty_logic: Optional PenaltyLogic dependency for turnovers.
+        """
         self.state = game_state
         self.penalty_logic = penalty_logic
 

@@ -2,7 +2,20 @@ from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
 class PhysicalContactLogic:
+    """
+    Resolves player-to-player collision physics.
+
+    Attributes:
+        state: Shared GameState instance for player access.
+    """
+
     def __init__(self, game_state: GameState):
+        """
+        Initialize collision handling.
+
+        Args:
+            game_state: The active GameState instance.
+        """
         self.state = game_state
 
     def _check_player_collisions(self) -> None:

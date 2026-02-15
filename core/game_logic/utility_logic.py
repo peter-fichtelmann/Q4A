@@ -3,7 +3,20 @@ from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRo
 from operator import itemgetter
 
 class UtilityLogic:
+    """
+    Provides shared utility calculations for game logic systems.
+
+    Attributes:
+        state: Shared GameState instance for entity lists and caches.
+    """
+
     def __init__(self, game_state: GameState):
+        """
+        Initialize utility logic helpers.
+
+        Args:
+            game_state: The active GameState instance.
+        """
         self.state = game_state
 
     def _calculate_distances(self) -> None:

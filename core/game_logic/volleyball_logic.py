@@ -2,7 +2,20 @@ from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
 class VolleyballLogic:
+    """
+    Manages volleyball-specific possession, scoring, and dead-ball rules.
+
+    Attributes:
+        state: Shared GameState instance for volleyball and hoops.
+    """
+
     def __init__(self, game_state: GameState):
+        """
+        Initialize volleyball rule handling.
+
+        Args:
+            game_state: The active GameState instance.
+        """
         self.state = game_state
 
     def _check_volleyball_possessions(self) -> None:

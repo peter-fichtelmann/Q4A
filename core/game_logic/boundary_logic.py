@@ -4,7 +4,20 @@ from typing import Optional
 import random
 
 class BoundaryLogic:
+    """
+    Enforces play area boundaries, hoop blockage, and inbounding free ways.
+
+    Attributes:
+        state: Shared GameState instance used for boundary checks and entities.
+    """
+
     def __init__(self, game_state: GameState):
+        """
+        Initialize boundary rule handling.
+
+        Args:
+            game_state: The active GameState instance.
+        """
         self.state = game_state
 
     def _enforce_hoop_blockage(self) -> None:
@@ -232,6 +245,15 @@ class BoundaryLogic:
             player.position.y += move_vector.y
 
     def _making_alive_keeper_free_way(self, dt: float) -> None:
+        """
+        Create a free way around the keeper when reviving a dead volleyball.
+
+        Moves nearby opponents away from the keeper to avoid immediate pressure
+        during the dead-ball restart.
+
+        Args:
+            dt: Delta game time since last frame in seconds.
+        """
         volleyball = self.state.get_volleyball()
         if not volleyball:
             return

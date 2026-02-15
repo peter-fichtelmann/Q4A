@@ -3,7 +3,20 @@ from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRo
 import random
 
 class PenaltyLogic:
+    """
+    Enforces penalties, turnovers, and delay-of-game rules.
+
+    Attributes:
+        state: Shared GameState instance for rule evaluation and updates.
+    """
+
     def __init__(self, game_state: GameState):
+        """
+        Initialize penalty rule handling.
+
+        Args:
+            game_state: The active GameState instance.
+        """
         self.state = game_state
 
     def _check_delay_of_game(self, dt: float) -> None:
@@ -128,6 +141,16 @@ class PenaltyLogic:
         # if no egliglibe player: no turnover
 
     def _third_dodgeball_interference(self, player, dodgeball):
+        """
+        Apply third-dodgeball interference rules for an illegal pickup.
+
+        Depending on beat-attempt timing, either schedules a potential
+        interference penalty or immediately applies a turnover and knockout.
+
+        Args:
+            player: The player committing interference.
+            dodgeball: The dodgeball involved in the interference.
+        """
         if dodgeball.beat_attempt_time > 0:
             self.state.potential_third_dodgeball_interference_kwargs = {
                 'dodgeball_id': dodgeball.id,

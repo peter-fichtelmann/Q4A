@@ -2,7 +2,20 @@ from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
 class ProcessActionLogic:
+    """
+    Processes player action inputs such as throwing and tackling.
+
+    Attributes:
+        state: Shared GameState instance for player and ball updates.
+    """
+
     def __init__(self, game_state: GameState):
+        """
+        Initialize action processing logic.
+
+        Args:
+            game_state: The active GameState instance.
+        """
         self.state = game_state
 
     def process_throw_action(self, player_id: str) -> bool:

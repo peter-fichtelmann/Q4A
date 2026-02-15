@@ -18,6 +18,17 @@ class GameLogic:
     Implements the core game rules for quadball.
     This system is SERVER-AUTHORITATIVE, meaning the server runs this logic
     and clients trust its decisions.
+
+    Attributes:
+        state: Shared GameState instance used by all logic subsystems.
+        penalty_logic: Rule enforcement for turnovers and infractions.
+        basic_logic: Movement and ball physics updates.
+        dodgeball_logic: Dodgeball interactions and third-dodgeball rules.
+        volleyball_logic: Volleyball pickups, goals, and live/dead state.
+        physical_contact_logic: Player collision resolution.
+        boundary_logic: Boundary, hoop blockage, and inbounding rules.
+        process_action_logic: Handles player action inputs (throw, tackle).
+        utility_logic: Distance precomputation for efficient collision checks.
     """
     
     def __init__(self, game_state: GameState):
@@ -26,6 +37,17 @@ class GameLogic:
         
         Sets up distance tracking structures used for efficient collision detection
         and interaction checks between entities (players and balls).
+
+        Attributes initialized:
+            state: GameState reference for all rule systems.
+            penalty_logic: PenaltyLogic instance created first for dependencies.
+            basic_logic: BasicLogic instance for movement and collisions.
+            dodgeball_logic: DodgeballLogic instance for dodgeball rules.
+            volleyball_logic: VolleyballLogic instance for volleyball rules.
+            physical_contact_logic: PhysicalContactLogic instance for player collisions.
+            boundary_logic: BoundaryLogic instance for boundary enforcement.
+            process_action_logic: ProcessActionLogic instance for player actions.
+            utility_logic: UtilityLogic instance for distance precomputation.
         
         Args:
             game_state: The GameState instance that this system will manage

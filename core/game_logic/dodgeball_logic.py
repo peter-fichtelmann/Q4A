@@ -2,7 +2,22 @@ from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
 class DodgeballLogic:
+    """
+    Handles dodgeball pickups, beats, and third-dodgeball enforcement.
+
+    Attributes:
+        state: Shared GameState instance for entities and rules.
+        penalty_logic: Optional PenaltyLogic for third-dodgeball penalties.
+    """
+
     def __init__(self, game_state: GameState, penalty_logic=None):
+        """
+        Initialize dodgeball rule handling.
+
+        Args:
+            game_state: The active GameState instance.
+            penalty_logic: Optional PenaltyLogic dependency for penalties.
+        """
         self.state = game_state
         self.penalty_logic = penalty_logic
 
@@ -158,6 +173,15 @@ class DodgeballLogic:
     #                         continue
 
     def _is_dodgeball_third(self, dodgeballs_per_team) -> bool:
+        """
+        Determine whether the free dodgeball becomes a third-dodgeball.
+
+        Args:
+            dodgeballs_per_team: Precomputed mapping of dodgeball ownership states.
+
+        Returns:
+            True if a third-dodgeball situation exists, False otherwise.
+        """
         if len(dodgeballs_per_team['dead_dodgeballs']) == 1:
             if len(dodgeballs_per_team[f'hold_dodgeballs_{self.state.team_0}']) == 2 and len(dodgeballs_per_team[f'hold_dodgeballs_{self.state.team_1}']) == 0:
                 self.state.third_dodgeball_team = self.state.team_1
