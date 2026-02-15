@@ -1,5 +1,5 @@
 class Config:
-    FPS = 10 # frame rate per 
+    FPS = 20 # frame rate per 
     GAME_TIME_TO_REAL_TIME_RATIO = 3 # 1 second real time = 3 seconds game time
     PITCH_WIDTH = 33
     PITCH_LENGTH = 60
