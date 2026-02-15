@@ -20,7 +20,7 @@ from collections import deque
 # Import your game modules
 from core.game_state import GameState
 from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop
-from core.game_logic import GameLogic
+from core.game_logic.game_logic import GameLogic
 from config import Config
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -618,7 +618,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         player.direction.y = float(direction_y)
 
                 elif message_type == "throw":
-                    success = room.game_logic.process_throw_action(player_id)
+                    success = room.game_logic.process_action_logic.process_throw_action(player_id)
                     if success:
                         # Broadcast updated state
                         await broadcast_to_room(room, {

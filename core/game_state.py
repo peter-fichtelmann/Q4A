@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import json
 from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType
 
@@ -17,6 +17,8 @@ class GameState:
     balls: Dict[str, Ball] = field(default_factory=dict)       # ball_id -> Ball
     hoops: Dict[str, Hoop] = field(default_factory=dict)       # hoop_id -> Hoop
     score: List[int] = field(default_factory=lambda: [0, 0])  # [team0, team1]
+    squared_distances: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
+    squared_distances_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
     game_time: float = 0.0                                    # Seconds elapsed
     delay_of_game_time_limit: float = 10.0                     # Time limit before delay of game penalty
     delay_of_game_velocity_x_threshold: float = 0.5              # Velocity threshold in x direction the volleyball must exceed to avoid delay of game
