@@ -56,7 +56,7 @@ export function renderGame() {
     return s.x >= -m && s.x <= Config.CANVAS_WIDTH + m && s.y >= -m && s.y <= Config.CANVAS_HEIGHT + m;
   }
 
-  ctx.fillStyle = '#228b22'; ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
+  ctx.fillStyle = '#146e0aff'; ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
 
   const lineThickness = Math.max(1, xScale / 15); ctx.lineWidth = lineThickness; ctx.strokeStyle = '#000000';
 
@@ -75,19 +75,19 @@ export function renderGame() {
     ctx.beginPath(); ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y); ctx.stroke();
   } else { ctx.beginPath(); ctx.rect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT); ctx.stroke(); }
 
-  const colour_player_A = '#6464ff';
-  const colour_player_B = '#ff7f00';
+  const colour_player_A = '#c878ffff';
+  const colour_player_B = '#ff9632ff';
   const colour_keeper = '#7cfc00';
   const colour_chaser = '#ffffff';
   const colour_beater = '#000000';
   const colour_seeker = '#ffff00';
-  const colour_quaffle = '#ebb0b7';
-  const colour_bludger = '#ff0000';
+  const colour_quaffle = '#e6e6e6ff';
+  const colour_bludger = '#ff0064ff';
   const colour_selected_player = '#ffff00';
   const knocked_out_alpha = 0.5; const is_dead_alpha = 0.5;
 
   if (gs.hoops) {
-    const colour_hoop_A = '#14c896'; const colour_hoop_B = '#00ff32';
+    const colour_hoop_A = '#000000'; const colour_hoop_B = '#000000';
     for (const hoop of Object.values(gs.hoops)) {
       const hp = hoop.position || hoop.pos || hoop;
       if (!isVisible(hp.x, hp.y)) continue;
