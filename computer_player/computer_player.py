@@ -25,7 +25,7 @@ class RandomComputerPlayer(ComputerPlayer):
 
     def make_move(self):
         # add random number between -1 and 1 to the x and y direction of each CPU player
-        print(f'[CPU Player] Making move for {len(self.cpu_players)} CPU players')
+        # print(f'[CPU Player] Making move for {len(self.cpu_players)} CPU players')
         for player in self.cpu_players:
             player.direction.x += random.uniform(-1, 1)
             player.direction.y += random.uniform(-1, 1)
