@@ -62,11 +62,38 @@ class ProcessActionLogic:
         print(f"[GAME] Player {player_id} threw {ball.id}")
         return True
     
-    def process_tackle_action(self):
+    def process_tackle_action(self, player_id: str) -> bool:
         """
         Process a tackle action (currently unimplemented).
         
         Placeholder for future tackling/blocking mechanics.
         TODO: Implement tackle logic
         """
-        pass
+        player = self.state.get_player(player_id)
+        # for other_id, distance in self.state.squared_distances.get(player.id, [])
+        #     if other_id in self.state.players.keys():
+        #         other_player = self.state.players[other_id]
+        #         if other_player.team != player.team:
+        #             if not other_player.is_knocked_out:
+        #                 if (
+        #                     player.role == other_player.role
+        #                 ) or (
+        #                     player.role == PlayerRole.CHASER and other_player.role == PlayerRole.KEEPER
+        #                 ) or (
+        #                     player.role == PlayerRole.KEEPER and other_player.role == PlayerRole.CHASER
+        #                 ):
+        #                     if distance < (player.radius + other_player.radius) ** 2:
+        #                         print(f"[GAME] Player {player_id} tackled player {other_id}")
+        if not player.has_ball:
+            if len(player.in_contact_player_ids) > 0:
+                for other_id in player.in_contact_player_ids:
+                    if other_id in self.state.players.keys():
+                        other_player = self.state.players[other_id]
+                        # only tackling player with ball allowed
+                        if other_player.has_ball:
+                            if other_player.team != player.team:
+                                player.tackling_player_ids.append(other_id)
+                                other_player.tackling_player_ids.append(player.id)
+                                print(f"[GAME] Player {player_id} tackled player {other_id}")
+                                return True
+        return False

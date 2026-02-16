@@ -18,6 +18,17 @@ class PhysicalContactLogic:
         """
         self.state = game_state
 
+    def _enforce_tackle(self) -> None:
+        """
+        Enforce tackling effects on players: no movement when tackling or being tackled.
+        """
+        # TODO add player dependent tackle strength -> probability for enforcing tackle and stealing ball if close enough to steal
+        for player in self.state.players.values():
+            if len(player.tackling_player_ids) > 0:
+                player.direction = Vector2(0, 0) # stop movement when being tackled or tackling
+                player.velocity = Vector2(0, 0) # stop movement when being tackled or tackling
+                player.tackling_player_ids = []
+
     def _check_player_collisions(self) -> None:
         """
         Detect and resolve collisions between players.
@@ -30,8 +41,11 @@ class PhysicalContactLogic:
         This creates realistic elastic collisions where players don't stick together
         but bounce off each other naturally.
         """
+        # TODO punish or prevent contact from behind (when enough velocity)
+
         # reset in contact player ids from last update (in separate loop because in other loop attributes of other players set)
         for player in self.state.players.values():
+            # resetting each update and adding back if still persisting
             player.in_contact_player_ids = []
         for i, player in enumerate(list(self.state.players.values())[:-1]):
             if player.is_knocked_out:

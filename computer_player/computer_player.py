@@ -32,5 +32,7 @@ class RandomComputerPlayer(ComputerPlayer):
             throwing_decision = random.random() < self.throwing_probability
             if throwing_decision:
                 self.logic.process_action_logic.process_throw_action(player.id)
+            # always try to tackle if not throwing
+            self.logic.process_action_logic.process_tackle_action(player.id)
 
             

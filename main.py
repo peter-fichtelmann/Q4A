@@ -691,8 +691,9 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         player.direction.y = float(direction_y)
 
                 elif message_type == "throw":
-                    success = room.game_logic.process_action_logic.process_throw_action(player_id)
-                    if success:
+                    success_throw = room.game_logic.process_action_logic.process_throw_action(player_id)
+                    success_tackle = room.game_logic.process_action_logic.process_tackle_action(player_id)
+                    if success_throw or success_tackle:
                         # Broadcast updated state
                         await broadcast_to_room(room, {
                             "type": "state_update",

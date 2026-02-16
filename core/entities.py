@@ -74,6 +74,7 @@ class Player:
     dodgeball_immunity: bool = False      # Temporary immunity to being knocked out by dodgeballs
     inbounding: None|str = None       # if player is inbounding, if true then id of ball
     in_contact_player_ids: list[str] = field(default_factory=list)   # player ids where the player is in physical contact
+    tackling_player_ids: list[str] = field(default_factory=list) # player ids where the player is tackling or being tackled by
     is_receiving_turnover_ball: bool = False  # True if player is currently receiving a turnover ball
 
     def serialize(self) -> dict:
