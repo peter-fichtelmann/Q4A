@@ -42,6 +42,7 @@ class PhysicalContactLogic:
         but bounce off each other naturally.
         """
         # TODO punish or prevent contact from behind (when enough velocity)
+        # TODO prevent any contact with protected keeper
 
         # reset in contact player ids from last update (in separate loop because in other loop attributes of other players set)
         for player in self.state.players.values():

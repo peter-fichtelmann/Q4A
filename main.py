@@ -23,7 +23,7 @@ from collections import deque
 from core.game_state import GameState
 from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop
 from core.game_logic.game_logic import GameLogic
-from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer
+from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer, RuleBasedComputerPlayer
 from config import Config
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +90,8 @@ class GameRoom:
         self._broadcast_count = 0
 
         self._initialize_pitch()
-        self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
+        # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
+        self.computer_player_class: ComputerPlayer = RuleBasedComputerPlayer
         self.computer_player: ComputerPlayer = None # initialized later
 
     
