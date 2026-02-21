@@ -67,23 +67,31 @@ class HoopDefence:
                                 (hoop.position.x + add_hoop_blockage_x) - chaser.position.x,
                                 hoop.position.y - chaser.position.y
                             )
+                            next_direction_to_hoop = Vector2(
+                                (hoop.position.x + add_hoop_blockage_x) - next_chaser_position.x,
+                                hoop.position.y - next_chaser_position.y
+                            )
                             x_pos_position = True
                         else:
                             direction_to_hoop = Vector2(
                                 (hoop.position.x - add_hoop_blockage_x) - chaser.position.x,
                                 hoop.position.y - chaser.position.y
                             )
+                            next_direction_to_hoop = Vector2(
+                                (hoop.position.x - add_hoop_blockage_x) - next_chaser_position.x,
+                                hoop.position.y - next_chaser_position.y
+                            )
                             x_pos_position = False
                         #         x_pos_position = False
                         # print('direction to hoop: ', direction_to_hoop)
-                        self._volleyball_player_hoop_blockage(chaser, direction_to_hoop, add_hoop_blockage_x, x_pos_position, hoop, dt)
+                        self._volleyball_player_hoop_blockage(chaser, direction_to_hoop, next_direction_to_hoop, add_hoop_blockage_x, x_pos_position, hoop, dt)
                         # print('player direction', chaser.direction)
                         # print('player velocity', chaser.velocity)
                         # print(f'[CPU Player] Moving chaser {chaser_id} towards hoop {hoop_id} with direction {chaser.direction}')
                     # print(f'[CPU Player] Moving chaser {chaser_id} towards hoop {hoop_id}')
                     break
 
-    def _volleyball_player_hoop_blockage(self, player: Player, direction_to_hoop: Vector2, add_hoop_blockage_x: float, x_pos_position: bool, target_hoop: Hoop, dt: float):
+    def _volleyball_player_hoop_blockage(self, player: Player, direction_to_hoop: Vector2, next_direction_to_hoop: Vector2, add_hoop_blockage_x: float, x_pos_position: bool, target_hoop: Hoop, dt: float):
         """ Adjust player direction to move around the hoop if the volleyball is between the player and the hoop, otherwise move directly towards the hoop. x_pos_position is if the player should move to the x_hoop + radius or x_hoop - radius position, depending on which is closer to the player. """
         # min_dir and min_velocity of players can make it difficult to go around hoops
         if direction_to_hoop.x == 0 and direction_to_hoop.y == 0:
@@ -118,8 +126,8 @@ class HoopDefence:
                             y = hoop.position.y + add_hoop_blockage_radius * self.move_buffer_factor # add buffer after checks (before checks leads to wrong checks)
                             best_y_crossing = (line_t_y, x, y, hoop)
         if math.isinf(best_x_crossing[0]) and math.isinf(best_y_crossing[0]):
-            # no blockage found
-            player.direction = direction_to_hoop
+            # no blockage found, move directly towards the hoop with estimation of current velocity taken into account
+            player.direction = next_direction_to_hoop
             # add buffer
             player.direction.x -= add_x_buffer # inverse to add buffer
 

@@ -47,7 +47,7 @@ class Config:
     N_BEATERS_TEAM_1 = 2
 
 
-    COMPUTER_PLAYER_TICK_RATE = 1 # number of game ticks between computer player updates
+    COMPUTER_PLAYER_TICK_RATE = 5 # number of game ticks between computer player updates
     COMPUTER_PLAYER_MIN_DIR = 0
     COMPUTER_PLAYER_MIN_SPEED_REAL = 0
     COMPUTER_PLAYER_MIN_SPEED = COMPUTER_PLAYER_MIN_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
