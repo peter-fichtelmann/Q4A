@@ -941,7 +941,9 @@ async def game_loop_manager():
     """Manage game loops for all active rooms"""
     clock_tick = 1.0 / Config.FPS
     clock_tick_game = clock_tick * Config.GAME_TIME_TO_REAL_TIME_RATIO
-    computer_player_tick_counter = 0
+    tick_counter = 0
+    logic_update_times = []
+    cpu_player_times = []
     while True:
         start_time = time.monotonic()
         if len(list(lobby_manager.rooms.items())) == 0:
@@ -951,16 +953,29 @@ async def game_loop_manager():
         for room_id, room in list(lobby_manager.rooms.items()):
             if room.game_started:
                 # Update game logic
+                game_logic_start = time.monotonic()
                 room.game_logic.update(clock_tick_game)
-                if room.computer_player is not None and (computer_player_tick_counter % Config.COMPUTER_PLAYER_TICK_RATE == 0):
+                logic_update_times.append(time.monotonic() - game_logic_start)
+                if room.computer_player is not None and (tick_counter % Config.COMPUTER_PLAYER_TICK_RATE == 0):
+                    cpu_player_start = time.monotonic()
                     room.computer_player.make_move(clock_tick_game * Config.COMPUTER_PLAYER_TICK_RATE)
+                    cpu_player_times.append(time.monotonic() - cpu_player_start)
 
                 # Broadcast state
                 await broadcast_to_room(room, {
                     "type": "state_update",
                     "game_state": room.game_state.serialize()
                 })
-        computer_player_tick_counter += 1
+        if tick_counter % 100 == 0:
+            avg_logic_update_time = sum(logic_update_times) * 1000 / (100) if logic_update_times else 0
+            avg_cpu_player_time = sum(cpu_player_times) * 1000 / (100) if cpu_player_times else 0
+            max_logic_update_time = max(logic_update_times) * 1000 if logic_update_times else 0
+            max_cpu_player_time = max(cpu_player_times) * 1000 if cpu_player_times else 0
+            print(f"Tick {tick_counter} - Avg logic update time: {avg_logic_update_time:.1f}ms,  Max logic update time: {max_logic_update_time:.1f}ms")
+            print(f"Average CPU player time: {avg_cpu_player_time:.1f}ms, Max CPU player time: {max_cpu_player_time:.1f}ms")
+            logic_update_times.clear()
+            cpu_player_times.clear()
+        tick_counter += 1
         elapsed_time = time.monotonic() - start_time
         to_sleep = max(0.0, clock_tick - elapsed_time)  
         # print(clock_tick, elapsed_time, to_sleep)     
