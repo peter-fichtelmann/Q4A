@@ -45,14 +45,50 @@ class RuleBasedComputerPlayer(ComputerPlayer):
 
     def make_move(self, dt: float):
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
-        cpu_player_ids_defence = [cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1]
-        defence_player_ids = [player.id for player in self.logic.state.players.values() if player.team == self.logic.state.team_1]
-        HoopDefence(
-            logic = self.logic,
-            defence_cpu_player_ids=cpu_player_ids_defence,
-            defence_player_ids=defence_player_ids,
-            team=self.logic.state.team_1,
-            move_buffer_factor=self.move_buffer_factor
-            )(dt)
+        attacking_team = self._determine_attacking_team()
+        if attacking_team is None:
+            # both teams in attacking mode
+            pass
+        elif attacking_team == self.logic.state.team_0:
+            # team 0 attacking, team 1 defending
+            cpu_player_ids_defence = [cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1]
+            defence_player_ids = [player.id for player in self.logic.state.players.values() if player.team == self.logic.state.team_1]
+            HoopDefence(
+                logic = self.logic,
+                defence_cpu_player_ids=cpu_player_ids_defence,
+                defence_player_ids=defence_player_ids,
+                team=self.logic.state.team_1,
+                move_buffer_factor=self.move_buffer_factor
+                )(dt)
+        else:
+            # team 1 attacking, team 0 defending
+            cpu_player_ids_defence = [cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0]
+            defence_player_ids = [player.id for player in self.logic.state.players.values() if player.team == self.logic.state.team_0]
+            HoopDefence(
+                logic = self.logic,
+                defence_cpu_player_ids=cpu_player_ids_defence,
+                defence_player_ids=defence_player_ids,
+                team=self.logic.state.team_0,
+                move_buffer_factor=self.move_buffer_factor
+                )(dt)
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
 
+    def _determine_attacking_team(self) -> int:
+        # TODO Incorporate velocities and potential ball interception
+        volleyball  = self.logic.state.get_volleyball()
+        if volleyball.turnover_to_player is not None:
+            player = self.logic.state.players[volleyball.turnover_to_player]
+            return player.team
+        if volleyball.inbounder is not None:
+            player = self.logic.state.players[volleyball.inbounder]
+            return player.team
+        if volleyball.possession_team is not None:
+            return volleyball.possession_team
+        else:
+            # If no team has possession, determine team of closest chaser/keeper
+            for other_id, distance in self.logic.state.squared_distances.get(volleyball.id, []):
+                if other_id in self.logic.state.players.keys():
+                    player = self.logic.state.players[other_id]
+                    if not player.is_knocked_out:
+                        if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
+                            return player.team
