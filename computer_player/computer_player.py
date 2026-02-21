@@ -16,7 +16,7 @@ class ComputerPlayer(ABC):
         self.cpu_players = [self.logic.state.players[player_id] for player_id in cpu_player_ids]
 
     @abstractmethod
-    def make_move(self):
+    def make_move(self, dt: float):
         pass
 
 
@@ -25,7 +25,7 @@ class RandomComputerPlayer(ComputerPlayer):
         super().__init__(game_logic, cpu_player_ids)
         self.throwing_probability = throwing_probability
 
-    def make_move(self):
+    def make_move(self, dt: float):
         # add random number between -1 and 1 to the x and y direction of each CPU player
         # print(f'[CPU Player] Making move for {len(self.cpu_players)} CPU players')
         for player in self.cpu_players:
@@ -39,10 +39,11 @@ class RandomComputerPlayer(ComputerPlayer):
 
             
 class RuleBasedComputerPlayer(ComputerPlayer):
-    def __init__(self, game_logic: GameLogic, cpu_player_ids: List[str]):
+    def __init__(self, game_logic: GameLogic, cpu_player_ids: List[str], move_buffer_factor: float = 1.2):
         super().__init__(game_logic, cpu_player_ids)
+        self.move_buffer_factor = move_buffer_factor
 
-    def make_move(self):
+    def make_move(self, dt: float):
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
         cpu_player_ids_defence = [cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1]
         defence_player_ids = [player.id for player in self.logic.state.players.values() if player.team == self.logic.state.team_1]
@@ -50,7 +51,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             logic = self.logic,
             defence_cpu_player_ids=cpu_player_ids_defence,
             defence_player_ids=defence_player_ids,
-            team=self.logic.state.team_1
-            )()
+            team=self.logic.state.team_1,
+            move_buffer_factor=self.move_buffer_factor
+            )(dt)
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
 

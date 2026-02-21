@@ -164,10 +164,10 @@ class GameRoom:
                 random.uniform(10, Config.PITCH_WIDTH - 10)
             ),
             max_speed=Config.PLAYER_MAX_SPEED,
-            min_speed=Config.PLAYER_MIN_SPEED,
+            min_speed=Config.COMPUTER_PLAYER_MIN_SPEED, # important difference to normal player
             acceleration=Config.PLAYER_ACCELERATION,
             deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
-            min_dir=Config.PLAYER_MIN_DIR,
+            min_dir=Config.COMPUTER_PLAYER_MIN_DIR, # important difference to normal player
             throw_velocity=Config.PLAYER_THROW_VELOCITY
         ))
 
@@ -561,7 +561,7 @@ async def websocket_lobby(websocket: WebSocket):
                     room.game_logic = GameLogic(room.game_state)
 
                     # initialize computer player: has to be done after adding CPU players to the game state so it can find them
-                    room.computer_player = room.computer_player_class(room.game_logic, room.cpu_player_ids)
+                    room.computer_player = room.computer_player_class(room.game_logic, room.cpu_player_ids, **Config.COMPUTER_PLAYER_KWARGS)
 
                     # Broadcast start to all lobby connections in the room so every client
                     # receives their assigned player_id (if any) and can open the game page.
@@ -953,7 +953,7 @@ async def game_loop_manager():
                 # Update game logic
                 room.game_logic.update(clock_tick_game)
                 if room.computer_player is not None and (computer_player_tick_counter % Config.COMPUTER_PLAYER_TICK_RATE == 0):
-                    room.computer_player.make_move()
+                    room.computer_player.make_move(clock_tick_game * Config.COMPUTER_PLAYER_TICK_RATE)
 
                 # Broadcast state
                 await broadcast_to_room(room, {

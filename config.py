@@ -1,7 +1,6 @@
 class Config:
     FPS = 20 # frame rate per 
     GAME_TIME_TO_REAL_TIME_RATIO = 3 # 1 second real time = 3 seconds game time
-    COMPUTER_PLAYER_TICK_RATE = 5 # number of game ticks between computer player updates
     PITCH_WIDTH = 33
     PITCH_LENGTH = 60
     HOOP_X = 13.5
@@ -46,5 +45,16 @@ class Config:
     N_KEEPERS_TEAM_1 = 1
     N_BEATERS_TEAM_0 = 2
     N_BEATERS_TEAM_1 = 2
+
+
+    COMPUTER_PLAYER_TICK_RATE = 1 # number of game ticks between computer player updates
+    COMPUTER_PLAYER_MIN_DIR = 0
+    COMPUTER_PLAYER_MIN_SPEED_REAL = 0
+    COMPUTER_PLAYER_MIN_SPEED = COMPUTER_PLAYER_MIN_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    COMPUTER_PLAYER_KWARGS = {
+        # 'throwing_probability': 0.3, # for RandomComputerPlayer, probability of throwing each tick
+        'move_buffer_factor': 1.2, # for RuleBasedComputerPlayer, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
+    }
+
 
   
