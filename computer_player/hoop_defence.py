@@ -49,7 +49,7 @@ class HoopDefence:
             for chaser_id, _ in sorted_chaser_distances:
                 if chaser_id not in directed_chasers:
                     chaser = self.logic.state.get_player(chaser_id)
-                    hoop = self.logic.state.hoops[hoop_id]
+                    target_hoop = self.logic.state.hoops[hoop_id]
                     directed_chasers.append(chaser_id)
                     if chaser_id in self.defence_cpu_player_ids:
                         # TODO: chasers move with volleyball movement (between hoop x +/-) and chasers acknowledge hoop blockage and move around it if volleyball less than hoop x
@@ -62,36 +62,36 @@ class HoopDefence:
                             volleyball.position.x + volleyball.velocity.x * dt,
                             volleyball.position.y + volleyball.velocity.y * dt
                         )
-                        if next_volleyball_position.x > hoop.position.x:
+                        if next_volleyball_position.x > target_hoop.position.x:
                             direction_to_hoop = Vector2(
-                                (hoop.position.x + add_hoop_blockage_x) - chaser.position.x,
-                                hoop.position.y - chaser.position.y
+                                (target_hoop.position.x + add_hoop_blockage_x) - chaser.position.x,
+                                target_hoop.position.y - chaser.position.y
                             )
                             next_direction_to_hoop = Vector2(
-                                (hoop.position.x + add_hoop_blockage_x) - next_chaser_position.x,
-                                hoop.position.y - next_chaser_position.y
+                                (target_hoop.position.x + add_hoop_blockage_x) - next_chaser_position.x,
+                                target_hoop.position.y - next_chaser_position.y
                             )
                             x_pos_position = True
                         else:
                             direction_to_hoop = Vector2(
-                                (hoop.position.x - add_hoop_blockage_x) - chaser.position.x,
-                                hoop.position.y - chaser.position.y
+                                (target_hoop.position.x - add_hoop_blockage_x) - chaser.position.x,
+                                target_hoop.position.y - chaser.position.y
                             )
                             next_direction_to_hoop = Vector2(
-                                (hoop.position.x - add_hoop_blockage_x) - next_chaser_position.x,
-                                hoop.position.y - next_chaser_position.y
+                                (target_hoop.position.x - add_hoop_blockage_x) - next_chaser_position.x,
+                                target_hoop.position.y - next_chaser_position.y
                             )
                             x_pos_position = False
                         #         x_pos_position = False
                         # print('direction to hoop: ', direction_to_hoop)
-                        self._volleyball_player_hoop_blockage(chaser, direction_to_hoop, next_direction_to_hoop, add_hoop_blockage_x, x_pos_position, hoop)
+                        self._player_move_around_hoop_blockage(chaser, direction_to_hoop, next_direction_to_hoop, add_hoop_blockage_x, x_pos_position, target_hoop)
                         # print('player direction', chaser.direction)
                         # print('player velocity', chaser.velocity)
                         # print(f'[CPU Player] Moving chaser {chaser_id} towards hoop {hoop_id} with direction {chaser.direction}')
                     # print(f'[CPU Player] Moving chaser {chaser_id} towards hoop {hoop_id}')
                     break
 
-    def _volleyball_player_hoop_blockage(self, player: Player, direction_to_hoop: Vector2, next_direction_to_hoop: Vector2, add_hoop_blockage_x: float, x_pos_position: bool, target_hoop: Hoop):
+    def _player_move_around_hoop_blockage(self, player: Player, direction_to_hoop: Vector2, next_direction_to_hoop: Vector2, add_hoop_blockage_x: float, x_pos_position: bool, target_hoop: Hoop):
         """Adjust a chaser's movement vector to avoid hoop obstruction while defending.
 
         This helper determines whether the straight path from the player's current
