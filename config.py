@@ -23,7 +23,7 @@ class Config:
     PLAYER_ACCELERATION = PLAYER_ACCELERATION_REAL / GAME_TIME_TO_REAL_TIME_RATIO
     PLAYER_MIN_DIR = 0.6 # of 1 
 
-    BALL_DEACCELERATION_RATE = 0.15# ratio of speed lost per second
+    BALL_DEACCELERATION_RATE = 0.15 # ratio of speed lost per second
     BALL_REFLECT_VELOCITY_LOSS = 0.4 # ratio of velocity lost on reflection with player
 
     DODGEBALL_DEAD_VELOCITY_THRESHOLD_REAL = 4 # velocity m/s real when dodgeball becomes dead
