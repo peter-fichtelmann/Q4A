@@ -21,6 +21,30 @@ class BasicLogic:
         self.state = game_state
         self.penalty_logic = penalty_logic
 
+    def update_player_velocity(self, player: Player, dt: float):
+        # norm player.direction
+        mag_dir = (player.direction.x**2 + player.direction.y**2) ** 0.5
+        # on stick reset check before direction norm
+        if player.is_knocked_out and (mag_dir < player.radius + self.state.hoops[f'hoop_{player.team}_center'].thickness):
+            player.is_knocked_out = False
+            print(f"[GAME] Player {player.id} has recovered from knockout")
+        if mag_dir > 1:
+            player.direction.x /= mag_dir
+            player.direction.y /= mag_dir
+        player.velocity.x = player.velocity.x + ( - player.deacceleration_rate * player.velocity.x + player.direction.x * player.acceleration) * dt
+        player.velocity.y = player.velocity.y + ( - player.deacceleration_rate * player.velocity.y + player.direction.y * player.acceleration) * dt
+        
+        # Cap speed
+        speed = (player.velocity.x**2 + player.velocity.y**2) ** 0.5
+        if speed > player.max_speed:
+            scale = player.max_speed / speed
+            player.velocity.x *= scale
+            player.velocity.y *= scale
+        elif (speed < player.min_speed) and (mag_dir < player.min_dir):
+            player.velocity.x = 0
+            player.velocity.y = 0
+        # print('speed', (player.velocity.x**2 + player.velocity.y**2) ** 0.5)
+
     def update_player_velocities(self, dt: float) -> None:
         """
         Update player velocities based on their current direction and role.
@@ -80,28 +104,12 @@ class BasicLogic:
                     player.inbounding = None
                     player.dodgeball_immunity = False
                     print('inbounding procedure ended by ball re-entering pitch')
-            # norm player.direction
-            mag_dir = (player.direction.x**2 + player.direction.y**2) ** 0.5
-            # on stick reset check before direction norm
-            if player.is_knocked_out and (mag_dir < player.radius + self.state.hoops[f'hoop_{player.team}_center'].thickness):
-                player.is_knocked_out = False
-                print(f"[GAME] Player {player.id} has recovered from knockout")
-            if mag_dir > 1:
-                player.direction.x /= mag_dir
-                player.direction.y /= mag_dir
-            player.velocity.x = player.velocity.x + ( - player.deacceleration_rate * player.velocity.x + player.direction.x * player.acceleration) * dt
-            player.velocity.y = player.velocity.y + ( - player.deacceleration_rate * player.velocity.y + player.direction.y * player.acceleration) * dt
-            
-            # Cap speed
-            speed = (player.velocity.x**2 + player.velocity.y**2) ** 0.5
-            if speed > player.max_speed:
-                scale = player.max_speed / speed
-                player.velocity.x *= scale
-                player.velocity.y *= scale
-            elif (speed < player.min_speed) and (mag_dir < player.min_dir):
-                player.velocity.x = 0
-                player.velocity.y = 0
-            # print('speed', (player.velocity.x**2 + player.velocity.y**2) ** 0.5)
+            self.update_player_velocity(player, dt)
+
+    def update_free_ball_velocity(self, ball: Ball, dt: float):
+        """Update a ball's velocity based on its current velocity and friction."""
+        ball.velocity.x = ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt
+        ball.velocity.y = ball.velocity.y - ball.deacceleration_rate * ball.velocity.y * dt
 
     def update_ball_velocities(self, dt: float) -> None:
         """
@@ -135,8 +143,7 @@ class BasicLogic:
                             ball.velocity.y = ball.velocity.y / mag_dir * player.throw_velocity  
             elif ball.holder_id is None:
                 # Free balls experience friction/deceleration
-                ball.velocity.x = ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt
-                ball.velocity.y = ball.velocity.y - ball.deacceleration_rate * ball.velocity.y * dt
+                self.update_free_ball_velocity(ball, dt)
                 # if dodgeball below threshold then dead
                 if ball.ball_type == BallType.DODGEBALL:
                     squared_velocity_mag = (ball.velocity.x**2 + ball.velocity.y**2)
@@ -149,13 +156,17 @@ class BasicLogic:
                     ball.velocity.x = holder.velocity.x
                     ball.velocity.y = holder.velocity.y
 
+    def update_position(self, entity: object, dt: float) -> None:
+        """Update position of a player or ball based on its velocity."""
+        entity.position.x += entity.velocity.x * dt
+        entity.position.y += entity.velocity.y * dt
+
     def update_positions(self, dt: float) -> None:
         """Update positions of players and balls based on their velocities."""
         for player in self.state.players.values():
             player.previous_position.x = player.position.x
             player.previous_position.y = player.position.y
-            player.position.x += player.velocity.x * dt
-            player.position.y += player.velocity.y * dt
+            self.update_entity_position(player, dt)
             # print(f'Player {player.id} position: {player.position.x}, {player.position.y}')
             if player.role == PlayerRole.KEEPER: # dodgeball immunity if keeper in keeper zone
                 if (
@@ -174,8 +185,7 @@ class BasicLogic:
         for ball in self.state.balls.values():
             ball.previous_position.x = ball.position.x
             ball.previous_position.y = ball.position.y
-            ball.position.x += ball.velocity.x * dt
-            ball.position.y += ball.velocity.y * dt
+            self.update_entity_position(ball, dt)
 
 
     
