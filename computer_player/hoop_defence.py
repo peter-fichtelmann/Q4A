@@ -56,36 +56,30 @@ class HoopDefence:
                     if chaser_id in self.defence_cpu_player_ids:
                         # TODO: chasers move with volleyball movement (between hoop x +/-) and chasers acknowledge hoop blockage and move around it if volleyball less than hoop x
                         add_hoop_blockage_x = chaser.radius + volleyball.radius
-                        next_chaser_position = Vector2(
-                            chaser.position.x + chaser.velocity.x * dt,
-                            chaser.position.y + chaser.velocity.y * dt
-                        )
-                        next_volleyball_position = Vector2(
-                            volleyball.position.x + volleyball.velocity.x * dt,
-                            volleyball.position.y + volleyball.velocity.y * dt
-                        )
+                        next_chaser_position = self.logic.basic_logic.get_update_position(chaser, dt)
+                        next_volleyball_position = self.logic.basic_logic.get_update_position(volleyball, dt)
                         if next_volleyball_position.x > target_hoop.position.x:
-                            target = Vector2(target_hoop.position.x + add_hoop_blockage_x, target_hoop.position.y)
-                            direction_to_hoop = Vector2(
-                                (target_hoop.position.x + add_hoop_blockage_x) - chaser.position.x,
-                                target_hoop.position.y - chaser.position.y
-                            )
+                            target_position = Vector2(target_hoop.position.x + add_hoop_blockage_x, target_hoop.position.y)
+                            # direction_to_hoop = Vector2(
+                            #     (target_hoop.position.x + add_hoop_blockage_x) - chaser.position.x,
+                            #     target_hoop.position.y - chaser.position.y
+                            # )
                             next_direction_to_hoop = Vector2(
                                 (target_hoop.position.x + add_hoop_blockage_x) - next_chaser_position.x,
                                 target_hoop.position.y - next_chaser_position.y
                             )
-                            x_pos_position = True
+                            # x_pos_position = True
                         else:
-                            target = Vector2(target_hoop.position.x - add_hoop_blockage_x, target_hoop.position.y)
-                            direction_to_hoop = Vector2(
-                                (target_hoop.position.x - add_hoop_blockage_x) - chaser.position.x,
-                                target_hoop.position.y - chaser.position.y
-                            )
+                            target_position = Vector2(target_hoop.position.x - add_hoop_blockage_x, target_hoop.position.y)
+                            # direction_to_hoop = Vector2(
+                            #     (target_hoop.position.x - add_hoop_blockage_x) - chaser.position.x,
+                            #     target_hoop.position.y - chaser.position.y
+                            # )
                             next_direction_to_hoop = Vector2(
                                 (target_hoop.position.x - add_hoop_blockage_x) - next_chaser_position.x,
                                 target_hoop.position.y - next_chaser_position.y
                             )
-                            x_pos_position = False
+                            # x_pos_position = False
                         #         x_pos_position = False
                         # print('direction to hoop: ', direction_to_hoop)
         
@@ -94,7 +88,7 @@ class HoopDefence:
                         # print(f'[CPU Player] Moving chaser {chaser_id} towards hoop {hoop_id} with direction {chaser.direction}')
                         chaser.direction = self.move_around_hoop_blockage(
                             player=chaser,
-                            target=target,
+                            target_position=target_position,
                             target_hoop=target_hoop,
                             add_hoop_blockage_x=add_hoop_blockage_x,
                             lookahead_to_target=next_direction_to_hoop,

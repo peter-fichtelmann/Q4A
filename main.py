@@ -160,7 +160,7 @@ class GameRoom:
             role=PlayerRole(role),
             radius=Config.PLAYER_RADIUS,
             position=Vector2(
-                random.uniform(10, 30) if team == 0 else random.uniform(Config.PITCH_LENGTH - 30, Config.PITCH_LENGTH - 10),
+                random.uniform(10, 25) if team == 0 else random.uniform(Config.PITCH_LENGTH - 25, Config.PITCH_LENGTH - 10),
                 random.uniform(10, Config.PITCH_WIDTH - 10)
             ),
             max_speed=Config.PLAYER_MAX_SPEED,
@@ -343,7 +343,7 @@ async def websocket_lobby(websocket: WebSocket):
                         team=0,  # numerical team for game logic (0 = left/A)
                         role=PlayerRole("chaser"),
                         radius=Config.PLAYER_RADIUS,
-                        position=Vector2(25, Config.PITCH_WIDTH / 2 + y_offset),
+                        position=Vector2(27, Config.PITCH_WIDTH / 2 + y_offset),
                         max_speed=Config.PLAYER_MAX_SPEED,
                         min_speed=Config.PLAYER_MIN_SPEED,
                         acceleration=Config.PLAYER_ACCELERATION,

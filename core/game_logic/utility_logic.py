@@ -24,8 +24,8 @@ class UtilityLogic:
         Precompute squared distances between all relevant entity pairs.
         
         Builds two representations of entity distances:
-        1. Nested dict for O(1) lookups between two specific entities
-        2. Sorted list of nearby entities for each entity (nearest-first)
+        1. squared_distances_dicts: Nested dict for O(1) lookups between two specific entities: dict[str, dict[str, float]]
+        2. squared_distances: Sorted list of nearby entities for each entity (nearest-first): dict[str, List[Tuple[str, float]]]
         
         Skips distance calculations for:
         - Knocked out players

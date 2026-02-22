@@ -54,6 +54,7 @@ class Config:
     COMPUTER_PLAYER_KWARGS = {
         # 'throwing_probability': 0.3, # for RandomComputerPlayer, probability of throwing each tick
         'move_buffer_factor': 1.2, # for RuleBasedComputerPlayer, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
+        'determine_attacking_team_max_dt_steps': 20, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
     }
 
 
