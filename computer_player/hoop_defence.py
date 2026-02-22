@@ -1,6 +1,7 @@
 from typing import List
 from core.game_logic.game_logic import GameLogic
 from core.entities import Hoop, Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
+from computer_player.computer_player_utility import MoveAroundHoopBlockage
 import random
 import math
 
@@ -15,6 +16,7 @@ class HoopDefence:
 
         self.keeper_zone_x = self.logic.state.keeper_zone_x_0 if team == self.logic.state.team_0 else self.logic.state.keeper_zone_x_1
         self.defence_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team == team]
+        self.move_around_hoop_blockage = MoveAroundHoopBlockage(self.defence_hoops, move_buffer_factor=self.move_buffer_factor, tol=self.tol)
 
     def __call__(self, dt: float):
         volleyball = self.logic.state.get_volleyball()
@@ -63,6 +65,7 @@ class HoopDefence:
                             volleyball.position.y + volleyball.velocity.y * dt
                         )
                         if next_volleyball_position.x > target_hoop.position.x:
+                            target = Vector2(target_hoop.position.x + add_hoop_blockage_x, target_hoop.position.y)
                             direction_to_hoop = Vector2(
                                 (target_hoop.position.x + add_hoop_blockage_x) - chaser.position.x,
                                 target_hoop.position.y - chaser.position.y
@@ -73,6 +76,7 @@ class HoopDefence:
                             )
                             x_pos_position = True
                         else:
+                            target = Vector2(target_hoop.position.x - add_hoop_blockage_x, target_hoop.position.y)
                             direction_to_hoop = Vector2(
                                 (target_hoop.position.x - add_hoop_blockage_x) - chaser.position.x,
                                 target_hoop.position.y - chaser.position.y
@@ -84,103 +88,111 @@ class HoopDefence:
                             x_pos_position = False
                         #         x_pos_position = False
                         # print('direction to hoop: ', direction_to_hoop)
-                        self._player_move_around_hoop_blockage(chaser, direction_to_hoop, next_direction_to_hoop, add_hoop_blockage_x, x_pos_position, target_hoop)
+        
                         # print('player direction', chaser.direction)
                         # print('player velocity', chaser.velocity)
                         # print(f'[CPU Player] Moving chaser {chaser_id} towards hoop {hoop_id} with direction {chaser.direction}')
+                        chaser.direction = self.move_around_hoop_blockage(
+                            player=chaser,
+                            target=target,
+                            target_hoop=target_hoop,
+                            add_hoop_blockage_x=add_hoop_blockage_x,
+                            lookahead_to_target=next_direction_to_hoop,
+                            add_target_x_buffer=True
+                        )
                     # print(f'[CPU Player] Moving chaser {chaser_id} towards hoop {hoop_id}')
                     break
 
-    def _player_move_around_hoop_blockage(self, player: Player, direction_to_hoop: Vector2, next_direction_to_hoop: Vector2, add_hoop_blockage_x: float, x_pos_position: bool, target_hoop: Hoop):
-        """Adjust a chaser's movement vector to avoid hoop obstruction while defending.
+    # def _player_move_around_hoop_blockage(self, player: Player, direction_to_hoop: Vector2, next_direction_to_hoop: Vector2, add_hoop_blockage_x: float, x_pos_position: bool, target_hoop: Hoop):
+    #     """Adjust a chaser's movement vector to avoid hoop obstruction while defending.
 
-        This helper determines whether the straight path from the player's current
-        position to the intended hoop-side aiming point intersects a rectangular blocked hoop
-        region. The blocked region models hoop thickness using an x-range expanded
-        by ``add_hoop_blockage_x`` and top/bottom hoop boundaries in y.
+    #     This helper determines whether the straight path from the player's current
+    #     position to the intended hoop-side aiming point intersects a rectangular blocked hoop
+    #     region. The blocked region models hoop thickness using an x-range expanded
+    #     by ``add_hoop_blockage_x`` and top/bottom hoop boundaries in y.
 
-        The method computes two candidate intersections along the player's intended
-        line of travel:
+    #     The method computes two candidate intersections along the player's intended
+    #     line of travel:
 
-        1. An x-crossing (vertical to x-axis) against the target hoop's main line (scoring area, hoop radius)
-        2. The earliest y-crossing (vertical to y-axis) against the upper/lower boundaries of any
-           defensive hoop (hoop thickness)
+    #     1. An x-crossing (vertical to x-axis) against the target hoop's main line (scoring area, hoop radius)
+    #     2. The earliest y-crossing (vertical to y-axis) against the upper/lower boundaries of any
+    #        defensive hoop (hoop thickness)
 
-        If no crossing is found, the player continues with ``next_direction_to_hoop``
-        plus a small x-buffer offset to keep spacing from the hoop face. If a
-        crossing is found, the player direction is redirected toward a buffered
-        corner waypoint so the chaser moves around the hoop instead of clipping
-        through its blocked area.
+    #     If no crossing is found, the player continues with ``next_direction_to_hoop``
+    #     plus a small x-buffer offset to keep spacing from the hoop face. If a
+    #     crossing is found, the player direction is redirected toward a buffered
+    #     corner waypoint so the chaser moves around the hoop instead of clipping
+    #     through its blocked area.
 
-        Args:
-            player: Defender being steered. The method writes to
-                ``player.direction``.
-            direction_to_hoop: Current-frame vector from player position to the
-                selected hoop-side aiming point.
-            next_direction_to_hoop: Next-frame estimated vector to the same aiming
-                point, incorporating current velocity.
-            add_hoop_blockage_x: Horizontal half-width used for hoop collision
-                avoidance, typically ``player.radius + volleyball.radius``.
-            x_pos_position: Which hoop side is being targeted. ``True`` means the
-                right side of the hoop (positive x side), ``False`` means the left
-                side.
-            target_hoop: Hoop currently assigned to this defender and used as the
-                primary obstacle reference.
-        """
-        # min_dir and min_velocity of players can make it difficult to go around hoops
-        if direction_to_hoop.x == 0 and direction_to_hoop.y == 0:
-            # no movement needed, already at the hoop, so no blockage
-            return
-        # hoop width: hoop.radius
-        # hoop thickness: player.radius + ball.radius
-        # player will not be blocked by hoop line where the target point is
-        if x_pos_position:
-            hoop_blockage_x = target_hoop.position.x - add_hoop_blockage_x
-            add_x_buffer = - add_hoop_blockage_x * (self.move_buffer_factor - 1)
-        else:
-            hoop_blockage_x = target_hoop.position.x + add_hoop_blockage_x
-            add_x_buffer = add_hoop_blockage_x * (self.move_buffer_factor - 1)
-        # check x crossing
-        line_t_x = (hoop_blockage_x - player.position.x) / direction_to_hoop.x if direction_to_hoop.x != 0 else float('inf')
-        best_x_crossing  = (float('inf'), None, None, None) # (t, x, y, hoop)
-        best_y_crossing = (float('inf'), None, None, None) # (t, x, y, hoop)
-        if line_t_x > 0 - self.tol and line_t_x < 1 + self.tol:
-            check_y_at_line_t_x = player.position.y + direction_to_hoop.y * line_t_x
-            if (check_y_at_line_t_x >= target_hoop.position.y - target_hoop.radius and check_y_at_line_t_x <= target_hoop.position.y + add_hoop_blockage_x):
-                best_x_crossing = (line_t_x, hoop_blockage_x + add_x_buffer, check_y_at_line_t_x, target_hoop)
-        # check all possible y crossings
-        for hoop in self.defence_hoops:
-            for add_hoop_blockage_radius in [hoop.radius, - hoop.radius]:
-                y = hoop.position.y + add_hoop_blockage_radius
-                line_t_y = (y - player.position.y) / direction_to_hoop.y if direction_to_hoop.y != 0 else float('inf')
-                if line_t_y > 0 - self.tol and line_t_y < 1 + self. tol:
-                    x = player.position.x + direction_to_hoop.x * line_t_y
-                    if (x >= hoop.position.x - add_hoop_blockage_x and x <= hoop.position.x + add_hoop_blockage_x):
-                        if line_t_y < best_y_crossing[0]:
-                            y = hoop.position.y + add_hoop_blockage_radius * self.move_buffer_factor # add buffer after checks (before checks leads to wrong checks)
-                            best_y_crossing = (line_t_y, x, y, hoop)
-        if math.isinf(best_x_crossing[0]) and math.isinf(best_y_crossing[0]):
-            # no blockage found, move directly towards the hoop with estimation of current velocity taken into account
-            player.direction = next_direction_to_hoop
-            # add buffer
-            player.direction.x -= add_x_buffer # inverse to add buffer
-            return
-        elif best_x_crossing[0] < best_y_crossing[0]:
-            # use best x crossing
-            # check closest corner of the hoop where the player should move towards with buffer to avoid blockage
-            if direction_to_hoop.y < 0: # move towards upper corner
-                corner_y = best_x_crossing[3].position.y + best_x_crossing[3].radius * self.move_buffer_factor
-            else: # move towards lower corner
-                corner_y = best_x_crossing[3].position.y - best_x_crossing[3].radius * self.move_buffer_factor
-            player.direction.x = best_x_crossing[1] - player.position.x
-            player.direction.y = corner_y - player.position.y
-        else: # best y_crossing is closer
-            if x_pos_position:
-                corner_x = best_y_crossing[3].position.x + add_hoop_blockage_x * self.move_buffer_factor
-            else:
-                corner_x = best_y_crossing[3].position.x - add_hoop_blockage_x * self.move_buffer_factor
-            player.direction.x = corner_x - player.position.x
-            player.direction.y = best_y_crossing[2] - player.position.y
+    #     Args:
+    #         player: Defender being steered. The method writes to
+    #             ``player.direction``.
+    #         direction_to_hoop: Current-frame vector from player position to the
+    #             selected hoop-side aiming point.
+    #         next_direction_to_hoop: Next-frame estimated vector to the same aiming
+    #             point, incorporating current velocity.
+    #         add_hoop_blockage_x: Horizontal half-width used for hoop collision
+    #             avoidance, typically ``player.radius + volleyball.radius``.
+    #         x_pos_position: Which hoop side is being targeted. ``True`` means the
+    #             right side of the hoop (positive x side), ``False`` means the left
+    #             side.
+    #         target_hoop: Hoop currently assigned to this defender and used as the
+    #             primary obstacle reference.
+    #     """
+    #     # min_dir and min_velocity of players can make it difficult to go around hoops
+    #     if direction_to_hoop.x == 0 and direction_to_hoop.y == 0:
+    #         # no movement needed, already at the hoop, so no blockage
+    #         return
+    #     # hoop width: hoop.radius
+    #     # hoop thickness: player.radius + ball.radius
+    #     # player will not be blocked by hoop line where the target point is
+    #     if x_pos_position:
+    #         hoop_blockage_x = target_hoop.position.x - add_hoop_blockage_x
+    #         add_x_buffer = - add_hoop_blockage_x * (self.move_buffer_factor - 1)
+    #     else:
+    #         hoop_blockage_x = target_hoop.position.x + add_hoop_blockage_x
+    #         add_x_buffer = add_hoop_blockage_x * (self.move_buffer_factor - 1)
+    #     # check x crossing
+    #     line_t_x = (hoop_blockage_x - player.position.x) / direction_to_hoop.x if direction_to_hoop.x != 0 else float('inf')
+    #     best_x_crossing  = (float('inf'), None, None, None) # (t, x, y, hoop)
+    #     best_y_crossing = (float('inf'), None, None, None) # (t, x, y, hoop)
+    #     if line_t_x > 0 - self.tol and line_t_x < 1 + self.tol:
+    #         check_y_at_line_t_x = player.position.y + direction_to_hoop.y * line_t_x
+    #         if (check_y_at_line_t_x >= target_hoop.position.y - target_hoop.radius and check_y_at_line_t_x <= target_hoop.position.y + add_hoop_blockage_x):
+    #             best_x_crossing = (line_t_x, hoop_blockage_x + add_x_buffer, check_y_at_line_t_x, target_hoop)
+    #     # check all possible y crossings
+    #     for hoop in self.defence_hoops:
+    #         for add_hoop_blockage_radius in [hoop.radius, - hoop.radius]:
+    #             y = hoop.position.y + add_hoop_blockage_radius
+    #             line_t_y = (y - player.position.y) / direction_to_hoop.y if direction_to_hoop.y != 0 else float('inf')
+    #             if line_t_y > 0 - self.tol and line_t_y < 1 + self. tol:
+    #                 x = player.position.x + direction_to_hoop.x * line_t_y
+    #                 if (x >= hoop.position.x - add_hoop_blockage_x and x <= hoop.position.x + add_hoop_blockage_x):
+    #                     if line_t_y < best_y_crossing[0]:
+    #                         y = hoop.position.y + add_hoop_blockage_radius * self.move_buffer_factor # add buffer after checks (before checks leads to wrong checks)
+    #                         best_y_crossing = (line_t_y, x, y, hoop)
+    #     if math.isinf(best_x_crossing[0]) and math.isinf(best_y_crossing[0]):
+    #         # no blockage found, move directly towards the hoop with estimation of current velocity taken into account
+    #         player.direction = next_direction_to_hoop
+    #         # add buffer
+    #         player.direction.x -= add_x_buffer # inverse to add buffer
+    #         return
+    #     elif best_x_crossing[0] < best_y_crossing[0]:
+    #         # use best x crossing
+    #         # check closest corner of the hoop where the player should move towards with buffer to avoid blockage
+    #         if direction_to_hoop.y < 0: # move towards upper corner
+    #             corner_y = best_x_crossing[3].position.y + best_x_crossing[3].radius * self.move_buffer_factor
+    #         else: # move towards lower corner
+    #             corner_y = best_x_crossing[3].position.y - best_x_crossing[3].radius * self.move_buffer_factor
+    #         player.direction.x = best_x_crossing[1] - player.position.x
+    #         player.direction.y = corner_y - player.position.y
+    #     else: # best y_crossing is closer
+    #         if x_pos_position:
+    #             corner_x = best_y_crossing[3].position.x + add_hoop_blockage_x * self.move_buffer_factor
+    #         else:
+    #             corner_x = best_y_crossing[3].position.x - add_hoop_blockage_x * self.move_buffer_factor
+    #         player.direction.x = corner_x - player.position.x
+    #         player.direction.y = best_y_crossing[2] - player.position.y
 
 
     def _is_volleyball_in_keeper_zone(self, volleyball: VolleyBall) -> bool:
