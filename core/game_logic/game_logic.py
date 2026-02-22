@@ -69,6 +69,9 @@ class GameLogic:
         self.process_action_logic = ProcessActionLogic(self.state)
         self.utility_logic = UtilityLogic(self.state)
 
+    def copy(self) -> 'GameLogic':
+        return GameLogic(self.state.copy())
+
     
     def update(self, dt: float) -> None:
         """
