@@ -1,4 +1,4 @@
-
+import logging
 from core.game_state import GameState
 from core.game_logic.basic_logic import BasicLogic
 from core.game_logic.volleyball_logic import VolleyballLogic
@@ -8,6 +8,9 @@ from core.game_logic.boundary_logic import BoundaryLogic
 from core.game_logic.penalty_logic import PenaltyLogic
 from core.game_logic.process_action_logic import ProcessActionLogic
 from core.game_logic.utility_logic import UtilityLogic
+
+# Configure logger for game logic subsystem
+logger = logging.getLogger('quadball.game_logic')
 
 class GameLogic:
     """
@@ -27,7 +30,7 @@ class GameLogic:
         utility_logic: Distance precomputation for efficient collision checks.
     """
     
-    def __init__(self, game_state: GameState):
+    def __init__(self, game_state: GameState, log_level: int = logging.DEBUG):
         """
         Initialize the game logic system with a reference to the game state.
         
@@ -47,8 +50,11 @@ class GameLogic:
         
         Args:
             game_state: The GameState instance that this system will manage
+            log_level: Logging level (e.g., logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR)
         """
         self.state = game_state
+        
+
 
         # Initialize distance dictionaries for all entities
         entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
@@ -69,9 +75,18 @@ class GameLogic:
         self.process_action_logic = ProcessActionLogic(self.state)
         self.utility_logic = UtilityLogic(self.state)
 
-    def copy(self) -> 'GameLogic':
-        return GameLogic(self.state.copy())
-
+    def copy(self, log_level = None) -> 'GameLogic':
+        if log_level is None:
+            log_level = logger.level
+        return GameLogic(self.state.copy(), log_level=log_level)
+    
+    def set_logger_level(self, log_level: int):
+        # Configure logger level
+        logger.setLevel(log_level)
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+            logger.addHandler(handler)
     
     def update(self, dt: float) -> None:
         """

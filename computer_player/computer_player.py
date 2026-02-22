@@ -45,11 +45,13 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  game_logic: GameLogic,
                  cpu_player_ids: List[str],
                  move_buffer_factor: float = 1.2,
-                 determine_attacking_team_max_dt_steps: int = 10
+                 determine_attacking_team_max_dt_steps: int = 10,
+                 simulation_game_logic_log_level: int = None
                  ):
         super().__init__(game_logic, cpu_player_ids)
         self.move_buffer_factor = move_buffer_factor
         self.determine_attacking_team_max_dt_steps = determine_attacking_team_max_dt_steps
+        self.simulation_game_logic_log_level = simulation_game_logic_log_level
         defence_hoops_0 = []
         defence_hoops_1 = []
         for hoop in self.logic.state.hoops.values():
@@ -63,11 +65,13 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             logic=self.logic,
             max_dt_steps=self.determine_attacking_team_max_dt_steps,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_0,
+            log_level=self.simulation_game_logic_log_level
             )
         self.interception_ratio_calculator_team_1 = InterceptionRatioCalculator(
             logic=self.logic,
             max_dt_steps=self.determine_attacking_team_max_dt_steps,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_1,
+            log_level=self.simulation_game_logic_log_level
             )
 
     def make_move(self, dt: float):

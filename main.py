@@ -74,7 +74,7 @@ class GameRoom:
         self.game_state.delay_of_game_velocity_x_threshold = Config.DELAY_OF_GAME_VELOCITY_X_THRESHOLD
         self.game_state.max_delay_of_game_warnings = Config.MAX_DELAY_OF_GAME_WARNINGS
         self.game_state.beat_attempt_time_limit = Config.BEAT_ATTEMPT_TIME_LIMIT
-        self.game_logic = GameLogic(self.game_state)
+        self.game_logic = GameLogic(self.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
         self.client_connections: Dict[str, WebSocket] = {}
         self.player_to_client: Dict[str, str] = {}
         # Lobby websocket connections (for waiting-room updates)
@@ -558,7 +558,7 @@ async def websocket_lobby(websocket: WebSocket):
 
                     room.game_started = True
                     # reinitialize game logic system with all players and balls
-                    room.game_logic = GameLogic(room.game_state)
+                    room.game_logic = GameLogic(room.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
 
                     # initialize computer player: has to be done after adding CPU players to the game state so it can find them
                     room.computer_player = room.computer_player_class(room.game_logic, room.cpu_player_ids, **Config.COMPUTER_PLAYER_KWARGS)

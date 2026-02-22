@@ -1,5 +1,8 @@
+import logging
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
+
+logger = logging.getLogger('quadball.game_logic')
 
 class ProcessActionLogic:
     """
@@ -59,7 +62,7 @@ class ProcessActionLogic:
             player.catch_cooldown = 0.0
         player.has_ball = False
 
-        print(f"[GAME] Player {player_id} threw {ball.id}")
+        logger.info(f"Player {player_id} threw {ball.id}")
         return True
     
     def process_tackle_action(self, player_id: str) -> bool:
@@ -94,6 +97,6 @@ class ProcessActionLogic:
                             if other_player.team != player.team:
                                 player.tackling_player_ids.append(other_id)
                                 other_player.tackling_player_ids.append(player.id)
-                                print(f"[GAME] Player {player_id} tackled player {other_id}")
+                                logger.info(f"Player {player_id} tackled player {other_id}")
                                 return True
         return False

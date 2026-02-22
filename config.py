@@ -1,4 +1,7 @@
+import logging
+
 class Config:
+    GAME_LOGIC_UPDATE_LOG_LEVEL = logging.DEBUG
     FPS = 20 # frame rate per 
     GAME_TIME_TO_REAL_TIME_RATIO = 3 # 1 second real time = 3 seconds game time
     PITCH_WIDTH = 33
@@ -55,6 +58,7 @@ class Config:
         # 'throwing_probability': 0.3, # for RandomComputerPlayer, probability of throwing each tick
         'move_buffer_factor': 1.2, # for RuleBasedComputerPlayer, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
         'determine_attacking_team_max_dt_steps': 20, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
+        'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)
     }
 
 

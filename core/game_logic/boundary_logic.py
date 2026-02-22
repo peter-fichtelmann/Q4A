@@ -1,7 +1,10 @@
+import logging
+import random
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 from typing import Optional
-import random
+
+logger = logging.getLogger('quadball.game_logic')
 
 class BoundaryLogic:
     """
@@ -93,7 +96,7 @@ class BoundaryLogic:
                 if hasattr(moving_entity, "ball_type"):
                     # ball
                     # stopp balls at boundary
-                    print(f'ball {moving_entity.id} hit boundary at position')
+                    logger.debug(f"Ball {moving_entity.id} hit boundary at position ({moving_entity.position.x:.2f}, {moving_entity.position.y:.2f})")
                     moving_entity.velocity.x = 0
                     moving_entity.velocity.y = 0
                     if moving_entity.ball_type == BallType.VOLLEYBALL:
@@ -106,7 +109,7 @@ class BoundaryLogic:
                         ball = self.state.get_ball(moving_entity.has_ball)
                         if ball.ball_type == BallType.VOLLEYBALL:
                             # volleyball going out of bounds
-                            print('volleyball going out of bounds at position where player out of bounds')
+                            logger.info("Volleyball going out of bounds at position where player out of bounds")
                             # Copy position values, don't share the same Vector2 object
                             ball.position.x = moving_entity.position.x
                             ball.position.y = moving_entity.position.y
@@ -154,7 +157,7 @@ class BoundaryLogic:
                         if player.inbounding is None:
                             if not player.has_ball:
                                 if not player.is_knocked_out: # what happens if all chasers/keeper of team are knocked out?
-                                    print(f'[GAME] Inbounding procedure started by player {player.id} for volleyball {volleyball.id}')
+                                    logger.info(f"Inbounding procedure started by player {player.id} for volleyball {volleyball.id}")
                                     player.inbounding = volleyball.id
                                     player.dodgeball_immunity = True # chaser/keeper immune while inbounding
                                     volleyball.inbounder = player.id
@@ -231,7 +234,7 @@ class BoundaryLogic:
                                     sign = random.choice([-1, 1])
                                     move_vector.x = move_vector_existing.x + sign * normal_existing.y * move_away_speed * dt * 0.5
                                     move_vector.y = move_vector_existing.y + sign * -normal_existing.x * move_away_speed * dt * 0.5
-                                    print(f'Added perpendicular vector to avoid deadlock for player {other_id} during inbounding free way')
+                                    logger.debug(f"Added perpendicular vector to avoid deadlock for player {other_id} during inbounding free way")
                                 else:
                                     continue
                             players_to_move[other_id]= move_vector
@@ -307,7 +310,7 @@ class BoundaryLogic:
         )
         normal_mag = (normal.x**2 + normal.y**2) ** 0.5
         if normal_mag == 0:
-            print('zero normal mag in inbounding free way') # avoid divide by zero
+            logger.warning("Zero normal magnitude in inbounding free way (entities at same position)")
             return None
         normal.x /= normal_mag
         normal.y /= normal_mag

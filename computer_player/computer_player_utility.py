@@ -1,4 +1,5 @@
 
+import logging
 import math
 from typing import Dict, Optional, List, Tuple
 
@@ -128,12 +129,14 @@ class InterceptionRatioCalculator:
                     logic: GameLogic,
                     max_dt_steps: int, # calculalation complexity increases with max_dt_steps*(max_dt_steps + 1) / 2 (triangular number)
                     move_around_hoop_blockage: MoveAroundHoopBlockage,
-                    tol_reaching_target: float = 1
+                    tol_reaching_target: float = 1,
+                    log_level: int = None
                     ):
         self.logic = logic
         self.max_dt_steps = max_dt_steps
         self.move_around_hoop_blockage = move_around_hoop_blockage
         self.tol_reaching_target = tol_reaching_target
+        self.log_level = log_level
 
     def update_moving_free_ball_position(self, copy_moving_entity: object, dt: float):
         copy_moving_entity.velocity = self.logic.basic_logic.get_free_ball_velocity(copy_moving_entity, dt)
@@ -148,7 +151,7 @@ class InterceptionRatioCalculator:
                     moving_entity: object,
                     intercepting_player_ids: List[str],
                     target_position: Optional[Vector2] = None,
-                    only_first_intercepting: bool = True
+                    only_first_intercepting: bool = True,
                     ) -> Tuple[float, Dict[str, Tuple[int, float, Vector2]]]:
         """
         Check the line from moving_entity to target_position for intercepting with players in intercepting_player_ids.
@@ -183,7 +186,7 @@ class InterceptionRatioCalculator:
         if can_reach_target:
             step_ratio_dict = {}
             for steps in range(updated_max_dt_steps):
-                copy_logic = self.logic.copy()
+                copy_logic = self.logic.copy(log_level=self.log_level)
                 intercepting_players = [copy_logic.state.players[player_id] for player_id in intercepting_player_ids]
                 step_ratio = 1
                 for step in range(steps):
