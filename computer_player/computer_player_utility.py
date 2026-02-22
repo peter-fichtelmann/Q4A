@@ -115,3 +115,9 @@ class MoveAroundHoopBlockage:
                 corner_x = best_y_crossing[3].position.x - add_hoop_blockage_x * self.move_buffer_factor
             direction = Vector2(corner_x - player.position.x, best_y_crossing[2] - player.position.y)
         return direction
+    
+
+    class LineCrossing:
+
+        def __call__(self):
+            pass

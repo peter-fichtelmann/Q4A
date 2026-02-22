@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from enum import Enum
 import json
 
@@ -32,6 +32,17 @@ class Vector2:
     
     def to_tuple(self) -> Tuple[float, float]:
         return (self.x, self.y)
+
+    def copy(self) -> 'Vector2':
+        return Vector2(self.x, self.y)
+
+    def __copy__(self) -> 'Vector2':
+        return self.copy()
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> 'Vector2':
+        copied = self.copy()
+        memo[id(self)] = copied
+        return copied
 
     def reflect(self, normal: 'Vector2', reflect_loss: float = 0.0) -> 'Vector2':
         dot_product = self.x * normal.x + self.y * normal.y
@@ -89,6 +100,40 @@ class Player:
             "is_knocked_out": self.is_knocked_out,
             "has_ball": self.has_ball,
         }
+
+    def copy(self) -> 'Player':
+        return Player(
+            id=self.id,
+            team=self.team,
+            role=self.role,
+            position=self.position.copy(),
+            previous_position=self.previous_position.copy(),
+            direction=self.direction.copy(),
+            velocity=self.velocity.copy(),
+            radius=self.radius,
+            is_knocked_out=self.is_knocked_out,
+            has_ball=self.has_ball,
+            max_speed=self.max_speed,
+            min_speed=self.min_speed,
+            acceleration=self.acceleration,
+            deacceleration_rate=self.deacceleration_rate,
+            min_dir=self.min_dir,
+            throw_velocity=self.throw_velocity,
+            catch_cooldown=self.catch_cooldown,
+            dodgeball_immunity=self.dodgeball_immunity,
+            inbounding=self.inbounding,
+            in_contact_player_ids=self.in_contact_player_ids.copy(),
+            tackling_player_ids=self.tackling_player_ids.copy(),
+            is_receiving_turnover_ball=self.is_receiving_turnover_ball,
+        )
+
+    def __copy__(self) -> 'Player':
+        return self.copy()
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> 'Player':
+        copied = self.copy()
+        memo[id(self)] = copied
+        return copied
     
     @staticmethod
     def deserialize(data: dict) -> 'Player':
@@ -128,6 +173,30 @@ class Ball:
             "velocity": self.velocity.to_dict(),
             "holder_id": self.holder_id
         }
+
+    def copy(self) -> 'Ball':
+        return Ball(
+            id=self.id,
+            ball_type=self.ball_type,
+            radius=self.radius,
+            position=self.position.copy(),
+            previous_position=self.previous_position.copy(),
+            velocity=self.velocity.copy(),
+            deacceleration_rate=self.deacceleration_rate,
+            possession_team=self.possession_team,
+            holder_id=self.holder_id,
+            previous_thrower_id=self.previous_thrower_id,
+            reflect_velocity_loss=self.reflect_velocity_loss,
+            turnover_to_player=self.turnover_to_player,
+        )
+
+    def __copy__(self) -> 'Ball':
+        return self.copy()
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> 'Ball':
+        copied = self.copy()
+        memo[id(self)] = copied
+        return copied
     
     @staticmethod
     def deserialize(data: dict) -> 'Ball':
@@ -165,6 +234,25 @@ class VolleyBall(Ball):
         self.is_dead = is_dead
         self.delay_of_game_timer = delay_of_game_timer
 
+    def copy(self) -> 'VolleyBall':
+        return VolleyBall(
+            id=self.id,
+            radius=self.radius,
+            position=self.position.copy(),
+            crossed_hoop=self.crossed_hoop,
+            inbounder=self.inbounder,
+            is_dead=self.is_dead,
+            delay_of_game_timer=self.delay_of_game_timer,
+            previous_position=self.previous_position.copy(),
+            velocity=self.velocity.copy(),
+            deacceleration_rate=self.deacceleration_rate,
+            possession_team=self.possession_team,
+            holder_id=self.holder_id,
+            previous_thrower_id=self.previous_thrower_id,
+            reflect_velocity_loss=self.reflect_velocity_loss,
+            turnover_to_player=self.turnover_to_player,
+        )
+
 
 class DodgeBall(Ball):
     """Represents a dodgeball (bludger) in quadball."""
@@ -186,6 +274,23 @@ class DodgeBall(Ball):
         self.beat_attempt_time = beat_attempt_time
         self.dead_velocity_threshold = dead_velocity_threshold
 
+    def copy(self) -> 'DodgeBall':
+        return DodgeBall(
+            id=self.id,
+            radius=self.radius,
+            position=self.position.copy(),
+            beat_attempt_time=self.beat_attempt_time,
+            dead_velocity_threshold=self.dead_velocity_threshold,
+            previous_position=self.previous_position.copy(),
+            velocity=self.velocity.copy(),
+            deacceleration_rate=self.deacceleration_rate,
+            possession_team=self.possession_team,
+            holder_id=self.holder_id,
+            previous_thrower_id=self.previous_thrower_id,
+            reflect_velocity_loss=self.reflect_velocity_loss,
+            turnover_to_player=self.turnover_to_player,
+        )
+
 @dataclass
 class Hoop:
     """Represents a goal hoop."""
@@ -204,6 +309,23 @@ class Hoop:
             "radius": self.radius,
             "thickness": self.thickness
         }
+
+    def copy(self) -> 'Hoop':
+        return Hoop(
+            id=self.id,
+            team=self.team,
+            position=self.position.copy(),
+            radius=self.radius,
+            thickness=self.thickness,
+        )
+
+    def __copy__(self) -> 'Hoop':
+        return self.copy()
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> 'Hoop':
+        copied = self.copy()
+        memo[id(self)] = copied
+        return copied
 
     @staticmethod
     def deserialize(data: dict) -> 'Hoop':

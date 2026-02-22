@@ -93,6 +93,44 @@ class GameState:
         """Update player data in the game state."""
         if player.id in self.players:
             self.players[player.id] = player
+
+    def copy(self) -> 'GameState':
+        return GameState(
+            boundaries_x=self.boundaries_x,
+            boundaries_y=self.boundaries_y,
+            keeper_zone_x_0=self.keeper_zone_x_0,
+            keeper_zone_x_1=self.keeper_zone_x_1,
+            midline_x=self.midline_x,
+            players={pid: player.copy() for pid, player in self.players.items()},
+            balls={bid: ball.copy() for bid, ball in self.balls.items()},
+            hoops=self.hoops,
+            score=self.score,
+            game_time=self.game_time,
+            delay_of_game_time_limit=self.delay_of_game_time_limit,
+            delay_of_game_velocity_x_threshold=self.delay_of_game_velocity_x_threshold,
+            max_delay_of_game_warnings=self.max_delay_of_game_warnings,
+            delay_of_game_warnings=self.delay_of_game_warnings.copy(),
+            third_dodgeball=self.third_dodgeball,
+            third_dodgeball_team=self.third_dodgeball_team,
+            potential_third_dodgeball_interference_kwargs=(
+                self.potential_third_dodgeball_interference_kwargs.copy()
+                if self.potential_third_dodgeball_interference_kwargs is not None
+                else None
+            ),
+            beat_attempt_time_limit=self.beat_attempt_time_limit,
+            seeker_on_pitch=self.seeker_on_pitch,
+            set_score=self.set_score,
+            game_phase=self.game_phase,
+            seeker_floor_seconds=self.seeker_floor_seconds,
+        )
+
+    def __copy__(self) -> 'GameState':
+        return self.copy()
+
+    def __deepcopy__(self, memo: dict[int, object]) -> 'GameState':
+        copied = self.copy()
+        memo[id(self)] = copied
+        return copied
     
     def serialize(self) -> dict:
         """Convert entire game state to JSON-serializable dict."""
