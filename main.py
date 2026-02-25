@@ -109,15 +109,15 @@ class GameRoom:
         )
         
         # Add hoops for team 1
-        # self.game_state.hoops["hoop_1_left"] = Hoop(
-        #     id="hoop_1_left", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 + Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
-        # )
+        self.game_state.hoops["hoop_1_left"] = Hoop(
+            id="hoop_1_left", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 + Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
+        )
         self.game_state.hoops["hoop_1_center"] = Hoop(
             id="hoop_1_center", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
         )
-        # self.game_state.hoops["hoop_1_right"] = Hoop(
-        #     id="hoop_1_right", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 - Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
-        # )
+        self.game_state.hoops["hoop_1_right"] = Hoop(
+            id="hoop_1_right", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 - Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
+        )
         
         # Add quaffle
         volleyball = VolleyBall(

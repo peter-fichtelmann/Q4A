@@ -77,8 +77,8 @@ class DiamondAttack:
                  max_dt_per_step=self.score_interception_max_dt_per_step
             )
             intercepting_scores_dict[hoop.id] = intercepting_score
-            self.logger.debug("Interception info per hoop %s: %s, %s", hoop.id, intercepting_score, scores_info)
-        # self.logger.debug("intercepting_scores_dict %s", intercepting_scores_dict)
+            # self.logger.debug("Interception info per hoop %s: %s, %s", hoop.id, intercepting_score, scores_info)
+        self.logger.debug("intercepting_scores_dict %s", intercepting_scores_dict)
         return intercepting_scores_dict
 
     def score_attempt(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player):

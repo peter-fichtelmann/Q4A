@@ -150,7 +150,7 @@ class InterceptionRatioCalculator:
         copy_moving_entity.position = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
 
     def get_dt_stepsize(self, copy_moving_entity: object, max_distance_per_step: Optional[float], max_dt_per_step: Optional[int]) -> float:
-        dt = max_distance_per_step / (UtilityLogic._square_sum(copy_moving_entity.velocity.x, copy_moving_entity.velocity.y) ** 0.5) if max_distance_per_step is not None else 0.1
+        dt = max_distance_per_step / (UtilityLogic._square_sum(copy_moving_entity.velocity.x, copy_moving_entity.velocity.y) ** 0.5 + 1e-6) if max_distance_per_step is not None else 0.1
         if max_dt_per_step is not None and dt > max_dt_per_step:
             dt = max_dt_per_step
         return dt
@@ -208,7 +208,8 @@ class InterceptionRatioCalculator:
                     updated_max_dt_steps = steps - 1 # if can reach target then check for line intercepting at each step until reaching target (instead of max_dt_steps)
                     break
                 previous_len_moving_entity_target = len_moving_entity_target
-            self.logger.debug(f"Updated moving entity positions for interception ratio calculation: {[f'({pos.x:.2f}, {pos.y:.2f})' for pos in updated_moving_entity_positions]}")
+            # self.logger.debug(f"Updated moving entity positions for interception ratio calculation: {[f'({pos.x:.2f}, {pos.y:.2f})' for pos in updated_moving_entity_positions]}")
+            # self.logger.debug(f"dt steps {dt_steps}")
             # self.logger.debug(f"Updated moving entity velocities for interception ratio calculation: {[f'({vel.x:.2f}, {vel.y:.2f})' for vel in updated_moving_entity_velocities]}")
         if can_reach_target:
             step_ratio_dict = {}
@@ -263,7 +264,7 @@ class InterceptionRatioCalculator:
                         break
             if len(step_ratio_dict) > 0:
                 intercepting_score = 1
-                for step_ratio in step_ratio_dict.values():
+                for _, step_ratio, _ in step_ratio_dict.values():
                     intercepting_score = step_ratio * intercepting_score # combine step ratios for multiple intercepting players
                 return intercepting_score, step_ratio_dict
             else:

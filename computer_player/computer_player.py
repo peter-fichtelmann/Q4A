@@ -53,6 +53,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  cpu_player_ids: List[str],
                  move_buffer_factor: float = 1.2,
                  determine_attacking_team_max_dt_steps: int = 10,
+                 determine_attacking_team_max_distance_per_step: float = None,
+                 determine_attacking_team_max_dt_per_step: int = None,
                  score_interception_max_dt_steps: int = 10,
                  score_interception_max_distance_per_step: float = 0.5,
                  score_interception_max_dt_per_step: int = 0.25,
@@ -63,6 +65,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         super().__init__(game_logic, cpu_player_ids, computer_player_log_level=computer_player_log_level)
         self.move_buffer_factor = move_buffer_factor
         self.determine_attacking_team_max_dt_steps = determine_attacking_team_max_dt_steps
+        self.determine_attacking_team_max_distance_per_step = determine_attacking_team_max_distance_per_step
+        self.determine_attacking_team_max_dt_per_step = determine_attacking_team_max_dt_per_step
         self.scoring_threshold = scoring_threshold
         self.score_interception_max_dt_steps = score_interception_max_dt_steps
         self.score_interception_max_distance_per_step = score_interception_max_distance_per_step
@@ -156,24 +160,29 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             return volleyball.possession_team, volleyball.holder_id, None
         else:
             # elif volleyball.velocity.x > 0 or volleyball.velocity.y > 0:
-            # potential_intercepting_players = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]]
-            # _, step_ratio_dict_team_0 = self.interception_ratio_calculator_team_0(
-            #     dt=dt,
-            #     moving_entity=volleyball,
-            #     intercepting_player_ids=potential_intercepting_players,
-            #     target_position=None,
-            #     only_first_intercepting=True,
-                #   max_dt_steps=self.determine_attacking_team_max_dt_steps
-            # )
-            # _, step_ratio_dict_team_1 = self.interception_ratio_calculator_team_1(
-            #     dt=dt,
-            #     moving_entity=volleyball,
-            #     intercepting_player_ids=potential_intercepting_players,
-            #     target_position=None,
-            #     only_first_intercepting=True,
-                #   max_dt_steps=self.determine_attacking_team_max_dt_steps
-            # )
-            # step_ratio_dict = {**step_ratio_dict_team_0, **step_ratio_dict_team_1}
+            potential_intercepting_players = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]]
+            _, step_ratio_dict_team_0 = self.interception_ratio_calculator_team_0(
+                dt=dt,
+                moving_entity=volleyball,
+                intercepting_player_ids=potential_intercepting_players,
+                target_position=None,
+                only_first_intercepting=True,
+                max_dt_steps=self.determine_attacking_team_max_dt_steps,
+                max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
+                max_dt_per_step=self.determine_attacking_team_max_dt_per_step
+
+            )
+            _, step_ratio_dict_team_1 = self.interception_ratio_calculator_team_1(
+                dt=dt,
+                moving_entity=volleyball,
+                intercepting_player_ids=potential_intercepting_players,
+                target_position=None,
+                only_first_intercepting=True,
+                max_dt_steps=self.determine_attacking_team_max_dt_steps,
+                max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
+                max_dt_per_step=self.determine_attacking_team_max_dt_per_step
+            )
+            step_ratio_dict = {**step_ratio_dict_team_0, **step_ratio_dict_team_1}
             step_ratio_dict = {}
             if len(step_ratio_dict) > 0:
                 if len(step_ratio_dict) > 1:
