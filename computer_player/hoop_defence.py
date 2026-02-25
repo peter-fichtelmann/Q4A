@@ -6,17 +6,17 @@ import random
 import math
 
 class HoopDefence:
-    def __init__(self, logic, defence_player_ids: List[str], defence_cpu_player_ids: List[str], team: int, move_buffer_factor: float = 1.2, numerical_tol: float = 1e-2):    
+    def __init__(self, logic, defence_player_ids: List[str], defence_cpu_player_ids: List[str], team: int, move_around_hoop_blockage: MoveAroundHoopBlockage):    
         self.logic = logic
         self.defence_player_ids = defence_player_ids
         self.defence_cpu_player_ids = defence_cpu_player_ids
         self.team = team
-        self.move_buffer_factor = move_buffer_factor
-        self.tol = numerical_tol
+        # self.move_buffer_factor = move_buffer_factor
+        # self.tol = numerical_tol
 
         self.keeper_zone_x = self.logic.state.keeper_zone_x_0 if team == self.logic.state.team_0 else self.logic.state.keeper_zone_x_1
         self.defence_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team == team]
-        self.move_around_hoop_blockage = MoveAroundHoopBlockage(self.defence_hoops, move_buffer_factor=self.move_buffer_factor, tol=self.tol)
+        self.move_around_hoop_blockage = move_around_hoop_blockage
 
     def __call__(self, dt: float):
         volleyball = self.logic.state.get_volleyball()

@@ -109,15 +109,15 @@ class GameRoom:
         )
         
         # Add hoops for team 1
-        self.game_state.hoops["hoop_1_left"] = Hoop(
-            id="hoop_1_left", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 + Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
-        )
+        # self.game_state.hoops["hoop_1_left"] = Hoop(
+        #     id="hoop_1_left", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 + Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
+        # )
         self.game_state.hoops["hoop_1_center"] = Hoop(
             id="hoop_1_center", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
         )
-        self.game_state.hoops["hoop_1_right"] = Hoop(
-            id="hoop_1_right", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 - Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
-        )
+        # self.game_state.hoops["hoop_1_right"] = Hoop(
+        #     id="hoop_1_right", team=1, position=Vector2(Config.PITCH_LENGTH - Config.HOOP_X, Config.PITCH_WIDTH / 2 - Config.HOOP_DISTANCES), thickness=Config.HOOP_THICKNESS, radius=Config.HOOP_RADIUS
+        # )
         
         # Add quaffle
         volleyball = VolleyBall(
@@ -160,7 +160,7 @@ class GameRoom:
             role=PlayerRole(role),
             radius=Config.PLAYER_RADIUS,
             position=Vector2(
-                random.uniform(10, 25) if team == 0 else random.uniform(Config.PITCH_LENGTH - 25, Config.PITCH_LENGTH - 10),
+                random.uniform(Config.PITCH_LENGTH - 25, Config.PITCH_LENGTH - 10) if team == 0 else random.uniform(Config.PITCH_LENGTH - 25, Config.PITCH_LENGTH - 10),
                 random.uniform(10, Config.PITCH_WIDTH - 10)
             ),
             max_speed=Config.PLAYER_MAX_SPEED,
@@ -561,7 +561,12 @@ async def websocket_lobby(websocket: WebSocket):
                     room.game_logic = GameLogic(room.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
 
                     # initialize computer player: has to be done after adding CPU players to the game state so it can find them
-                    room.computer_player = room.computer_player_class(room.game_logic, room.cpu_player_ids, **Config.COMPUTER_PLAYER_KWARGS)
+                    room.computer_player = room.computer_player_class(
+                        room.game_logic,
+                        room.cpu_player_ids,
+                        computer_player_log_level=Config.COMPUTER_PLAYER_LOG_LEVEL,
+                        **Config.COMPUTER_PLAYER_KWARGS
+                    )
 
                     # Broadcast start to all lobby connections in the room so every client
                     # receives their assigned player_id (if any) and can open the game page.

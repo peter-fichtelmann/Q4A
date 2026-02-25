@@ -124,4 +124,8 @@ class UtilityLogic:
         """
         dx = pos1.x - pos2.x
         dy = pos1.y - pos2.y
-        return (dx**2 + dy**2)
+        return UtilityLogic._square_sum(dx, dy)
+    
+    @staticmethod
+    def _square_sum(value_1, value_2):
+        return value_1**2 + value_2**2

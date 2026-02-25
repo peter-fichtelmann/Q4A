@@ -5,16 +5,19 @@ from typing import Dict, Optional, List, Tuple
 
 from core.entities import Player, PlayerRole, Vector2, Hoop
 from core.game_logic.game_logic import GameLogic
+from core.game_logic.utility_logic import UtilityLogic
 
 class MoveAroundHoopBlockage:
     def __init__(self,
                  defence_hoops: List[Hoop],
                  move_buffer_factor: float = 1.2,
-                 tol: float = 1e-2
+                 tol: float = 1e-2,
+                 logger: Optional[logging.Logger] = None
                  ):
         self.defence_hoops = defence_hoops
         self.move_buffer_factor = move_buffer_factor    
         self.tol = tol
+        self.logger = logger
 
     def __call__(self,
                  player: Player,
@@ -127,16 +130,16 @@ class MoveAroundHoopBlockage:
 class InterceptionRatioCalculator:
     def __init__(self,
                     logic: GameLogic,
-                    max_dt_steps: int, # calculalation complexity increases with max_dt_steps*(max_dt_steps + 1) / 2 (triangular number)
                     move_around_hoop_blockage: MoveAroundHoopBlockage,
-                    tol_reaching_target: float = 1,
-                    log_level: int = None
+                    tol_reaching_target: float = 0,
+                    log_level: int = None,
+                    logger: Optional[logging.Logger] = None
                     ):
         self.logic = logic
-        self.max_dt_steps = max_dt_steps
         self.move_around_hoop_blockage = move_around_hoop_blockage
         self.tol_reaching_target = tol_reaching_target
         self.log_level = log_level
+        self.logger = logger
 
     def update_moving_free_ball_position(self, copy_moving_entity: object, dt: float):
         copy_moving_entity.velocity = self.logic.basic_logic.get_free_ball_velocity(copy_moving_entity, dt)
@@ -146,12 +149,22 @@ class InterceptionRatioCalculator:
         self.logic.basic_logic.update_player_velocity(copy_moving_entity, dt)
         copy_moving_entity.position = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
 
+    def get_dt_stepsize(self, copy_moving_entity: object, max_distance_per_step: Optional[float], max_dt_per_step: Optional[int]) -> float:
+        dt = max_distance_per_step / (UtilityLogic._square_sum(copy_moving_entity.velocity.x, copy_moving_entity.velocity.y) ** 0.5) if max_distance_per_step is not None else 0.1
+        if max_dt_per_step is not None and dt > max_dt_per_step:
+            dt = max_dt_per_step
+        return dt
+
+
     def __call__(self,
                     dt: float,
                     moving_entity: object,
                     intercepting_player_ids: List[str],
+                    max_dt_steps: int, # calculalation complexity increases with max_dt_steps*(max_dt_steps + 1) / 2 (triangular number)
                     target_position: Optional[Vector2] = None,
                     only_first_intercepting: bool = True,
+                    max_distance_per_step: Optional[float] = None,
+                    max_dt_per_step: Optional[int] = None
                     ) -> Tuple[float, Dict[str, Tuple[int, float, Vector2]]]:
         """
         Check the line from moving_entity to target_position for intercepting with players in intercepting_player_ids.
@@ -165,31 +178,46 @@ class InterceptionRatioCalculator:
         # check if moving_entity will reach target position within max_dt_steps
         copy_moving_entity = moving_entity.copy()
         can_reach_target = False
-        updated_max_dt_steps = self.max_dt_steps
+        updated_max_dt_steps = max_dt_steps
         updated_moving_entity_positions = []
+        # updated_moving_entity_velocities = []
+        dt_steps = []
         if target_position is None:
             # set to end position after max_dt_steps if no target position provided
-            for steps in range(self.max_dt_steps):
+            for steps in range(max_dt_steps):
+                dt = self.get_dt_stepsize(copy_moving_entity, max_distance_per_step, max_dt_per_step)
+                dt_steps.append(dt)
                 update_moving_entity_position(copy_moving_entity, dt) # assume fixed dt of 0.1 for each step
                 updated_moving_entity_positions.append(copy_moving_entity.position.copy())
             can_reach_target = True
             target_position = copy_moving_entity.position
         else:
-            for steps in range(self.max_dt_steps):
+            previous_len_moving_entity_target = float('inf')
+            for steps in range(max_dt_steps):
+                dt = self.get_dt_stepsize(copy_moving_entity, max_distance_per_step, max_dt_per_step)
+                dt_steps.append(dt)
                 update_moving_entity_position(copy_moving_entity, dt) # assume fixed dt of 0.1 for each step
                 updated_moving_entity_positions.append(copy_moving_entity.position.copy())
+                # updated_moving_entity_velocities.append(copy_moving_entity.velocity.copy())
                 # check if reached target position
-                if (copy_moving_entity.position.x - target_position.x)**2 + (copy_moving_entity.position.y - target_position.y)**2 < self.tol_reaching_target**2:
+                len_moving_entity_target = ((target_position.x - copy_moving_entity.position.x)**2 + (target_position.y - copy_moving_entity.position.y)**2) ** 0.5
+                if len_moving_entity_target > previous_len_moving_entity_target:
                     can_reach_target = True
-                    updated_max_dt_steps = steps # if can reach target then check for line intercepting at each step until reaching target (instead of max_dt_steps)
+                    if steps == 0:
+                        updated_max_dt_steps = 1 # if already at target position, just check for intercepting at the current position without updating moving entity position
+                    updated_max_dt_steps = steps - 1 # if can reach target then check for line intercepting at each step until reaching target (instead of max_dt_steps)
                     break
+                previous_len_moving_entity_target = len_moving_entity_target
+            self.logger.debug(f"Updated moving entity positions for interception ratio calculation: {[f'({pos.x:.2f}, {pos.y:.2f})' for pos in updated_moving_entity_positions]}")
+            # self.logger.debug(f"Updated moving entity velocities for interception ratio calculation: {[f'({vel.x:.2f}, {vel.y:.2f})' for vel in updated_moving_entity_velocities]}")
         if can_reach_target:
             step_ratio_dict = {}
             for steps in range(updated_max_dt_steps):
                 copy_logic = self.logic.copy(log_level=self.log_level)
                 intercepting_players = [copy_logic.state.players[player_id] for player_id in intercepting_player_ids]
                 step_ratio = 1
-                for step in range(steps):
+                # self.logger.debug(f"Steps {steps} for interception ratio calculation: moving entity position ({copy_moving_entity.position.x:.2f}, {copy_moving_entity.position.y:.2f}), intercepting player positions: {[f'{player.id}: ({player.position.x:.2f}, {player.position.y:.2f})' for player in intercepting_players]}")
+                for step in range(steps + 1):
                     for intercepting_player in intercepting_players:
                         if not intercepting_player.is_knocked_out:
                             if intercepting_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
@@ -207,18 +235,25 @@ class InterceptionRatioCalculator:
                                     target_position.x - updated_moving_entity_positions[steps].x,
                                     target_position.y - updated_moving_entity_positions[steps].y
                                     )
-                    copy_logic.update(dt)
+                    dt_update = dt_steps[step]
+                    copy_logic.basic_logic.update_player_velocities(dt_update)
+                    copy_logic.basic_logic.update_positions(dt_update)
+                    squared_distance_dict = {}
+                    for intercepting_player in intercepting_players:
+                        if not intercepting_player.is_knocked_out:
+                            squared_distance_dict[intercepting_player.id] = UtilityLogic._squared_distance(intercepting_player.position, updated_moving_entity_positions[steps])
+                    sorted_squared_distance = sorted(squared_distance_dict.items(), key=lambda item: item[1])
                     # check if an intercepting player crosses the line to target position within steps
-                    for other_id, distance in copy_logic.state.squared_distances[moving_entity.id]:
+                    for other_id, distance in sorted_squared_distance:
                         if other_id in intercepting_player_ids:
                             player = copy_logic.state.players[other_id]
                             if not player.is_knocked_out:
                                 if distance <= (player.radius + moving_entity.radius)**2:
                                     step_ratio = steps / (steps + 1)
-                                    # print(f"intercepting detected at step {step} with player {other_id} at distance {math.sqrt(distance)} and step ratio {step_ratio}")
+                                    # self.logger.debug(f"intercepting detected at step {step} with player {other_id} at distance {math.sqrt(distance)} and step ratio {step_ratio}")
                                     if only_first_intercepting:
                                         return step_ratio, {other_id: (step, step_ratio, updated_moving_entity_positions[step])}
-                                    stored_step_ratio = step_ratio_dict.get(other_id, 1)
+                                    stored_step_ratio = step_ratio_dict.get(other_id, (float('inf'), 1, None)) # (step, step_ratio, position)
                                     if step_ratio < stored_step_ratio[1]: # stored_step_ratio is a tuple (step, step_ratio, position)
                                         step_ratio_dict[other_id] = (step, step_ratio, updated_moving_entity_positions[step])
                                     break
@@ -234,7 +269,7 @@ class InterceptionRatioCalculator:
             else:
                 return 1, {} # no intercepting, reached target
         # not reaching target
-        print(f"Not reaching target within {self.max_dt_steps} steps, returning intercepting score of 0")
+        # print(f"Not reaching target within {max_dt_steps} steps, returning intercepting score of 0")
         return 0, {}
     
 
