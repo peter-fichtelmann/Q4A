@@ -150,7 +150,7 @@ class InterceptionRatioCalculator:
         copy_moving_entity.position = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
 
     def get_dt_stepsize(self, copy_moving_entity: object, max_distance_per_step: Optional[float], max_dt_per_step: Optional[int]) -> float:
-        dt = max_distance_per_step / (UtilityLogic._square_sum(copy_moving_entity.velocity.x, copy_moving_entity.velocity.y) ** 0.5 + 1e-6) if max_distance_per_step is not None else 0.1
+        dt = max_distance_per_step / (UtilityLogic._magnitude(copy_moving_entity.velocity) + 1e-6) if max_distance_per_step is not None else 0.1
         if max_dt_per_step is not None and dt > max_dt_per_step:
             dt = max_dt_per_step
         return dt
@@ -200,7 +200,7 @@ class InterceptionRatioCalculator:
                 updated_moving_entity_positions.append(copy_moving_entity.position.copy())
                 # updated_moving_entity_velocities.append(copy_moving_entity.velocity.copy())
                 # check if reached target position
-                len_moving_entity_target = ((target_position.x - copy_moving_entity.position.x)**2 + (target_position.y - copy_moving_entity.position.y)**2) ** 0.5
+                len_moving_entity_target = UtilityLogic._distance(copy_moving_entity.position, target_position)
                 if len_moving_entity_target > previous_len_moving_entity_target:
                     can_reach_target = True
                     if steps == 0:
@@ -249,7 +249,7 @@ class InterceptionRatioCalculator:
                         if other_id in intercepting_player_ids:
                             player = copy_logic.state.players[other_id]
                             if not player.is_knocked_out:
-                                if distance <= (player.radius + moving_entity.radius)**2:
+                                if distance <= UtilityLogic._squared_sum(player.radius, moving_entity.radius):
                                     step_ratio = steps / (steps + 1)
                                     # self.logger.debug(f"intercepting detected at step {step} with player {other_id} at distance {math.sqrt(distance)} and step ratio {step_ratio}")
                                     if only_first_intercepting:

@@ -1,4 +1,5 @@
 import logging
+from core.game_logic.utility_logic import UtilityLogic
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
@@ -83,7 +84,8 @@ class BasicLogic:
                             player.direction.y = 0
             if player.inbounding is not None: # inbounding
                 ball = self.state.balls[player.inbounding]
-                if ((ball.position.x - player.position.x)**2 + (ball.position.y - player.position.y)**2) > (player.radius + ball.radius) **2:
+                squared_distance_to_ball = UtilityLogic._squared_distance(player.position, ball.position)
+                if squared_distance_to_ball > (player.radius + ball.radius) ** 2:
                     # not reached ball during inbounding
                     player.direction.x = ball.position.x - player.position.x
                     player.direction.y = ball.position.y - player.position.y
@@ -141,7 +143,7 @@ class BasicLogic:
                     if not player.is_knocked_out:
                         ball.velocity.x = player.position.x - ball.position.x
                         ball.velocity.y = player.position.y - ball.position.y
-                        mag_dir = (ball.velocity.x**2 + ball.velocity.y**2) ** 0.5
+                        mag_dir = UtilityLogic._magnitude(ball.velocity)
                         if mag_dir > player.throw_velocity:
                             ball.velocity.x = ball.velocity.x / mag_dir * player.throw_velocity
                             ball.velocity.y = ball.velocity.y / mag_dir * player.throw_velocity  
@@ -150,7 +152,7 @@ class BasicLogic:
                 ball.velocity = self.get_free_ball_velocity(ball, dt)
                 # if dodgeball below threshold then dead
                 if ball.ball_type == BallType.DODGEBALL:
-                    squared_velocity_mag = (ball.velocity.x**2 + ball.velocity.y**2)
+                    squared_velocity_mag = UtilityLogic._squared_sum(ball.velocity.x, ball.velocity.y)
                     if squared_velocity_mag < ball.dead_velocity_threshold **2:
                         ball.possession_team = None                    
             else:
@@ -225,8 +227,8 @@ class BasicLogic:
                 collision_dist_sq = (ball_1.radius + ball_2.radius) ** 2
                 if dist_sq < collision_dist_sq:
                     # Collision occurred
-                    ball_1_velocity_mag = (ball_1.velocity.x**2 + ball_1.velocity.y**2) ** 0.5
-                    ball_2_velocity_mag = (ball_2.velocity.x**2 + ball_2.velocity.y**2) ** 0.5
+                    ball_1_velocity_mag = UtilityLogic._magnitude(ball_1.velocity)
+                    ball_2_velocity_mag = UtilityLogic._magnitude(ball_2.velocity)
                     if ball_1_velocity_mag == 0 and ball_2_velocity_mag == 0:
                         continue # avoid divide by zero
                     if ball_1_velocity_mag == 0:
@@ -245,7 +247,7 @@ class BasicLogic:
                         ball_2.position.x - ball_1.position.x,
                         ball_2.position.y - ball_1.position.y
                     )
-                    normal_mag = (normal.x**2 + normal.y**2) ** 0.5
+                    normal_mag = UtilityLogic._magnitude(normal)
                     if normal_mag == 0:
                         continue # avoid divide by zero
                     normal.x /= normal_mag

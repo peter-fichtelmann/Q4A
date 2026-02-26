@@ -108,8 +108,13 @@ class DiamondAttack:
             opponent.position.y - player.position.y
         )
         mag_player_to_opponent_vector = UtilityLogic._magnitude(player_to_opponent_vector)
-
-
+        if mag_player_to_opponent_vector == 0:
+            return Vector2(0, 0)
+        evade_vector = Vector2(
+            -player_to_opponent_vector.x / mag_player_to_opponent_vector,
+            -player_to_opponent_vector.y / mag_player_to_opponent_vector
+        )
+        return evade_vector
 
     def __call__(self,
                 dt: float,
@@ -126,9 +131,9 @@ class DiamondAttack:
         # elif volleyball.holder_id is not None:
         #     self.get_intercepting_scores_for_hoops(dt, volleyball, self.logic.state.players[volleyball.holder_id])
         if (# volleyball in own half
-            volleyball.position.x < self.logic.state.field_length / 2 and self.attack_team == 0
+            volleyball.position.x < self.logic.state.boundaries_x[1] / 2 and self.attack_team == 0
             ) or (
-            volleyball.position.x > self.logic.state.field_length / 2 and self.attack_team == 1
+            volleyball.position.x > self.logic.state.boundaries_x[1] / 2 and self.attack_team == 1
         ):
             for player_id in self.attack_cpu_player_ids:
                 player = self.logic.state.players[player_id]

@@ -1,6 +1,7 @@
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 from operator import itemgetter
+# from numba import jit
 
 class UtilityLogic:
     """
@@ -108,6 +109,22 @@ class UtilityLogic:
     #     return sorted_tuples
 
     @staticmethod
+    def _distance(pos1: Vector2, pos2: Vector2) -> float:
+        """
+        Calculate Euclidean distance between two positions.
+        
+        Args:
+            pos1: First position vector
+            pos2: Second position vector
+            
+        Returns:
+            The distance between the two positions
+        """
+        dx = pos1.x - pos2.x
+        dy = pos1.y - pos2.y
+        return (dx**2 + dy**2)**0.5
+
+    @staticmethod
     def _squared_distance(pos1: Vector2, pos2: Vector2) -> float:
         """
         Calculate squared Euclidean distance between two positions.
@@ -124,8 +141,47 @@ class UtilityLogic:
         """
         dx = pos1.x - pos2.x
         dy = pos1.y - pos2.y
-        return UtilityLogic._square_sum(dx, dy)
+        return dx**2 + dy**2
     
     @staticmethod
-    def _square_sum(value_1, value_2):
+    def _magnitude(vector: Vector2) -> float:
+        """Calculate magnitude of a vector."""
+        return (vector.x**2 + vector.y**2)**0.5
+    
+    @staticmethod
+    def _squared_sum(value_1: float, value_2: float) -> float:
         return value_1**2 + value_2**2
+    
+
+    # numba more useful if more complex calculations, more looping
+    # @jit(fastmath=True, cache=True)
+    # def _distance_numba(pos1_x: float, pos1_y: float, pos2_x: float, pos2_y: float) -> float:
+    #     """Calculate Euclidean distance between two positions."""
+    #     return ((pos1_x - pos2_x)**2 + (pos1_y - pos2_y)**2)**0.5
+    
+    # @jit(fastmath=True, cache=True)
+    # def _squared_distance_numba(pos_1_x: float, pos_1_y: float, pos_2_x: float, pos_2_y: float) -> float:
+    #     return (pos_1_x - pos_2_x)**2 + (pos_1_y - pos_2_y)**2
+
+    # # numba about double as fast with square root than python if compiled before
+    # @jit(fastmath=True, cache=True)
+    # def _magnitude_numba(value_1: float, value_2: float) -> float:
+    #     """Calculate magnitude of a vector."""
+    #     return (value_1**2 + value_2**2)**0.5
+
+    # @jit(fastmath=True, cache=True)
+    # def _square_sum(value_1: float, value_2: float) -> float:
+    #     return value_1**2 + value_2**2
+
+    # @staticmethod
+    # def _square_sum(value_1: float, value_2: float) -> float:
+    #     return value_1**2 + value_2**2
+    
+    # def _magnitude_python(value_1: float, value_2: float) -> float:
+    #     """Calculate magnitude of a vector."""
+    #     return (value_1**2 + value_2**2)**0.5
+
+        # @staticmethod
+    # def _magnitude(vector: Vector2) -> float:
+    #     """Calculate magnitude of a vector."""
+    #     return UtilityLogic._square_sum(vector.x, vector.y)**0.5

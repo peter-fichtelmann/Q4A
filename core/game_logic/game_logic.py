@@ -74,6 +74,11 @@ class GameLogic:
         self.boundary_logic = BoundaryLogic(self.state)
         self.process_action_logic = ProcessActionLogic(self.state)
         self.utility_logic = UtilityLogic(self.state)
+        # # compile static functions for initial warmup of numba
+        # UtilityLogic._distance_numba(0.5, 0.5, 0.5, 0.5)
+        # UtilityLogic._squared_distance_numba(0.5, 0.5, 0.5, 0.5)
+        # UtilityLogic._magnitude_numba(0.5, 0.5)
+        # UtilityLogic._square_sum(0.5, 0.5)
 
     def copy(self, log_level = None) -> 'GameLogic':
         if log_level is None:
