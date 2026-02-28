@@ -13,7 +13,7 @@ class Config:
     HOOP_THICKNESS = 0.1
     VOLLEYBALL_RADIUS = 0.67 / 2 / 3.14 # 65 centimeters to 67 centimeters in circumference (approximately 0.106 m)
     DODGEBALL_RADIUS = 0.70 / 2 / 3.14 # 68 centimeters and 70 centimeters in circumference (approximately 0.111 m)
-    PLAYER_RADIUS = 0.3
+    PLAYER_RADIUS = 0.35
 
     PLAYER_MAX_SPEED_REAL = 3 # m/s per real second
     PLAYER_MIN_SPEED_REAL = 1 # m/s per real second
@@ -60,13 +60,15 @@ class Config:
         'move_buffer_factor': 1.2, # for RuleBasedComputerPlayer, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
         'determine_attacking_team_max_dt_steps': 10, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
         'determine_attacking_team_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when determining attacking team based on interception ratio
-        'determine_attacking_team_max_dt_per_step': 0.3 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME
+        'determine_attacking_team_max_dt_per_step': 0.4 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME
         'score_interception_max_dt_steps': 20, # for RuleBasedComputerPlayer, how many dt steps to look ahead when scoring
-        'score_interception_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when scoring
-        'score_interception_max_dt_per_step': 0.3 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when scoring in s GAME_TIME
+        'score_interception_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when scoring so that no intercepting player is skipped 
+        'score_interception_max_dt_per_step': 0.4 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when scoring in s GAME_TIME
         'scoring_threshold': 0.95, # for RuleBasedComputerPlayer, minimum interception score (chance of not being intercepted) to attempt a score
-        'evade_beater_distance': 4, # for RuleBasedComputerPlayer, distance at which to attempt to evade beaters (in m)
-        'evade_chaser_keeper_distance': 2, # for RuleBasedComputerPlayer, distance at which to attempt to evade chasers/keepers (in m)
+        'evade_beater_importance': 3.5, # for RuleBasedComputerPlayer, importance at which to attempt to evade beaters (in m)
+        'evade_chaser_keeper_importance': 2, # for RuleBasedComputerPlayer, importance at which to attempt to evade chasers/keepers (in m)
+        'evade_teamate_chaser_keeper_importance': 2, # for RuleBasedComputerPlayer, importance at which to attempt to evade teamate chasers/keepers (in m)
+        'positioning_boundary_buffer_distance': 3, # for RuleBasedComputerPlayer, distance from boundary at which to start evading boundary. Need time to stop direction moving there to slown down in this direction
         'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)
     }
 

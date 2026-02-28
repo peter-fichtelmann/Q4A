@@ -59,8 +59,10 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  score_interception_max_distance_per_step: float = 0.5,
                  score_interception_max_dt_per_step: int = 0.25,
                  scoring_threshold: float = 0.8,
-                 evade_beater_distance: float = 4,
-                 evade_chaser_keeper_distance: float = 2,
+                 evade_beater_importance: float = 4,
+                 evade_chaser_keeper_importance: float = 2,
+                 evade_teamate_chaser_keeper_importance: float = 1,
+                 positioning_boundary_buffer_distance: float = 2,
                  simulation_game_logic_log_level: int = None,
                  computer_player_log_level: int = logging.INFO
                  ):
@@ -70,8 +72,10 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         self.determine_attacking_team_max_distance_per_step = determine_attacking_team_max_distance_per_step
         self.determine_attacking_team_max_dt_per_step = determine_attacking_team_max_dt_per_step
         self.scoring_threshold = scoring_threshold
-        self.evade_beater_distance = evade_beater_distance
-        self.evade_chaser_keeper_distance = evade_chaser_keeper_distance
+        self.evade_beater_importance = evade_beater_importance
+        self.evade_chaser_keeper_importance = evade_chaser_keeper_importance
+        self.evade_teamate_chaser_keeper_importance = evade_teamate_chaser_keeper_importance
+        self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
 
         self.score_interception_max_dt_steps = score_interception_max_dt_steps
         self.score_interception_max_distance_per_step = score_interception_max_distance_per_step
@@ -144,8 +148,10 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             score_interception_max_distance_per_step=self.score_interception_max_distance_per_step,
             score_interception_max_dt_per_step=self.score_interception_max_dt_per_step,
             scoring_threshold=self.scoring_threshold,
-            evade_beater_distance=self.evade_beater_distance,
-            evade_chaser_keeper_distance=self.evade_chaser_keeper_distance,
+            evade_beater_importance=self.evade_beater_importance,
+            evade_chaser_keeper_importance=self.evade_chaser_keeper_importance,
+            evade_teamate_chaser_keeper_importance=self.evade_teamate_chaser_keeper_importance,
+            positioning_boundary_buffer_distance=self.positioning_boundary_buffer_distance,
             logger=self.logger
              )(
                 dt=dt,
