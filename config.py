@@ -66,7 +66,7 @@ class Config:
         'score_interception_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when scoring in s GAME_TIME
         'scoring_threshold': 0.95, # for RuleBasedComputerPlayer, minimum interception score (chance of not being intercepted) to attempt a score
         'evade_beater_importance': 3.5, # for RuleBasedComputerPlayer, importance at which to attempt to evade beaters (in m)
-        'evade_chaser_keeper_importance': 2, # for RuleBasedComputerPlayer, importance at which to attempt to evade chasers/keepers (in m)
+        'evade_chaser_keeper_importance': 1, # for RuleBasedComputerPlayer, importance at which to attempt to evade chasers/keepers (in m)
         'evade_teamate_chaser_keeper_importance': 2, # for RuleBasedComputerPlayer, importance at which to attempt to evade teamate chasers/keepers (in m)
         'positioning_boundary_buffer_distance': 3, # for RuleBasedComputerPlayer, distance from boundary at which to start evading boundary. Need time to stop direction moving there to slown down in this direction
         'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)

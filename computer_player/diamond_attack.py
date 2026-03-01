@@ -12,8 +12,8 @@ class DiamondAttack:
 
     def __init__(self,
                 logic: GameLogic,
-                move_around_hoop_blockage: MoveAroundHoopBlockage,
-                interception_ratio_calculator: InterceptionRatioCalculator,
+                move_around_hoop_blockage: MoveAroundHoopBlockage, # of own team
+                interception_ratio_calculator_opponent: InterceptionRatioCalculator,
                 attack_cpu_player_ids: List[str],
                 attack_team: int,
                 score_interception_max_dt_steps: int = 10,
@@ -28,7 +28,7 @@ class DiamondAttack:
                 ):
         self.logic = logic
         self.move_around_hoop_blockage = move_around_hoop_blockage
-        self.interception_ratio_calculator = interception_ratio_calculator
+        self.interception_ratio_calculator_opponent = interception_ratio_calculator_opponent
         self.attack_cpu_player_ids = attack_cpu_player_ids
         self.attack_team = attack_team
         self.score_interception_max_dt_steps = score_interception_max_dt_steps
@@ -78,7 +78,7 @@ class DiamondAttack:
                 volleyball_holder.throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector,
                 volleyball_holder.throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
             )
-            intercepting_score, scores_info = self.interception_ratio_calculator(
+            intercepting_score, scores_info = self.interception_ratio_calculator_opponent(
                  dt=dt,
                  moving_entity=copy_volleyball,
                  intercepting_player_ids=self.defending_chaser_keeper_ids,
@@ -169,11 +169,15 @@ class DiamondAttack:
                 continue
             player = players[player_index]
             if player.id in self.attack_cpu_player_ids:
+
                 hoop = hoops[i]
-                move_vector = Vector2(
-                    hoop.position.x - player.position.x,
-                    hoop.position.y - player.position.y
-                )
+                if player.role == PlayerRole.CHASER:
+                    move_vector = self.move_around_hoop_blockage(player, hoop.position, add_hoop_blockage_x=player.radius)
+                else:
+                    move_vector = Vector2(
+                        hoop.position.x - player.position.x,
+                        hoop.position.y - player.position.y
+                    )
                 move_vector_mag = UtilityLogic._magnitude(move_vector)
                 if move_vector_mag == 0:
                     move_vector = Vector2(0, 0)

@@ -87,14 +87,17 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 defence_hoops_0.append(hoop)
             else:
                 defence_hoops_1.append(hoop)
+        volleyball_radius = self.logic.state.get_volleyball().radius if self.logic.state.get_volleyball() is not None else 0
         self.move_around_hoop_blockage_team_0 = MoveAroundHoopBlockage(
             defence_hoops=defence_hoops_0,
             move_buffer_factor=self.move_buffer_factor,
+            volleyball_radius=volleyball_radius,
             logger=self.logger
             )
         self.move_around_hoop_blockage_team_1 = MoveAroundHoopBlockage(
             defence_hoops=defence_hoops_1,
             move_buffer_factor=self.move_buffer_factor,
+            volleyball_radius=volleyball_radius,
             logger=self.logger
             )
         self.interception_ratio_calculator_team_0 = InterceptionRatioCalculator(
@@ -141,7 +144,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         DiamondAttack(
             logic=self.logic,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_0 if attacking_team == 0 else self.move_around_hoop_blockage_team_1,
-            interception_ratio_calculator=self.interception_ratio_calculator_team_0 if attacking_team == 0 else self.interception_ratio_calculator_team_1,
+            interception_ratio_calculator_opponent=self.interception_ratio_calculator_team_1 if attacking_team == 0 else self.interception_ratio_calculator_team_0, # inverse because we need hoop blockage of opponent team
             attack_cpu_player_ids=[cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == attacking_team],
             attack_team=attacking_team,
             score_interception_max_dt_steps=self.score_interception_max_dt_steps,
