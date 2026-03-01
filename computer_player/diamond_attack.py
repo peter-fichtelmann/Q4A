@@ -90,7 +90,7 @@ class DiamondAttack:
             )
             intercepting_scores_dict[hoop.id] = intercepting_score
             # self.logger.debug("Interception info per hoop %s: %s, %s", hoop.id, intercepting_score, scores_info)
-        self.logger.debug("intercepting_scores_dict %s", intercepting_scores_dict)
+        # self.logger.debug("intercepting_scores_dict %s", intercepting_scores_dict)
         return intercepting_scores_dict
 
     def score_attempt(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player):
@@ -142,7 +142,7 @@ class DiamondAttack:
                 evade_vector = self.evade_player(player, other_player, importance=self.evade_teamate_chaser_keeper_importance)
                 evade_vectors.append(evade_vector)
         for evade_vector in evade_vectors:
-            self.logger.debug("Evade vector for player %s from opponent: %s", player.id, evade_vector)
+            # self.logger.debug("Evade vector for player %s from opponent: %s", player.id, evade_vector)
             move_vector.x += evade_vector.x
             move_vector.y += evade_vector.y
         if player.position.y < self.logic.state.boundaries_y[0] + self.positioning_boundary_buffer_distance:

@@ -8,6 +8,8 @@ from computer_player.diamond_attack import DiamondAttack
 from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage
 import random
 
+from core.game_logic.utility_logic import UtilityLogic
+
 class ComputerPlayer(ABC):
     """
     Abstract base class for a computer player in a game. 
@@ -80,6 +82,9 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         self.score_interception_max_dt_steps = score_interception_max_dt_steps
         self.score_interception_max_distance_per_step = score_interception_max_distance_per_step
         self.score_interception_max_dt_per_step = score_interception_max_dt_per_step
+
+        self.beaters = [player for player in self.logic.state.players.values() if player.role == PlayerRole.BEATER]
+
         defence_hoops_0 = []
         defence_hoops_1 = []
         for hoop in self.logic.state.hoops.values():
@@ -116,6 +121,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
     def make_move(self, dt: float):
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
         attacking_team, next_volleyball_holder_id, intercepting_position = self._determine_attacking_team(dt)
+        self._determine_beater_ball_getting(dt)
         if attacking_team is None:
             # both teams in attacking mode
             pass
@@ -162,6 +168,34 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 intercepting_position=intercepting_position,
             )
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
+
+    def _determine_beater_ball_getting(self, dt: float):
+        """Determine if any beater should attempt to get a dodgeball."""
+        third_dodgeball_team = self.logic.state.third_dodgeball_team
+        if third_dodgeball_team is not None:
+            # If there is a third dodgeball team, assign beater players to get the dodgeball
+            self.logger.debug(f"Third dodgeball on team {third_dodgeball_team}, determining beater assignment to get the dodgeball")
+            third_dodgeball = self.logic.state.balls[self.logic.state.third_dodgeball]
+            squared_distance_and_direction_to_dodgeball_dict = {}
+            for beater in self.beaters:
+                if beater.team == third_dodgeball_team and not beater.is_knocked_out:
+                    direction_to_dodgeball = Vector2(
+                            third_dodgeball.position.x - beater.position.x,
+                            third_dodgeball.position.y - beater.position.y
+                        )
+                    squared_distance_to_dodgeball = UtilityLogic._squared_sum(direction_to_dodgeball.x, direction_to_dodgeball.y)
+                    squared_distance_and_direction_to_dodgeball_dict[beater.id] = (squared_distance_to_dodgeball, direction_to_dodgeball)
+            if len(squared_distance_and_direction_to_dodgeball_dict) > 0:
+                # assign beater with lowest squared distance to dodgeball to get the dodgeball
+                beater_id = min(squared_distance_and_direction_to_dodgeball_dict.keys(), key=lambda k: squared_distance_and_direction_to_dodgeball_dict[k][0])
+                beater = self.logic.state.players[beater_id]
+                self.logger.debug(f"Beater {beater.id} assigned to get third dodgeball for team {third_dodgeball_team}")
+                    # move towards the dodgeball
+                if beater.id in self.cpu_player_ids:
+                    beater.direction = squared_distance_and_direction_to_dodgeball_dict[beater.id][1]
+   
+
+
 
     def _determine_attacking_team(self, dt: float) -> Tuple[int, str, Vector2]:
         """Return the attacking team and player id of the chaser/keeper assigned to the volleyball"""
