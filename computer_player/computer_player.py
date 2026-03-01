@@ -173,11 +173,13 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             return volleyball.possession_team, volleyball.holder_id, None
         else:
             # elif volleyball.velocity.x > 0 or volleyball.velocity.y > 0:
-            potential_intercepting_players = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]]
+            potential_intercepting_players_0 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 0]
+            potential_intercepting_players_1 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 1]
+            # need to consider two cases due to different move_hoop_blockage
             _, step_ratio_dict_team_0 = self.interception_ratio_calculator_team_0(
                 dt=dt,
                 moving_entity=volleyball,
-                intercepting_player_ids=potential_intercepting_players,
+                intercepting_player_ids=potential_intercepting_players_0,
                 target_position=None,
                 only_first_intercepting=True,
                 max_dt_steps=self.determine_attacking_team_max_dt_steps,
@@ -188,7 +190,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             _, step_ratio_dict_team_1 = self.interception_ratio_calculator_team_1(
                 dt=dt,
                 moving_entity=volleyball,
-                intercepting_player_ids=potential_intercepting_players,
+                intercepting_player_ids=potential_intercepting_players_1,
                 target_position=None,
                 only_first_intercepting=True,
                 max_dt_steps=self.determine_attacking_team_max_dt_steps,
