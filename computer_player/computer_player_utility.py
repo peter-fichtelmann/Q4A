@@ -12,18 +12,20 @@ class MoveAroundHoopBlockage:
                  defence_hoops: List[Hoop],
                  move_buffer_factor: float = 1.2,
                  tol: float = 1e-2,
+                 volleyball_radius: float = 0.0, # for hoop blockage_x
                  logger: Optional[logging.Logger] = None
                  ):
         self.defence_hoops = defence_hoops
         self.move_buffer_factor = move_buffer_factor    
         self.tol = tol
+        self.volleyball_radius = volleyball_radius
         self.logger = logger
 
     def __call__(self,
                  player: Player,
                  target_position: Vector2,
-                 target_hoop: Hoop,
-                 add_hoop_blockage_x: float,
+                 target_hoop: Optional[Hoop] = None,
+                 add_hoop_blockage_x: Optional[float] = None,
                  lookahead_to_target: Optional[Vector2] = None,
                  add_target_x_buffer: bool = False
                  ) -> Vector2:
@@ -58,6 +60,11 @@ class MoveAroundHoopBlockage:
             target_position.x - player.position.x,
             target_position.y - player.position.y
             )
+        if target_hoop is None:
+            # take first defending hoop
+            target_hoop = self.defence_hoops[0]
+        if add_hoop_blockage_x is None:
+            add_hoop_blockage_x = self.volleyball_radius + player.radius
 
         # min_dir and min_velocity of players can make it difficult to go around hoops
         if direction_to_target.x == 0 and direction_to_target.y == 0:
@@ -222,12 +229,10 @@ class InterceptionRatioCalculator:
                     for intercepting_player in intercepting_players:
                         if not intercepting_player.is_knocked_out:
                             if intercepting_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
-                                add_hoop_blockage_x = intercepting_player.radius + self.logic.state.get_volleyball().radius
                                 intercepting_player.direction = self.move_around_hoop_blockage(
                                     player=intercepting_player,
                                     target_position=updated_moving_entity_positions[steps],
                                     target_hoop=self.move_around_hoop_blockage.defence_hoops[0], # assume hoops same x position and orientation so can use any as target hoop 
-                                    add_hoop_blockage_x=add_hoop_blockage_x,
                                     lookahead_to_target=None,
                                     add_target_x_buffer=False
                                 )
