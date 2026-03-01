@@ -60,10 +60,10 @@ class Config:
         'move_buffer_factor': 1.2, # for RuleBasedComputerPlayer, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
         'determine_attacking_team_max_dt_steps': 10, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
         'determine_attacking_team_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when determining attacking team based on interception ratio
-        'determine_attacking_team_max_dt_per_step': 0.4 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME
+        'determine_attacking_team_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME
         'score_interception_max_dt_steps': 20, # for RuleBasedComputerPlayer, how many dt steps to look ahead when scoring
         'score_interception_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when scoring so that no intercepting player is skipped 
-        'score_interception_max_dt_per_step': 0.4 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when scoring in s GAME_TIME
+        'score_interception_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when scoring in s GAME_TIME
         'scoring_threshold': 0.95, # for RuleBasedComputerPlayer, minimum interception score (chance of not being intercepted) to attempt a score
         'evade_beater_importance': 3.5, # for RuleBasedComputerPlayer, importance at which to attempt to evade beaters (in m)
         'evade_chaser_keeper_importance': 2, # for RuleBasedComputerPlayer, importance at which to attempt to evade chasers/keepers (in m)
