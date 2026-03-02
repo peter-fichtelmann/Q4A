@@ -235,5 +235,6 @@ class DiamondAttack:
         for player_id in self.attack_cpu_player_ids:
             if player_id != next_volleyball_holder_id: # dealing with volleyball holder before
                 player = self.logic.state.players[player_id]
-                self.player_positioning(player, move_vector_dict.get(player.id, None))
+                if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
+                    self.player_positioning(player, move_vector_dict.get(player.id, None))
 
