@@ -32,7 +32,7 @@ class Config:
     DODGEBALL_DEAD_VELOCITY_THRESHOLD_REAL = 4 # velocity m/s real when dodgeball becomes dead
     DODGEBALL_DEAD_VELOCITY_THRESHOLD = DODGEBALL_DEAD_VELOCITY_THRESHOLD_REAL / GAME_TIME_TO_REAL_TIME_RATIO
 
-    DELAY_OF_GAME_TIME_LIMIT = 7.0  # game seconds before delay of game warning/penalty
+    DELAY_OF_GAME_TIME_LIMIT = 15  # game seconds before delay of game warning/penalty
     DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL = 1.4  # m/s in x direction the volleyball must exceed to avoid delay of game; should be slow running speed
     DELAY_OF_GAME_VELOCITY_X_THRESHOLD = DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL / GAME_TIME_TO_REAL_TIME_RATIO
     MAX_DELAY_OF_GAME_WARNINGS = 1  # Number of warnings before penalty per team

@@ -43,43 +43,45 @@ class PenaltyLogic:
                  True if delay of game conditions are met, False otherwise.
             """
             if not volleyball:
-                return 0
+                return None
             if volleyball.is_dead:
-                return  0 # Dead volleyball cannot incur delay of game
+                return None # Dead volleyball cannot incur delay of game
             if volleyball.inbounder is not None:
-                return 0 # Inbounding volleyball cannot incur delay of game
+                return None # Inbounding volleyball cannot incur delay of game
             if volleyball.turnover_to_player is not None:
-                return 0 # volleyball in turnover cannot incur delay of game
+                return None # volleyball in turnover cannot incur delay of game
             if volleyball.possession_team is None:
-                return 0 # So far unpossessed volleyball cannot incur delay of game
-            if volleyball.possession_team == self.state.team_0 and volleyball.position.x < self.state.midline_x: # if volleyball in own half
-                if volleyball.velocity.x > self.state.delay_of_game_velocity_x_threshold: # if volleyball moving forward enough
-                    return 0
-            elif volleyball.possession_team == self.state.team_1 and volleyball.position.x > self.state.midline_x: # if volleyball in own half
-                if volleyball.velocity.x < -self.state.delay_of_game_velocity_x_threshold: # if volleyball moving forward enough + use the inverse for team 1 
-                    return 0
+                return None # So far unpossessed volleyball cannot incur delay of game
+            if volleyball.possession_team == self.state.team_0:
+                delay_velocity = self.state.delay_of_game_velocity_x_threshold - volleyball.velocity.x
             else:
-                 return 0 # volleyball not in own half
+                delay_velocity = self.state.delay_of_game_velocity_x_threshold + volleyball.velocity.x
+            if volleyball.possession_team == self.state.team_0 and volleyball.position.x < self.state.midline_x: # if volleyball in own half 
+                if delay_velocity < 0: # if volleyball moving forward enough return negative delay velocity
+                    return delay_velocity
+            elif volleyball.possession_team == self.state.team_1 and volleyball.position.x > self.state.midline_x: # if volleyball in own half
+                if delay_velocity < 0: # if volleyball moving forward enough + use the inverse for team 1 
+                    return delay_velocity
+            else:
+                 return None # volleyball not in own half
             for other_id, distance in self.state.squared_distances[volleyball.id]:
                 if other_id in self.state.players.keys():
                     player = self.state.players[other_id]
                     if player.team != volleyball.possession_team:
                         if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
                             if distance < 2:
-                                return 0 # opponent player close enough to volleyball to prevent delay of game
+                                return None # opponent player close enough to volleyball to prevent delay of game
                         elif player.role == PlayerRole.BEATER and player.has_ball is not None:
                             if distance < 4:
-                                return 0 # opponent loaded beater close enough to volleyball to prevent delay of game
+                                return None # opponent loaded beater close enough to volleyball to prevent delay of game
                             else:
                                 break # no need to check further players
-            if volleyball.possession_team == self.state.team_0:
-                delay_velocity = self.state.delay_of_game_velocity_x_threshold - volleyball.velocity.x
-            else:
-                delay_velocity = self.state.delay_of_game_velocity_x_threshold + volleyball.velocity.x
             return delay_velocity # return how much below threshold the volleyball is
         # delay velocity as weighting factor how severve the delay of game is
         delay_velocity = _check_delay_velocity(volleyball)
-        if delay_velocity > 0:
+        if delay_velocity is None:
+            volleyball.delay_of_game_timer = 0.0
+        elif delay_velocity > 0:
             volleyball.delay_of_game_timer += dt * delay_velocity
             if volleyball.delay_of_game_timer >= self.state.delay_of_game_time_limit:
                 if self.state.delay_of_game_warnings.get(volleyball.possession_team) is None:
@@ -104,7 +106,9 @@ class PenaltyLogic:
                         if possessing_player.dodgeball_immunity:
                             protected_keeper = True
                 if not protected_keeper:
-                    volleyball.delay_of_game_timer = 0.0
+                    volleyball.delay_of_game_timer += dt * delay_velocity # less than building up due to threshold velocity
+                    volleyball.delay_of_game_timer = max(0, volleyball.delay_of_game_timer) # clip to 0
+                
 
     def _designate_turnover(self, ball: Ball) -> None:
         """
