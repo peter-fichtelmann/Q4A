@@ -1,6 +1,7 @@
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 from operator import itemgetter
+import math
 # from numba import jit
 
 class UtilityLogic:
@@ -108,6 +109,8 @@ class UtilityLogic:
     #     # print(other_dict)
     #     return sorted_tuples
 
+    # using math for faster operations square root operations
+
     @staticmethod
     def _distance(pos1: Vector2, pos2: Vector2) -> float:
         """
@@ -122,7 +125,8 @@ class UtilityLogic:
         """
         dx = pos1.x - pos2.x
         dy = pos1.y - pos2.y
-        return (dx**2 + dy**2)**0.5
+        # hypot gets the square root of the sum of squares, more efficient than **0.5 and more accurate for large/small numbers
+        return math.hypot(dx, dy)
 
     @staticmethod
     def _squared_distance(pos1: Vector2, pos2: Vector2) -> float:
@@ -146,7 +150,7 @@ class UtilityLogic:
     @staticmethod
     def _magnitude(vector: Vector2) -> float:
         """Calculate magnitude of a vector."""
-        return (vector.x**2 + vector.y**2)**0.5
+        return math.hypot(vector.x, vector.y)
     
     @staticmethod
     def _squared_sum(value_1: float, value_2: float) -> float:
