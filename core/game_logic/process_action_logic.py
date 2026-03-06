@@ -1,4 +1,6 @@
 import logging
+from typing import Optional
+from core.game_logic.utility_logic import UtilityLogic
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
@@ -21,7 +23,7 @@ class ProcessActionLogic:
         """
         self.state = game_state
 
-    def process_throw_action(self, player_id: str) -> bool:
+    def process_throw_action(self, player_id: str, throw_direction: Optional[Vector2] = None) -> bool:
         """
         Process a throw action by a player.
         
@@ -48,13 +50,19 @@ class ProcessActionLogic:
         # Release the ball; copy player's position so the ball doesn't share the same Vector2
         ball.previous_thrower_id = player.id # so dodgeball not bouncing off from thrower immediately
         ball.holder_id = None
-        mag_dir = (player.direction.x**2 + player.direction.y**2) ** 0.5
+        if throw_direction is None:
+            throw_direction = player.direction
+        mag_dir = UtilityLogic._magnitude(throw_direction)
         if mag_dir > 1:
-            player.direction.x /= mag_dir
-            player.direction.y /= mag_dir
-        ball.velocity.x = player.throw_velocity * player.direction.x
-        ball.velocity.y = player.throw_velocity * player.direction.y
-        mag_velocity = (ball.velocity.x**2 + ball.velocity.y**2) ** 0.5
+            throw_direction.x /= mag_dir
+            throw_direction.y /= mag_dir
+            mag_velocity = player.throw_velocity # mag velocity should be same as player throw velocity because throw direction is normalized
+        else:
+            mag_velocity = player.throw_velocity * mag_dir # if throw direction is not normalized, scale velocity by mag_dir to prevent faster throws in diagonal directions
+
+        ball.velocity.x = player.throw_velocity * throw_direction.x
+        ball.velocity.y = player.throw_velocity * throw_direction.y
+        # mag_velocity = UtilityLogic._calculate_magnitude(ball.velocity)
         # Prevent divide-by-zero if mag_velocity is (unexpectedly) zero
         if mag_velocity > 1e-2:
             player.catch_cooldown = 2 * player.radius / mag_velocity * player.max_speed * 2.5  # Prevent immediate re-catch with buffer

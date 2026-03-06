@@ -280,9 +280,5 @@ class InterceptionRatioCalculator:
     
 
 
-    
-
-    
-
 
 

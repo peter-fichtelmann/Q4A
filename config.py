@@ -69,6 +69,7 @@ class Config:
         'evade_chaser_keeper_importance': 1, # for RuleBasedComputerPlayer, importance at which to attempt to evade chasers/keepers (in m)
         'evade_teamate_chaser_keeper_importance': 2, # for RuleBasedComputerPlayer, importance at which to attempt to evade teamate chasers/keepers (in m)
         'positioning_boundary_buffer_distance': 3, # for RuleBasedComputerPlayer, distance from boundary at which to start evading boundary. Need time to stop direction moving there to slown down in this direction
+        'beater_throw_threshold_volleyball_holder': 5, # m for beater to throw at volleyball holder
         'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)
     }
 

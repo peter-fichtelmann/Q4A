@@ -65,6 +65,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  evade_chaser_keeper_importance: float = 2,
                  evade_teamate_chaser_keeper_importance: float = 1,
                  positioning_boundary_buffer_distance: float = 2,
+                 beater_throw_threshold_volleyball_holder: float = 5,
                  simulation_game_logic_log_level: int = None,
                  computer_player_log_level: int = logging.INFO
                  ):
@@ -78,6 +79,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         self.evade_chaser_keeper_importance = evade_chaser_keeper_importance
         self.evade_teamate_chaser_keeper_importance = evade_teamate_chaser_keeper_importance
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
+        self.beater_throw_threshold_volleyball_holder = beater_throw_threshold_volleyball_holder
 
         self.score_interception_max_dt_steps = score_interception_max_dt_steps
         self.score_interception_max_distance_per_step = score_interception_max_distance_per_step
@@ -85,22 +87,22 @@ class RuleBasedComputerPlayer(ComputerPlayer):
 
         self.beaters = [player for player in self.logic.state.players.values() if player.role == PlayerRole.BEATER]
 
-        defence_hoops_0 = []
-        defence_hoops_1 = []
+        self.defence_hoops_0 = []
+        self.defence_hoops_1 = []
         for hoop in self.logic.state.hoops.values():
             if hoop.team == 0:
-                defence_hoops_0.append(hoop)
+                self.defence_hoops_0.append(hoop)
             else:
-                defence_hoops_1.append(hoop)
+                self.defence_hoops_1.append(hoop)
         volleyball_radius = self.logic.state.get_volleyball().radius if self.logic.state.get_volleyball() is not None else 0
         self.move_around_hoop_blockage_team_0 = MoveAroundHoopBlockage(
-            defence_hoops=defence_hoops_0,
+            defence_hoops=self.defence_hoops_0,
             move_buffer_factor=self.move_buffer_factor,
             volleyball_radius=volleyball_radius,
             logger=self.logger
             )
         self.move_around_hoop_blockage_team_1 = MoveAroundHoopBlockage(
-            defence_hoops=defence_hoops_1,
+            defence_hoops=self.defence_hoops_1,
             move_buffer_factor=self.move_buffer_factor,
             volleyball_radius=volleyball_radius,
             logger=self.logger
@@ -121,7 +123,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
     def make_move(self, dt: float):
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
         attacking_team, next_volleyball_holder_id, intercepting_position = self._determine_attacking_team(dt)
-        assigned_beater_ids = self._determine_beater_ball_getting(dt)
+        assigned_beater_ids = self._determine_beater_ball_getting(dt, attacking_team)
         if attacking_team is None:
             # both teams in attacking mode
             pass
@@ -169,7 +171,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             )
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
 
-    def _determine_beater_ball_getting(self, dt: float):
+    def _determine_beater_ball_getting(self, dt: float, attacking_team: int) -> List[str]:
         """
         Determine if any beater should attempt to get a dodgeball. Return list of beater ids assigned to get a dodgeball, and set their direction towards the assigned dodgeball.
         
@@ -231,9 +233,55 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             while len(step_ratio_dicts) > 0:
                 # assign beaters to dodgeballs based on interception ratio calculation, if beater already assigned, perform another interception ratio calculation without the assigned beater until all step_ratio_dicts are processed or all beaters are assigned, then assign remaining dodgeballs based on proximity
                 step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids = self._interception_based_beater_assignment(dt, step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids)
-                self.logger.debug(f"Assigned beater ids after interception based assignment: {assigned_beater_ids}, unassigned dodgeball ids: {unassigned_dodgeball_ids}, remaining step ratio dicts: {len(step_ratio_dicts.keys())}")
+                # self.logger.debug(f"Assigned beater ids after interception based assignment: {assigned_beater_ids}, unassigned dodgeball ids: {unassigned_dodgeball_ids}, remaining step ratio dicts: {len(step_ratio_dicts.keys())}")
             if len(unassigned_dodgeball_ids) > 0:
                 assigned_beater_ids = self._distance_based_beater_assignment(unassigned_dodgeball_ids, assigned_beater_ids)
+
+            # check if assigned beater has ball to throw to teammate or back to hoops
+            for beater_id in assigned_beater_ids:
+                beater = self.logic.state.players[beater_id]
+                if beater.has_ball and beater.id in self.cpu_player_ids:
+                    # check if in defence and volleyball holding chaser close, if so throw at volleyball holder and get the assigned ball
+                    if beater.team != attacking_team:
+                        volleyball = self.logic.state.get_volleyball()
+                        if volleyball.holder_id is not None:
+                            volleyball_holder = self.logic.state.players[volleyball.holder_id]
+                            squared_distance_volleyball_holder = UtilityLogic._squared_distance(beater.position, volleyball_holder.position)
+                            if self.beater_throw_threshold_volleyball_holder**2 > squared_distance_volleyball_holder:
+                                self.logger.debug(f"Beater {beater.id} is close to volleyball holder {volleyball_holder.id} and is throwing at volleyball holder")
+                                throw_direction = Vector2(
+                                    volleyball_holder.position.x - beater.position.x,
+                                    volleyball_holder.position.y - beater.position.y
+                                )
+                                self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
+                                continue
+                    # check for pass to beater buddy, else pass back to hoops   
+                    beater_buddy = [player for player in self.beaters if player.id != beater_id and player.team == beater.team][0]
+                    if not (beater_buddy.is_knocked_out) and not (beater_buddy.id in assigned_beater_ids) and not (beater_buddy.has_ball):
+                        # pass to teammate if they not knocked out, not assigned a dodgeball or already having a dodgeball
+                        self.logger.debug(f"Beater {beater.id} has ball and is passing to teammate {beater_buddy.id}")
+                        throw_direction = Vector2(
+                            beater_buddy.position.x - beater.position.x,
+                            beater_buddy.position.y - beater.position.y
+                        )
+                        self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
+                        beater_buddy.direction = Vector2(
+                            - throw_direction.x,
+                            - throw_direction.y
+                        )
+                        assigned_beater_ids.append(beater_buddy.id)
+                    else:
+                        # pass back to central hoop
+                        self.logger.debug(f"Beater {beater.id} has ball but teammate {beater_buddy.id} is not available, passing back to hoops")
+                        if beater.team == 0:
+                            central_hoop = self.defence_hoops_0[1]
+                        else:
+                            central_hoop = self.defence_hoops_1[1]
+                        throw_direction = Vector2(
+                            central_hoop.position.x - beater.position.x,
+                            central_hoop.position.y - beater.position.y
+                        )
+                        self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
         return assigned_beater_ids
 
     def _interception_based_beater_assignment(self, dt, step_ratio_dicts: dict, assigned_beater_ids: List[str], unassigned_dodgeball_ids: List[str]):
@@ -245,10 +293,11 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 if beater_id not in assigned_beater_ids:
                     beater = self.logic.state.players[beater_id]
                     dodgeball = self.logic.state.balls[dodgeball_id]
-                    self.logger.debug(f"Beater {beater.id} assigned to get dodgeball {dodgeball.id} which is not currently possessed by any team")
+                    # self.logger.debug(f"Beater {beater.id} assigned to get dodgeball {dodgeball.id} which is not currently possessed by any team")
                     assigned_beater_ids.append(beater_id)
                     # move towards the dodgeball
                     if beater.id in self.cpu_player_ids:
+                        # if beater has ball, pass to teammate or back to hoops
                         intercepting_position = step_ratio_dicts[dodgeball_id][beater_id][2]
                         beater.direction = Vector2(
                                 intercepting_position.x - beater.position.x,
@@ -289,7 +338,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             if beater_id not in assigned_beater_ids and dodgeball_id in unassigned_dodgeball_ids:
                 beater = self.logic.state.players[beater_id]
                 dodgeball = self.logic.state.balls[dodgeball_id]
-                self.logger.debug(f"Beater {beater.id} assigned to get unassigned dodgeball {dodgeball.id} based on proximity")
+                # self.logger.debug(f"Beater {beater.id} assigned to get unassigned dodgeball {dodgeball.id} based on proximity")
                 assigned_beater_ids.append(beater_id)
                 unassigned_dodgeball_ids.remove(dodgeball_id)
                 # move towards the dodgeball
