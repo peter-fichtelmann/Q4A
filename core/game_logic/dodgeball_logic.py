@@ -2,7 +2,7 @@ import logging
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
-logger = logging.getLogger('quadball.game_logic')
+BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
 class DodgeballLogic:
     """
@@ -13,7 +13,7 @@ class DodgeballLogic:
         penalty_logic: Optional PenaltyLogic for third-dodgeball penalties.
     """
 
-    def __init__(self, game_state: GameState, penalty_logic=None):
+    def __init__(self, game_state: GameState, penalty_logic=None, logger: logging.Logger | None = None):
         """
         Initialize dodgeball rule handling.
 
@@ -23,6 +23,7 @@ class DodgeballLogic:
         """
         self.state = game_state
         self.penalty_logic = penalty_logic
+        self.logger = logger or BASE_LOGGER
 
     def _check_dodgeball_possession_of_player(self, player: Player, dodgeball: Ball) -> bool:
         """
@@ -54,7 +55,7 @@ class DodgeballLogic:
                         if dodgeball.turnover_to_player is not None:
                             dodgeball.turnover_to_player = None
                             player.is_receiving_turnover_ball = False
-                        logger.info(f"Player {player.id} picked up dodgeball {dodgeball.id}")
+                        self.logger.info(f"Player {player.id} picked up dodgeball {dodgeball.id}")
                     return True
         return False
 
@@ -147,7 +148,7 @@ class DodgeballLogic:
                 ball.velocity.x = 0
                 ball.velocity.y = 0
                 ball.possession_team = None
-                logger.info(f"Player {player.id} dropped ball {ball.id} due to knockout")
+                self.logger.info(f"Player {player.id} dropped ball {ball.id} due to knockout")
                 player.has_ball = None
             # dodgeball.possession_team = None # Only one beat at once?
             normal = Vector2(
@@ -158,7 +159,7 @@ class DodgeballLogic:
             normal.x /= normal_mag
             normal.y /= normal_mag
             dodgeball.velocity = dodgeball.velocity.reflect(normal, dodgeball.reflect_velocity_loss)
-            logger.info(f"Player {player.id} was knocked out by dodgeball {dodgeball.id}")
+            self.logger.info(f"Player {player.id} was knocked out by dodgeball {dodgeball.id}")
             for dodgeball in self.state.get_dodgeballs():
                 dodgeball.beat_attempt_time = 0.0 # reset beat attempt time
             self.state.potential_third_dodgeball_interference_kwargs = None # reset third dodgeball interference kwargs
@@ -224,7 +225,7 @@ class DodgeballLogic:
                         if thrown_dodgeball.beat_attempt_time == 0.0:
                             # "initialize" beat_attempt_time
                             thrown_dodgeball.beat_attempt_time = dt
-                            logger.debug(f"Initiating beat attempt time for dodgeball {thrown_dodgeball.id}")
+                            self.logger.debug(f"Initiating beat attempt time for dodgeball {thrown_dodgeball.id}")
 
                 
                     # reasonable beat attempt 
@@ -275,7 +276,7 @@ class DodgeballLogic:
                     third_dodgeball_id = dodgeballs_per_team['dead_dodgeballs'][0]
                     # third_dodgeball = self.state.balls[third_dodgeball_id]
                     self.state.third_dodgeball = third_dodgeball_id
-                    logger.info(f"Third dodgeball {third_dodgeball_id} assigned to team {self.state.third_dodgeball_team}")
+                    self.logger.info(f"Third dodgeball {third_dodgeball_id} assigned to team {self.state.third_dodgeball_team}")
             else:
                 # third dodgeball exists
                 # checks if still third dodgeball
@@ -286,7 +287,7 @@ class DodgeballLogic:
                     for dodgeball in dodgeballs:
                         dodgeball.beat_attempt_time = 0.0
                     self.state.potential_third_dodgeball_interference_kwargs = None
-                    logger.info("No longer third dodgeball situation")
+                    self.logger.info("No longer third dodgeball situation")
 
 
             # -> check for other events:

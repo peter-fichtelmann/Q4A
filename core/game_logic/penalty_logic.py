@@ -3,7 +3,7 @@ import random
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
-logger = logging.getLogger('quadball.game_logic')
+BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
 class PenaltyLogic:
     """
@@ -13,7 +13,7 @@ class PenaltyLogic:
         state: Shared GameState instance for rule evaluation and updates.
     """
 
-    def __init__(self, game_state: GameState):
+    def __init__(self, game_state: GameState, logger: logging.Logger | None = None):
         """
         Initialize penalty rule handling.
 
@@ -21,6 +21,7 @@ class PenaltyLogic:
             game_state: The active GameState instance.
         """
         self.state = game_state
+        self.logger = logger or BASE_LOGGER
 
     def _check_delay_of_game(self, dt: float) -> None:
         """
@@ -88,10 +89,10 @@ class PenaltyLogic:
                     self.state.delay_of_game_warnings[volleyball.possession_team] = 0
                 self.state.delay_of_game_warnings[volleyball.possession_team] += 1
                 if self.state.delay_of_game_warnings[volleyball.possession_team] <= self.state.max_delay_of_game_warnings:
-                    logger.warning(f"Warning {self.state.delay_of_game_warnings[volleyball.possession_team]} for delay of game on team {volleyball.possession_team}")
+                    self.logger.warning(f"Warning {self.state.delay_of_game_warnings[volleyball.possession_team]} for delay of game on team {volleyball.possession_team}")
                 else:
                     # Delay of game penalty
-                    logger.warning(f"Delay of game penalty on team {volleyball.possession_team}")
+                    self.logger.warning(f"Delay of game penalty on team {volleyball.possession_team}")
                     # initiate volleyball turnover
                     self._designate_turnover(volleyball)
                     # TODO implement blue card penalty
@@ -163,9 +164,9 @@ class PenaltyLogic:
                 'dodgeball_id': dodgeball.id,
                 'player_id': player.id,
             }
-            logger.warning(f"Potential third dodgeball interference if beat attempt not successful")
+            self.logger.warning(f"Potential third dodgeball interference if beat attempt not successful")
         else:
-            logger.warning(f"Third dodgeball interference by team {player.team} of player {player.id} with dodgeball {dodgeball.id}")
+            self.logger.warning(f"Third dodgeball interference by team {player.team} of player {player.id} with dodgeball {dodgeball.id}")
             volleyball = self.state.get_volleyball()
             # Back to hoops for player
             player.is_knocked_out = True
@@ -201,7 +202,7 @@ class PenaltyLogic:
             dodgeball_to_turnover.possession_team = player.team # turnover dodgeball to other team
             self._designate_turnover(dodgeball)
             self._designate_turnover(dodgeball_to_turnover)
-            logger.info("Back to hoops, volleyball, and double dodgeball turnover")
+            self.logger.info("Back to hoops, volleyball, and double dodgeball turnover")
             self.state.third_dodgeball = None
             self.state.third_dodgeball_team = None
             self.state.potential_third_dodgeball_interference_kwargs = None

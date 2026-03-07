@@ -3,7 +3,7 @@ from core.game_logic.utility_logic import UtilityLogic
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
-logger = logging.getLogger('quadball.game_logic')
+BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
 class BasicLogic:
     """
@@ -14,7 +14,7 @@ class BasicLogic:
         penalty_logic: Optional PenaltyLogic for turnover decisions.
     """
 
-    def __init__(self, game_state: GameState, penalty_logic=None):
+    def __init__(self, game_state: GameState, penalty_logic=None, logger: logging.Logger | None = None):
         """
         Initialize the basic movement and physics logic.
 
@@ -24,6 +24,7 @@ class BasicLogic:
         """
         self.state = game_state
         self.penalty_logic = penalty_logic
+        self.logger = logger or BASE_LOGGER
 
     def update_player_velocity(self, player: Player, dt: float):
         # norm player.direction
@@ -31,7 +32,7 @@ class BasicLogic:
         # on stick reset check before direction norm
         if player.is_knocked_out and (mag_dir < player.radius + self.state.hoops[f'hoop_{player.team}_center'].thickness):
             player.is_knocked_out = False
-            logger.info(f"Player {player.id} has recovered from knockout")
+            self.logger.info(f"Player {player.id} has recovered from knockout")
         if mag_dir > 1:
             player.direction.x /= mag_dir
             player.direction.y /= mag_dir
@@ -101,14 +102,14 @@ class BasicLogic:
                         player.direction.y += 1
                     elif ball.position.y >= self.state.boundaries_y[1] - player.radius: # top boundary
                         player.direction.y -= 1
-                    logger.debug(f"Inbounding direction: ({player.direction.x}, {player.direction.y})")
+                    self.logger.debug(f"Inbounding direction: ({player.direction.x}, {player.direction.y})")
                     player.velocity.x = 0
                     player.velocity.y = 0
                     ball = self.state.balls[player.inbounding]
                     ball.inbounder = None
                     player.inbounding = None
                     player.dodgeball_immunity = False
-                    logger.info("Inbounding procedure ended by ball re-entering pitch")
+                    self.logger.info("Inbounding procedure ended by ball re-entering pitch")
             self.update_player_velocity(player, dt)
 
     def get_free_ball_velocity(self, ball: Ball, dt: float) -> Vector2:
@@ -131,7 +132,7 @@ class BasicLogic:
         """
         for ball in self.state.balls.values():
             if ball.turnover_to_player is not None:
-                logger.debug(f"Ball turnover to player velocity: {ball.turnover_to_player}")
+                self.logger.debug(f"Ball turnover to player velocity: {ball.turnover_to_player}")
                 player = self.state.players.get(ball.turnover_to_player)
                 # reset turnover to other eligible player if player unavailable
                 if player is None:
@@ -180,7 +181,7 @@ class BasicLogic:
                     or
                     (player.team == self.state.team_1 and player.position.x <= self.state.keeper_zone_x_1 + player.radius)
                 ):
-                    logger.debug(f'Keeper {player.id} is in keeper zone and has dodgeball immunity')
+                    self.logger.debug(f'Keeper {player.id} is in keeper zone and has dodgeball immunity')
                     player.dodgeball_immunity = True
                 else:
                     player.dodgeball_immunity = False
@@ -259,4 +260,4 @@ class BasicLogic:
                     ball_1.velocity.y *= 1 / mag_velocity_ratio
                     ball_2.velocity.x *= mag_velocity_ratio
                     ball_2.velocity.y *= mag_velocity_ratio
-                    logger.debug(f"Ball {ball_1.id} collided with Ball {ball_2.id}")
+                    self.logger.debug(f"Ball {ball_1.id} collided with Ball {ball_2.id}")

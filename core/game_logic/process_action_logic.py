@@ -4,7 +4,7 @@ from core.game_logic.utility_logic import UtilityLogic
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
-logger = logging.getLogger('quadball.game_logic')
+BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
 class ProcessActionLogic:
     """
@@ -14,7 +14,7 @@ class ProcessActionLogic:
         state: Shared GameState instance for player and ball updates.
     """
 
-    def __init__(self, game_state: GameState):
+    def __init__(self, game_state: GameState, logger: logging.Logger | None = None):
         """
         Initialize action processing logic.
 
@@ -22,6 +22,7 @@ class ProcessActionLogic:
             game_state: The active GameState instance.
         """
         self.state = game_state
+        self.logger = logger or BASE_LOGGER
 
     def process_throw_action(self, player_id: str, throw_direction: Optional[Vector2] = None) -> bool:
         """
@@ -70,15 +71,12 @@ class ProcessActionLogic:
             player.catch_cooldown = 0.0
         player.has_ball = False
 
-        logger.info(f"Player {player_id} threw {ball.id}")
+        self.logger.info(f"Player {player_id} threw {ball.id}")
         return True
     
     def process_tackle_action(self, player_id: str) -> bool:
         """
-        Process a tackle action (currently unimplemented).
-        
-        Placeholder for future tackling/blocking mechanics.
-        TODO: Implement tackle logic
+        Process a tackle action
         """
         player = self.state.get_player(player_id)
         # for other_id, distance in self.state.squared_distances.get(player.id, [])
@@ -105,6 +103,6 @@ class ProcessActionLogic:
                             if other_player.team != player.team:
                                 player.tackling_player_ids.append(other_id)
                                 other_player.tackling_player_ids.append(player.id)
-                                logger.info(f"Player {player_id} tackled player {other_id}")
+                                self.logger.debug(f"Player {player_id} tackled player {other_id}")
                                 return True
         return False

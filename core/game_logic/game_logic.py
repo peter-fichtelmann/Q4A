@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from core.game_state import GameState
 from core.game_logic.basic_logic import BasicLogic
 from core.game_logic.volleyball_logic import VolleyballLogic
@@ -9,8 +10,8 @@ from core.game_logic.penalty_logic import PenaltyLogic
 from core.game_logic.process_action_logic import ProcessActionLogic
 from core.game_logic.utility_logic import UtilityLogic
 
-# Configure logger for game logic subsystem
-logger = logging.getLogger('quadball.game_logic')
+# Base logger for game logic subsystem
+BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
 class GameLogic:
     """
@@ -30,7 +31,12 @@ class GameLogic:
         utility_logic: Distance precomputation for efficient collision checks.
     """
     
-    def __init__(self, game_state: GameState, log_level: int = logging.DEBUG):
+    def __init__(
+        self,
+        game_state: GameState,
+        log_level: int = logging.DEBUG,
+        logger_name: Optional[str] = None,
+    ):
         """
         Initialize the game logic system with a reference to the game state.
         
@@ -51,28 +57,32 @@ class GameLogic:
         Args:
             game_state: The GameState instance that this system will manage
             log_level: Logging level (e.g., logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR)
+            logger_name: Optional logger name. If omitted, an instance-specific
+                logger name is generated.
         """
         self.state = game_state
+        if logger_name is None:
+            logger_name = f"quadball.game_logic.instance.{id(self):x}"
+        self.logger = logging.getLogger(logger_name)
+        self.set_log_level(log_level)
         
-
-
         # Initialize distance dictionaries for all entities
         entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
         for entity in entities_list:
             self.state.squared_distances_dicts[entity.id] = {}
 
         # Create penalty_logic first since other classes depend on it
-        self.penalty_logic = PenaltyLogic(self.state)
+        self.penalty_logic = PenaltyLogic(self.state, logger=self.logger)
         
         # Inject dependencies only where needed
-        self.basic_logic = BasicLogic(self.state, penalty_logic=self.penalty_logic)
-        self.dodgeball_logic = DodgeballLogic(self.state, penalty_logic=self.penalty_logic)
+        self.basic_logic = BasicLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
+        self.dodgeball_logic = DodgeballLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
         
         # Other classes have no cross-dependencies
-        self.volleyball_logic = VolleyballLogic(self.state)
-        self.physical_contact_logic = PhysicalContactLogic(self.state)
-        self.boundary_logic = BoundaryLogic(self.state)
-        self.process_action_logic = ProcessActionLogic(self.state)
+        self.volleyball_logic = VolleyballLogic(self.state, logger=self.logger)
+        self.physical_contact_logic = PhysicalContactLogic(self.state, logger=self.logger)
+        self.boundary_logic = BoundaryLogic(self.state, logger=self.logger)
+        self.process_action_logic = ProcessActionLogic(self.state, logger=self.logger)
         self.utility_logic = UtilityLogic(self.state)
         # # compile static functions for initial warmup of numba
         # UtilityLogic._distance_numba(0.5, 0.5, 0.5, 0.5)
@@ -82,16 +92,21 @@ class GameLogic:
 
     def copy(self, log_level = None) -> 'GameLogic':
         if log_level is None:
-            log_level = logger.level
+            log_level = self.logger.level
         return GameLogic(self.state.copy(), log_level=log_level)
     
-    def set_logger_level(self, log_level: int):
+    def set_log_level(self, log_level: int):
         # Configure logger level
-        logger.setLevel(log_level)
-        if not logger.handlers:
+        self.logger.setLevel(log_level)
+        if not self.logger.handlers:
             handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-            logger.addHandler(handler)
+            handler.setFormatter(logging.Formatter('[%(levelname)s] %(name)s: %(message)s'))
+            self.logger.addHandler(handler)
+        self.logger.propagate = False
+
+    def set_logger_level(self, log_level: int):
+        # Backward-compatible alias
+        self.set_log_level(log_level)
     
     def update(self, dt: float) -> None:
         """

@@ -2,7 +2,7 @@ import logging
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
-logger = logging.getLogger('quadball.game_logic')
+BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
 class VolleyballLogic:
     """
@@ -12,7 +12,7 @@ class VolleyballLogic:
         state: Shared GameState instance for volleyball and hoops.
     """
 
-    def __init__(self, game_state: GameState):
+    def __init__(self, game_state: GameState, logger: logging.Logger | None = None):
         """
         Initialize volleyball rule handling.
 
@@ -20,6 +20,7 @@ class VolleyballLogic:
             game_state: The active GameState instance.
         """
         self.state = game_state
+        self.logger = logger or BASE_LOGGER
 
     def _check_volleyball_possessions(self) -> None:
         """
@@ -62,7 +63,7 @@ class VolleyballLogic:
                                     if volleyball.turnover_to_player is not None:
                                         volleyball.turnover_to_player = None
                                         player.is_receiving_turnover_ball = False
-                                    logger.info(f"Player {player.id} picked up the volleyball")
+                                    self.logger.info(f"Player {player.id} picked up the volleyball")
                                     break
                             else:
                                 break  # Beyond pickup range, stop checking further players
@@ -106,7 +107,7 @@ class VolleyballLogic:
                                 volleyball.crossed_hoop = (hoop_id, volleyball.position.y)
                             else:
                                 volleyball.crossed_hoop = None # volleyball crossed back before fully through e.g. by keeper or dodgeball collision
-                                logger.debug('Volleyball crossed back before fully through hoop')
+                                self.logger.debug('Volleyball crossed back before fully through hoop')
                             break
         if volleyball.crossed_hoop is not None:
             hoop_id, cross_y = volleyball.crossed_hoop

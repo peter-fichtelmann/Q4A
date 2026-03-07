@@ -1,5 +1,8 @@
+import logging
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
+
+BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
 class PhysicalContactLogic:
     """
@@ -9,7 +12,7 @@ class PhysicalContactLogic:
         state: Shared GameState instance for player access.
     """
 
-    def __init__(self, game_state: GameState):
+    def __init__(self, game_state: GameState, logger: logging.Logger | None = None):
         """
         Initialize collision handling.
 
@@ -17,6 +20,7 @@ class PhysicalContactLogic:
             game_state: The active GameState instance.
         """
         self.state = game_state
+        self.logger = logger or BASE_LOGGER
 
     def _enforce_tackle(self) -> None:
         """
