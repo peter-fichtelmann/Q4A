@@ -156,7 +156,6 @@ class UtilityLogic:
     def _squared_sum(value_1: float, value_2: float) -> float:
         return value_1**2 + value_2**2
     
-
     # numba more useful if more complex calculations, more looping
     # @jit(fastmath=True, cache=True)
     # def _distance_numba(pos1_x: float, pos1_y: float, pos2_x: float, pos2_y: float) -> float:

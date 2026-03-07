@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import logging
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 from core.game_logic.game_logic import GameLogic
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 from computer_player.hoop_defence import HoopDefence
@@ -57,14 +57,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  determine_attacking_team_max_dt_steps: int = 10,
                  determine_attacking_team_max_distance_per_step: float = None,
                  determine_attacking_team_max_dt_per_step: int = None,
-                 score_interception_max_dt_steps: int = 10,
-                 score_interception_max_distance_per_step: float = 0.5,
-                 score_interception_max_dt_per_step: int = 0.25,
-                 scoring_threshold: float = 0.8,
-                 evade_beater_importance: float = 4,
-                 evade_chaser_keeper_importance: float = 2,
-                 evade_teamate_chaser_keeper_importance: float = 1,
-                 positioning_boundary_buffer_distance: float = 2,
+                 hoop_defence_kwargs: Dict = None,
+                 diamond_attack_kwargs: Dict = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
                  simulation_game_logic_log_level: int = None,
                  computer_player_log_level: int = logging.INFO
@@ -74,16 +68,11 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         self.determine_attacking_team_max_dt_steps = determine_attacking_team_max_dt_steps
         self.determine_attacking_team_max_distance_per_step = determine_attacking_team_max_distance_per_step
         self.determine_attacking_team_max_dt_per_step = determine_attacking_team_max_dt_per_step
-        self.scoring_threshold = scoring_threshold
-        self.evade_beater_importance = evade_beater_importance
-        self.evade_chaser_keeper_importance = evade_chaser_keeper_importance
-        self.evade_teamate_chaser_keeper_importance = evade_teamate_chaser_keeper_importance
-        self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
-        self.beater_throw_threshold_volleyball_holder = beater_throw_threshold_volleyball_holder
+        self.hoop_defence_kwargs = hoop_defence_kwargs
 
-        self.score_interception_max_dt_steps = score_interception_max_dt_steps
-        self.score_interception_max_distance_per_step = score_interception_max_distance_per_step
-        self.score_interception_max_dt_per_step = score_interception_max_dt_per_step
+        self.diamond_attack_kwargs = diamond_attack_kwargs
+
+        self.beater_throw_threshold_volleyball_holder = beater_throw_threshold_volleyball_holder
 
         self.beaters = [player for player in self.logic.state.players.values() if player.role == PlayerRole.BEATER]
 
@@ -126,43 +115,22 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         assigned_beater_ids = self._determine_beater_ball_getting(dt, attacking_team)
         if attacking_team is None:
             # both teams in attacking mode
+            # TODO implement
             pass
-        elif attacking_team == self.logic.state.team_0:
-            # team 0 attacking, team 1 defending
-            defence_cpu_player_ids = [cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1]
-            defence_player_ids = [player.id for player in self.logic.state.players.values() if player.team == self.logic.state.team_1]
-            HoopDefence(
-                logic = self.logic,
-                defence_cpu_player_ids=defence_cpu_player_ids,
-                defence_player_ids=defence_player_ids,
-                team=self.logic.state.team_1,
-                move_around_hoop_blockage=self.move_around_hoop_blockage_team_1,
-                )(dt)
-        else:
-            # team 1 attacking, team 0 defending
-            defence_cpu_player_ids = [cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0]
-            defence_player_ids = [player.id for player in self.logic.state.players.values() if player.team == self.logic.state.team_0]
-            HoopDefence(
-                logic = self.logic,
-                defence_cpu_player_ids=defence_cpu_player_ids,
-                defence_player_ids=defence_player_ids,
-                team=self.logic.state.team_0,
-                move_around_hoop_blockage=self.move_around_hoop_blockage_team_0,
-                )(dt)
+        HoopDefence(
+            logic = self.logic,
+            defence_cpu_player_ids=[cpu_player.id for cpu_player in self.cpu_players if cpu_player.team != attacking_team],
+            defence_team=self.logic.state.team_0 if attacking_team != 0 else self.logic.state.team_1,
+            move_around_hoop_blockage=self.move_around_hoop_blockage_team_0 if attacking_team != 0 else self.move_around_hoop_blockage_team_1,
+            **self.hoop_defence_kwargs,
+            )(dt, assigned_beater_ids)
         DiamondAttack(
             logic=self.logic,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_0 if attacking_team == 0 else self.move_around_hoop_blockage_team_1,
             interception_ratio_calculator_opponent=self.interception_ratio_calculator_team_1 if attacking_team == 0 else self.interception_ratio_calculator_team_0, # inverse because we need hoop blockage of opponent team
             attack_cpu_player_ids=[cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == attacking_team],
             attack_team=attacking_team,
-            score_interception_max_dt_steps=self.score_interception_max_dt_steps,
-            score_interception_max_distance_per_step=self.score_interception_max_distance_per_step,
-            score_interception_max_dt_per_step=self.score_interception_max_dt_per_step,
-            scoring_threshold=self.scoring_threshold,
-            evade_beater_importance=self.evade_beater_importance,
-            evade_chaser_keeper_importance=self.evade_chaser_keeper_importance,
-            evade_teamate_chaser_keeper_importance=self.evade_teamate_chaser_keeper_importance,
-            positioning_boundary_buffer_distance=self.positioning_boundary_buffer_distance,
+            **self.diamond_attack_kwargs,
             logger=self.logger
              )(
                 dt=dt,
@@ -188,6 +156,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         assigned_beater_ids = []
         third_dodgeball_team = self.logic.state.third_dodgeball_team
         if third_dodgeball_team is not None:
+            # TODO implement the rare case when control beater missed throw and wants to run to get thrown dodgeball back/oppenent tries to get this one
             # If there is a third dodgeball team, assign beater players to get the dodgeball
             self.logger.debug(f"Third dodgeball on team {third_dodgeball_team}, determining beater assignment to get the dodgeball")
             third_dodgeball = self.logic.state.balls[self.logic.state.third_dodgeball]

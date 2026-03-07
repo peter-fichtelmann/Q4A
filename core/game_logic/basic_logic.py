@@ -180,6 +180,7 @@ class BasicLogic:
                     or
                     (player.team == self.state.team_1 and player.position.x <= self.state.keeper_zone_x_1 + player.radius)
                 ):
+                    logger.debug(f'Keeper {player.id} is in keeper zone and has dodgeball immunity')
                     player.dodgeball_immunity = True
                 else:
                     player.dodgeball_immunity = False
@@ -192,8 +193,6 @@ class BasicLogic:
             ball.previous_position.x = ball.position.x
             ball.previous_position.y = ball.position.y
             ball.position = self.get_update_position(ball, dt)
-
-
     
     def _check_ball_collisions(self):
         """

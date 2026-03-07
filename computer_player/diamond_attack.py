@@ -2,7 +2,7 @@ import itertools
 import logging
 from typing import Dict, Optional, List
 
-from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage
+from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage, MoveUtility
 from core.entities import Player, PlayerRole, Vector2, VolleyBall
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
@@ -20,9 +20,9 @@ class DiamondAttack:
                 score_interception_max_distance_per_step: Optional[float] = None,
                 score_interception_max_dt_per_step: Optional[int] = None,
                 scoring_threshold: float = 0.8,
-                evade_beater_importance: float = 4,
-                evade_chaser_keeper_importance: float = 2,
-                evade_teamate_chaser_keeper_importance: float = 1,
+                chaser_evade_beater_weight: float = 4,
+                chaser_evade_chaser_keeper_weight: float = 2,
+                chaser_evade_teamate_chaser_keeper_weight: float = 1,
                 positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
                 logger: Optional[logging.Logger] = None
                 ):
@@ -36,9 +36,9 @@ class DiamondAttack:
         self.score_interception_max_dt_per_step = score_interception_max_dt_per_step
 
         self.scoring_threshold = scoring_threshold
-        self.evade_beater_importance = evade_beater_importance
-        self.evade_chaser_keeper_importance = evade_chaser_keeper_importance
-        self.evade_teamate_chaser_keeper_importance = evade_teamate_chaser_keeper_importance
+        self.chaser_evade_beater_weight = chaser_evade_beater_weight
+        self.chaser_evade_chaser_keeper_weight = chaser_evade_chaser_keeper_weight
+        self.chaser_evade_teamate_chaser_keeper_weight = chaser_evade_teamate_chaser_keeper_weight
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
         self.logger = logger or logging.getLogger("computer_player")
 
@@ -106,21 +106,6 @@ class DiamondAttack:
                 best_hoop.position.y - volleyball_holder.position.y
             )
             self.logic.process_action_logic.process_throw_action(volleyball_holder.id)
-
-    def evade_player(self, player: Player, opponent: Player, importance: float = 1.0) -> Vector2:
-        """Evade player, e.g. chaser or loaded beater. Return evade vector"""
-        player_to_opponent_vector = Vector2(
-            opponent.position.x - player.position.x,
-            opponent.position.y - player.position.y
-        )
-        squared_mag_player_to_opponent_vector = UtilityLogic._squared_sum(player_to_opponent_vector.x, player_to_opponent_vector.y)
-        if squared_mag_player_to_opponent_vector == 0:
-            return Vector2(0, 0)
-        evade_vector = Vector2(
-            -player_to_opponent_vector.x * importance / squared_mag_player_to_opponent_vector, # norm to one and then divide by distance to opponent to get stronger evasion when closer
-            -player_to_opponent_vector.y * importance / squared_mag_player_to_opponent_vector
-        )
-        return evade_vector
     
     def player_positioning(self, player: Player, move_vector: Optional[Vector2] = None):
         if move_vector is None:
@@ -133,26 +118,35 @@ class DiamondAttack:
         for other_player in self.logic.state.players.values():
             if other_player.team != self.attack_team:
                 if other_player.role == PlayerRole.BEATER and other_player.has_ball:
-                    evade_vector = self.evade_player(player, other_player, importance=self.evade_beater_importance)
+                    evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_beater_weight)
                     evade_vectors.append(evade_vector)
                 elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]: # if chaser or keeper, also check distance and evade if too close
-                    evade_vector = self.evade_player(player, other_player, importance=self.evade_chaser_keeper_importance)
+                    evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_chaser_keeper_weight)
                     evade_vectors.append(evade_vector)
             elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and other_player.id != player.id: # also evade teammates who are chasers or keepers to avoid clustering
-                evade_vector = self.evade_player(player, other_player, importance=self.evade_teamate_chaser_keeper_importance)
+                evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_teamate_chaser_keeper_weight)
                 evade_vectors.append(evade_vector)
         for evade_vector in evade_vectors:
             # self.logger.debug("Evade vector for player %s from opponent: %s", player.id, evade_vector)
             move_vector.x += evade_vector.x
             move_vector.y += evade_vector.y
-        if player.position.y < self.logic.state.boundaries_y[0] + self.positioning_boundary_buffer_distance:
-            move_vector.y = max(0, move_vector.y) # don't move down if already at boundary
-        elif player.position.y > self.logic.state.boundaries_y[1] - self.positioning_boundary_buffer_distance:
-            move_vector.y = min(0, move_vector.y) # don't move up if already at boundary
-        if player.position.x < self.logic.state.boundaries_x[0] + self.positioning_boundary_buffer_distance:
-            move_vector.x = max(0, move_vector.x) # don't move left if already at boundary
-        elif player.position.x > self.logic.state.boundaries_x[1] - self.positioning_boundary_buffer_distance:
-            move_vector.x = min(0, move_vector.x) # don't move right if already at boundary
+        move_vector = MoveUtility.adjust_move_vector_to_avoid_boundary(
+            player.position,
+            move_vector,
+            boundary_x_min = self.logic.state.boundaries_x[0],
+            boundary_x_max = self.logic.state.boundaries_x[1],
+            boundary_y_min = self.logic.state.boundaries_y[0],
+            boundary_y_max = self.logic.state.boundaries_y[1],
+            buffer = self.positioning_boundary_buffer_distance
+        )
+        # if player.position.y < self.logic.state.boundaries_y[0] + self.positioning_boundary_buffer_distance:
+        #     move_vector.y = max(0, move_vector.y) # don't move down if already at boundary
+        # elif player.position.y > self.logic.state.boundaries_y[1] - self.positioning_boundary_buffer_distance:
+        #     move_vector.y = min(0, move_vector.y) # don't move up if already at boundary
+        # if player.position.x < self.logic.state.boundaries_x[0] + self.positioning_boundary_buffer_distance:
+        #     move_vector.x = max(0, move_vector.x) # don't move left if already at boundary
+        # elif player.position.x > self.logic.state.boundaries_x[1] - self.positioning_boundary_buffer_distance:
+        #     move_vector.x = min(0, move_vector.x) # don't move right if already at boundary
         player.direction = Vector2(move_vector.x, move_vector.y)
 
     def move_chaser_keeper_hoops(self, players: List[Player]) -> Dict[str, Vector2]:

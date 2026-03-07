@@ -3,7 +3,7 @@ import logging
 import math
 from typing import Dict, Optional, List, Tuple
 
-from core.entities import Player, PlayerRole, Vector2, Hoop
+from core.entities import Ball, Player, PlayerRole, Vector2, Hoop
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
 
@@ -278,6 +278,44 @@ class InterceptionRatioCalculator:
         # print(f"Not reaching target within {max_dt_steps} steps, returning intercepting score of 0")
         return 0, {}
     
+
+class MoveUtility:
+    @staticmethod
+    def evade(player_position: Vector2, entity_to_evade_position: Vector2, weight: float = 1.0) -> Vector2:
+        """Evade player, e.g. chaser or loaded beater. Return evade vector"""
+        player_to_entity_vector = Vector2(
+            entity_to_evade_position.x - player_position.x,
+            entity_to_evade_position.y - player_position.y
+        )
+        squared_mag_player_to_entity_vector = UtilityLogic._squared_sum(player_to_entity_vector.x, player_to_entity_vector.y)
+        if squared_mag_player_to_entity_vector == 0:
+            return Vector2(0, 0)
+        evade_vector = Vector2(
+            -player_to_entity_vector.x * weight / squared_mag_player_to_entity_vector, # norm to one and then divide by distance to entity to get stronger evasion when closer
+            -player_to_entity_vector.y * weight / squared_mag_player_to_entity_vector
+        )
+        return evade_vector
+
+    @staticmethod
+    def adjust_move_vector_to_avoid_boundary(
+            player_position: Vector2,
+            move_vector: Vector2,
+            boundary_x_min: float,
+            boundary_x_max: float,
+            boundary_y_min: float,
+            boundary_y_max: float,
+            buffer: float
+            ):
+        """Avoid movement that would move player outside of boundaries. Return adjusted move vector."""
+        if player_position.x < boundary_x_min + buffer:
+            move_vector.x = max(0, move_vector.x) # only allow movement to the right
+        elif player_position.x > boundary_x_max - buffer:
+            move_vector.x = min(0, move_vector.x) # only allow movement to the left
+        if player_position.y < boundary_y_min + buffer:
+            move_vector.y = max(0, move_vector.y) # only allow movement downwards
+        elif player_position.y > boundary_y_max - buffer:
+            move_vector.y = min(0, move_vector.y) # only allow movement upwards
+        return move_vector
 
 
 

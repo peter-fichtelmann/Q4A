@@ -1,24 +1,48 @@
 from typing import List
 from core.game_logic.game_logic import GameLogic
 from core.entities import Hoop, Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
-from computer_player.computer_player_utility import MoveAroundHoopBlockage
+from computer_player.computer_player_utility import MoveAroundHoopBlockage, MoveUtility
 import random
 import math
 
+from core.game_logic.utility_logic import UtilityLogic
+
 class HoopDefence:
-    def __init__(self, logic, defence_player_ids: List[str], defence_cpu_player_ids: List[str], team: int, move_around_hoop_blockage: MoveAroundHoopBlockage):    
+    def __init__(self,
+                 logic,
+                 defence_cpu_player_ids: List[str],
+                 defence_team: int,
+                 move_around_hoop_blockage: MoveAroundHoopBlockage,
+                 beater_evade_beater_buddy_weight,
+                 beater_evade_volleyball_weight,
+                 beater_evade_chaser_keeper_weight,
+                 loaded_beater_evade_beater_weight,
+                 unloaded_beater_evade_beater_weight,
+                 unloaded_beater_max_x_to_midline,
+                 positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
+                 ):    
         self.logic = logic
-        self.defence_player_ids = defence_player_ids
+        self.defence_players = [player for player in self.logic.state.players.values() if player.team == defence_team]
+        self.defence_beaters = [player for player in self.defence_players if player.role == PlayerRole.BEATER]
+        self.attack_players = [player for player in self.logic.state.players.values() if player.team != defence_team]
         self.defence_cpu_player_ids = defence_cpu_player_ids
-        self.team = team
+        self.defence_team = defence_team
+        self.beater_evade_beater_buddy_weight = beater_evade_beater_buddy_weight
+        self.beater_evade_volleyball_weight = beater_evade_volleyball_weight
+        self.beater_evade_chaser_keeper_weight = beater_evade_chaser_keeper_weight
+        self.loaded_beater_evade_beater_weight = loaded_beater_evade_beater_weight
+        self.unloaded_beater_evade_beater_weight = unloaded_beater_evade_beater_weight
+        self.unloaded_beater_max_x_to_midline = unloaded_beater_max_x_to_midline
+        self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
         # self.move_buffer_factor = move_buffer_factor
         # self.tol = numerical_tol
 
-        self.keeper_zone_x = self.logic.state.keeper_zone_x_0 if team == self.logic.state.team_0 else self.logic.state.keeper_zone_x_1
-        self.defence_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team == team]
+        self.keeper_zone_x = self.logic.state.keeper_zone_x_0 if defence_team == self.logic.state.team_0 else self.logic.state.keeper_zone_x_1
+        self.defence_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team == defence_team]
+        self.center_hoop = self.defence_hoops[1] if len(self.defence_hoops) == 3 else self.defence_hoops[0]
         self.move_around_hoop_blockage = move_around_hoop_blockage
 
-    def __call__(self, dt: float):
+    def __call__(self, dt: float, assigned_beater_ids: List[str]):
         volleyball = self.logic.state.get_volleyball()
         
         volleyball_hoop_distances = {
@@ -30,10 +54,7 @@ class HoopDefence:
         closest_hoop = self.logic.state.hoops[closest_hoop_id]
         chaser_hoop_squared_distances = {hoop.id: {} for hoop in self.defence_hoops}
 
-        for player_id in self.defence_player_ids:
-            player = self.logic.state.get_player(player_id)
-            if not player:
-                continue
+        for player in self.defence_players:
             if player.role == PlayerRole.KEEPER and player.id in self.defence_cpu_player_ids:
                 self.keeper_action(player, volleyball, closest_hoop)
             elif player.role == PlayerRole.CHASER:
@@ -41,7 +62,74 @@ class HoopDefence:
                 if not player.is_knocked_out:
                     for hoop in self.defence_hoops:
                         chaser_hoop_squared_distances[hoop.id][player.id] = (player.position.x - hoop.position.x) ** 2 + (player.position.y - hoop.position.y) ** 2
+            # beater action if beater cpu player and not already assigned to get a dodgeball
+            elif player.role == PlayerRole.BEATER and player.id in self.defence_cpu_player_ids and player.id not in assigned_beater_ids:
+                self.beater_action(dt, player, volleyball)
         self.chasers_action(sorted_hoop_distances, chaser_hoop_squared_distances, volleyball, dt)
+
+    def beater_action(self, dt: float, beater: Player, volleyball: VolleyBall):
+        """
+        if loaded beater:
+            Move beaters to center hoop and directing them with evade and -evade vectors (the closer the more impactful).
+            
+            Then check if beater should throw
+        """
+        
+        move_vector = Vector2(
+            self.center_hoop.position.x - beater.position.x,
+            self.center_hoop.position.y - beater.position.y
+        )
+        move_vector_mag = UtilityLogic._magnitude(move_vector)
+        if move_vector_mag == 0:
+            move_vector = Vector2(0, 0)
+        else:
+            move_vector = Vector2(
+                move_vector.x / move_vector_mag,
+                move_vector.y / move_vector_mag
+            )
+        evade_vectors = []
+        for beater_buddy in self.defence_beaters:
+            # if loaded beater buddy
+            if beater_buddy.id != beater.id and beater_buddy.has_ball:
+                # use lookout to reduce oscillations around hoop
+                # but leads to rotation around center hoop
+                # lookout_beater_position = self.logic.basic_logic.get_update_position(beater, dt)
+                # lookout_beater_buddy_position = self.logic.basic_logic.get_update_position(beater_buddy, dt)
+                # evade_vectors.append(MoveUtility.evade(lookout_beater_position, lookout_beater_buddy_position, weight=self.beater_evade_beater_buddy_weight))
+                evade_vectors.append(MoveUtility.evade(beater.position, beater_buddy.position, weight=self.beater_evade_beater_buddy_weight))
+
+        if beater.has_ball: # loaded beater
+            for opponent in self.attack_players:
+                if opponent.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
+                    # negative weight
+                    evade_vectors.append(MoveUtility.evade(beater.position, opponent.position, weight=self.beater_evade_chaser_keeper_weight))
+                elif opponent.role == PlayerRole.BEATER:
+                    evade_vectors.append(MoveUtility.evade(beater.position, opponent.position, weight=self.loaded_beater_evade_beater_weight))
+            # negative weight to volleyball
+            evade_vectors.append(MoveUtility.evade(beater.position, volleyball.position, weight=self.beater_evade_volleyball_weight))
+        else: # unloaded beater
+            # try to make contact with opponent beater if not x position to close to midline
+            x_to_midline = abs(beater.position.x - self.logic.state.midline_x)
+            if x_to_midline > self.unloaded_beater_max_x_to_midline:
+                for opponent in self.attack_players:
+                    if opponent.role == PlayerRole.BEATER:
+                        # negative weight
+                        evade_vectors.append(MoveUtility.evade(beater.position, opponent.position, weight=self.unloaded_beater_evade_beater_weight))
+                self.logic.process_action_logic.process_tackle_action(beater.id) # unloaded beaters try to make contact with other close opponent beaters
+        for evade_vector in evade_vectors:
+            move_vector.x += evade_vector.x
+            move_vector.y += evade_vector.y
+        move_vector = MoveUtility.adjust_move_vector_to_avoid_boundary(
+        beater.position,
+        move_vector,
+        boundary_x_min = self.logic.state.boundaries_x[0],
+        boundary_x_max = self.logic.state.boundaries_x[1],
+        boundary_y_min = self.logic.state.boundaries_y[0],
+        boundary_y_max = self.logic.state.boundaries_y[1],
+        buffer = self.positioning_boundary_buffer_distance
+        )
+        beater.direction = move_vector
+                    
 
     def chasers_action(self, sorted_hoop_distances, chaser_hoop_squared_distances, volleyball: VolleyBall, dt: float):
         # move chaser closest to hoop with closest distance volleyball first; then move next closest chaser to next closest hoop and so on, but only if they are not already directed towards a hoop by a closer chaser
@@ -191,7 +279,7 @@ class HoopDefence:
 
     def _is_volleyball_in_keeper_zone(self, volleyball: VolleyBall) -> bool:
         if volleyball is not None:
-            if self.team == self.logic.state.team_0:
+            if self.defence_team == self.logic.state.team_0:
                 return volleyball.position.x < self.keeper_zone_x
             else:
                 return volleyball.position.x > self.keeper_zone_x

@@ -61,14 +61,25 @@ class Config:
         'determine_attacking_team_max_dt_steps': 10, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
         'determine_attacking_team_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when determining attacking team based on interception ratio
         'determine_attacking_team_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME
-        'score_interception_max_dt_steps': 20, # for RuleBasedComputerPlayer, how many dt steps to look ahead when scoring
-        'score_interception_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when scoring so that no intercepting player is skipped 
-        'score_interception_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when scoring in s GAME_TIME
-        'scoring_threshold': 0.95, # for RuleBasedComputerPlayer, minimum interception score (chance of not being intercepted) to attempt a score
-        'evade_beater_importance': 3.5, # for RuleBasedComputerPlayer, importance at which to attempt to evade beaters (in m)
-        'evade_chaser_keeper_importance': 1, # for RuleBasedComputerPlayer, importance at which to attempt to evade chasers/keepers (in m)
-        'evade_teamate_chaser_keeper_importance': 2, # for RuleBasedComputerPlayer, importance at which to attempt to evade teamate chasers/keepers (in m)
-        'positioning_boundary_buffer_distance': 3, # for RuleBasedComputerPlayer, distance from boundary at which to start evading boundary. Need time to stop direction moving there to slown down in this direction
+        'diamond_attack_kwargs': {
+            'score_interception_max_dt_steps': 20, # for DiamondAttack, how many dt steps to look ahead when scoring
+            'score_interception_max_distance_per_step': 2 * PLAYER_RADIUS, # for DiamondAttack, max distance to move per step when scoring so that no intercepting player is skipped
+            'score_interception_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for DiamondAttack, max dt per step when scoring in s GAME_TIME
+            'scoring_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a score
+            'chaser_evade_beater_weight': 3.5,
+            'chaser_evade_chaser_keeper_weight': 1,
+            'chaser_evade_teamate_chaser_keeper_weight': 2,
+            'positioning_boundary_buffer_distance': 3, # for DiamondAttack, distance from boundary at which to start evading boundary
+        },
+        'hoop_defence_kwargs': {
+            'beater_evade_beater_buddy_weight': 3,
+            'beater_evade_volleyball_weight': -3.5, # negative for anti-evade
+            'beater_evade_chaser_keeper_weight': -0.5, # negative for anti-evade
+            'loaded_beater_evade_beater_weight': 2, # loaded beaters evade other beaters
+            'unloaded_beater_evade_beater_weight': -2, # unloaded beaters try to make contact with other close opponent beaters
+            'unloaded_beater_max_x_to_midline': 8, # 11 would be stick to keeper zone, 0 would be got up to midline
+            'positioning_boundary_buffer_distance': 3, # for HoopDefence, distance from boundary at which to start evading boundary
+        },
         'beater_throw_threshold_volleyball_holder': 5, # m for beater to throw at volleyball holder
         'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)
     }
