@@ -5,7 +5,7 @@ from core.game_logic.game_logic import GameLogic
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 from computer_player.hoop_defence import HoopDefence
 from computer_player.diamond_attack import DiamondAttack
-from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage
+from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage, BeaterThrowDecider, ThrowDirector
 import random
 
 from core.game_logic.utility_logic import UtilityLogic
@@ -108,6 +108,9 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             log_level=simulation_game_logic_log_level,
             logger=self.logger
             )
+        self.beater_throw_decider = BeaterThrowDecider(
+            throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder
+        )
 
     def make_move(self, dt: float):
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
@@ -122,6 +125,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             defence_cpu_player_ids=[cpu_player.id for cpu_player in self.cpu_players if cpu_player.team != attacking_team],
             defence_team=self.logic.state.team_0 if attacking_team != 0 else self.logic.state.team_1,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_0 if attacking_team != 0 else self.move_around_hoop_blockage_team_1,
+            beater_throw_decider=self.beater_throw_decider,
             **self.hoop_defence_kwargs,
             )(dt, assigned_beater_ids)
         DiamondAttack(
@@ -215,13 +219,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         volleyball = self.logic.state.get_volleyball()
                         if volleyball.holder_id is not None:
                             volleyball_holder = self.logic.state.players[volleyball.holder_id]
-                            squared_distance_volleyball_holder = UtilityLogic._squared_distance(beater.position, volleyball_holder.position)
-                            if self.beater_throw_threshold_volleyball_holder**2 > squared_distance_volleyball_holder:
-                                self.logger.debug(f"Beater {beater.id} is close to volleyball holder {volleyball_holder.id} and is throwing at volleyball holder")
-                                throw_direction = Vector2(
-                                    volleyball_holder.position.x - beater.position.x,
-                                    volleyball_holder.position.y - beater.position.y
-                                )
+                            if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
+                                throw_direction = ThrowDirector.get_throw_direction(beater, volleyball_holder)
                                 self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
                                 continue
                     # check for pass to beater buddy, else pass back to hoops   
@@ -229,11 +228,9 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     if not (beater_buddy.is_knocked_out) and not (beater_buddy.id in assigned_beater_ids) and not (beater_buddy.has_ball):
                         # pass to teammate if they not knocked out, not assigned a dodgeball or already having a dodgeball
                         self.logger.debug(f"Beater {beater.id} has ball and is passing to teammate {beater_buddy.id}")
-                        throw_direction = Vector2(
-                            beater_buddy.position.x - beater.position.x,
-                            beater_buddy.position.y - beater.position.y
-                        )
+                        throw_direction = ThrowDirector.get_throw_direction(beater, beater_buddy)
                         self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
+                        # move beater buddy to throwing player (at the moment only for one dt step)
                         beater_buddy.direction = Vector2(
                             - throw_direction.x,
                             - throw_direction.y

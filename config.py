@@ -80,7 +80,7 @@ class Config:
             'unloaded_beater_max_x_to_midline': 8, # 11 would be stick to keeper zone, 0 would be got up to midline
             'positioning_boundary_buffer_distance': 3, # for HoopDefence, distance from boundary at which to start evading boundary
         },
-        'beater_throw_threshold_volleyball_holder': 5, # m for beater to throw at volleyball holder
+        'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
         'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)
     }
 

@@ -3,7 +3,7 @@ import logging
 import math
 from typing import Dict, Optional, List, Tuple
 
-from core.entities import Ball, Player, PlayerRole, Vector2, Hoop
+from core.entities import DodgeBall, Player, PlayerRole, Vector2, Hoop
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
 
@@ -318,5 +318,33 @@ class MoveUtility:
         return move_vector
 
 
+class BeaterThrowDecider:
+    """
+    Makes decisions if beaters should throw their dodogeball.
+    
+    Idea 1: just hard distance threshold
+    Idea 2: hard threshold and probabilty per second of 1/(distance + value) where value is aggressiveness
+    
+    """
+    def __init__(
+            self,
+            throw_threshold_volleyball_holder: float
+            ):
+        self.squared_throw_threshold_volleyball_holder = throw_threshold_volleyball_holder**2
 
+    def should_throw_at_volleyball_holder(self, beater: Player, volleyball_holder: Player) -> bool:
+        squared_distance = UtilityLogic._squared_distance(beater.position, volleyball_holder.position)
+        if squared_distance <= self.squared_throw_threshold_volleyball_holder:
+            return True
+        return False
+    
 
+class ThrowDirector:
+    """Calculates the throw vector to a moving receiver e.g. for passes and beats"""
+    @staticmethod
+    def get_throw_direction(player: Player, receiver: Player):
+        return  Vector2(
+            receiver.position.x - player.position.x,
+            receiver.position.y - player.position.y
+        )
+        

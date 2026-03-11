@@ -1,7 +1,7 @@
 from typing import List
 from core.game_logic.game_logic import GameLogic
 from core.entities import Hoop, Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
-from computer_player.computer_player_utility import MoveAroundHoopBlockage, MoveUtility
+from computer_player.computer_player_utility import MoveAroundHoopBlockage, MoveUtility, BeaterThrowDecider, ThrowDirector
 import random
 import math
 
@@ -19,6 +19,7 @@ class HoopDefence:
                  loaded_beater_evade_beater_weight,
                  unloaded_beater_evade_beater_weight,
                  unloaded_beater_max_x_to_midline,
+                 beater_throw_decider: BeaterThrowDecider,
                  positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
                  ):    
         self.logic = logic
@@ -34,6 +35,8 @@ class HoopDefence:
         self.unloaded_beater_evade_beater_weight = unloaded_beater_evade_beater_weight
         self.unloaded_beater_max_x_to_midline = unloaded_beater_max_x_to_midline
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
+
+        self.beater_throw_decider = beater_throw_decider
         # self.move_buffer_factor = move_buffer_factor
         # self.tol = numerical_tol
 
@@ -64,10 +67,11 @@ class HoopDefence:
                         chaser_hoop_squared_distances[hoop.id][player.id] = (player.position.x - hoop.position.x) ** 2 + (player.position.y - hoop.position.y) ** 2
             # beater action if beater cpu player and not already assigned to get a dodgeball
             elif player.role == PlayerRole.BEATER and player.id in self.defence_cpu_player_ids and player.id not in assigned_beater_ids:
-                self.beater_action(dt, player, volleyball)
+                self.beater_move_action(dt, player, volleyball)
+                self.beater_throw_action(player, volleyball)
         self.chasers_action(sorted_hoop_distances, chaser_hoop_squared_distances, volleyball, dt)
 
-    def beater_action(self, dt: float, beater: Player, volleyball: VolleyBall):
+    def beater_move_action(self, dt: float, beater: Player, volleyball: VolleyBall):
         """
         if loaded beater:
             Move beaters to center hoop and directing them with evade and -evade vectors (the closer the more impactful).
@@ -129,6 +133,16 @@ class HoopDefence:
         buffer = self.positioning_boundary_buffer_distance
         )
         beater.direction = move_vector
+    
+    def beater_throw_action(self, beater: Player, volleyball: VolleyBall):
+        if not beater.has_ball:
+            return
+        if volleyball.holder_id is not None:
+            volleyball_holder = self.logic.state.players[volleyball.holder_id]
+            if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
+                throw_direction = ThrowDirector.get_throw_direction(beater, volleyball_holder)
+                self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
+
                     
 
     def chasers_action(self, sorted_hoop_distances, chaser_hoop_squared_distances, volleyball: VolleyBall, dt: float):
