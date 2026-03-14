@@ -63,7 +63,7 @@ class BasicLogic:
         Args:
             dt: Delta game time (game time since last frame) in seconds
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         for player in self.state.players.values():
             # Update player velocity based on direction and current state
             

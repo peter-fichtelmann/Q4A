@@ -70,7 +70,7 @@ class DodgeballLogic:
         Collision detection uses precomputed distances sorted nearest-first
         for efficiency. Stops checking a dodgeball once an interaction occurs.
         """
-        dodgeballs = self.state.get_dodgeballs()
+        dodgeballs = self.state.dodgeballs
         if len(dodgeballs) == 0:
             return  # No dodgeballs exist
         for dodgeball in dodgeballs:
@@ -243,7 +243,7 @@ class DodgeballLogic:
                     pass
             return True
 
-        dodgeballs = self.state.get_dodgeballs()
+        dodgeballs = self.state.dodgeballs
         # if len(dodgeballs) == 0:
         #     return # no dodgeball exist
         if len(dodgeballs) == 3:

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import json
-from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType
+from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType, VolleyBall, DodgeBall
 
 @dataclass
 class GameState:
@@ -15,6 +15,8 @@ class GameState:
     team_1 = 1
     players: Dict[str, Player] = field(default_factory=dict)  # player_id -> Player
     balls: Dict[str, Ball] = field(default_factory=dict)       # ball_id -> Ball
+    volleyball: VolleyBall = field(init=False)
+    dodgeballs: List[DodgeBall] = field(default_factory=list)
     hoops: Dict[str, Hoop] = field(default_factory=dict)       # hoop_id -> Hoop
     score: List[int] = field(default_factory=lambda: [0, 0])  # [team0, team1]
     max_player_radius: float = field(init=False)
@@ -37,6 +39,13 @@ class GameState:
 
     def __post_init__(self):
         self.max_player_radius = max((p.radius for p in self.players.values()), default=0.0)
+        dodgeballs = []
+        for ball in self.balls.values():
+            if ball.ball_type == BallType.VOLLEYBALL:
+                self.volleyball = ball
+            elif ball.ball_type == BallType.DODGEBALL:
+                dodgeballs.append(ball)
+        self.dodgeballs = dodgeballs
     
     def add_player(self, player: Player) -> None:
         """Add a player to the game state."""
@@ -70,17 +79,6 @@ class GameState:
         """Retrieve a ball by ID."""
         return self.balls.get(ball_id)
     
-    def get_volleyball(self) -> Optional[Ball]:
-        """Get the volleyball (returns first one found)."""
-        for ball in self.balls.values():
-            if ball.ball_type == BallType.VOLLEYBALL:
-                return ball
-        return None
-    
-    def get_dodgeballs(self) -> List[Ball]:
-        """Get all dodgeballs."""
-        return [b for b in self.balls.values() if b.ball_type == BallType.DODGEBALL]
-    
     def update_score(self, team: int, points: int) -> None:
         """Add points to a team's score."""
         if team in [0, 1]:
@@ -107,8 +105,11 @@ class GameState:
             midline_x=self.midline_x,
             players={pid: player.copy() for pid, player in self.players.items()},
             balls={bid: ball.copy() for bid, ball in self.balls.items()},
+            volleyball=self.volleyball.copy(),
+            dodgeballs=[dodgeball.copy() for dodgeball in self.dodgeballs],
             hoops=self.hoops,
             score=self.score,
+            max_player_radius=self.max_player_radius,
             game_time=self.game_time,
             delay_of_game_time_limit=self.delay_of_game_time_limit,
             delay_of_game_velocity_x_threshold=self.delay_of_game_velocity_x_threshold,

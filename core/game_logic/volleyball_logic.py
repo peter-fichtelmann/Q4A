@@ -37,7 +37,7 @@ class VolleyballLogic:
         
         Once picked up, volleyball follows the player's movement.
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         if not volleyball:
             return  # Volleyball either doesn't exist or is held
         if volleyball.holder_id is not None:
@@ -90,7 +90,7 @@ class VolleyballLogic:
         
         Dead volleyball cannot score.
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         if not volleyball:
             return  # Volleyball doesn't exist
         if volleyball.is_dead:
@@ -162,7 +162,7 @@ class VolleyballLogic:
         The volleyball becomes alive when:
         - It is held by the keeper of the team that possesses it (was scored against) in their own half
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         if volleyball is None:
             return
         if not volleyball.is_dead:

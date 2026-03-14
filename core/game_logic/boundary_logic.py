@@ -37,7 +37,7 @@ class BoundaryLogic:
         # Only for players which are not knocked out
         # if player in same team as hoop and within player.radius of the square of hoop thickness and hoop radius
         # reset position to previous position
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         for player in self.state.players.values():
             if player.role == PlayerRole.CHASER:
                 for hoop in self.state.hoops.values():
@@ -145,7 +145,7 @@ class BoundaryLogic:
         - Volleyball holder is cleared (ball becomes free)
         - Inbounder must travel to the ball and bring it back into play
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         if not volleyball:
             return
         elif volleyball.inbounder is not None:
@@ -185,7 +185,7 @@ class BoundaryLogic:
         Args:
             dt: Delta game time since last frame in seconds
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         if not volleyball:
             return
         elif volleyball.inbounder is None:
@@ -262,7 +262,7 @@ class BoundaryLogic:
         Args:
             dt: Delta game time since last frame in seconds.
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
         if not volleyball:
             return
         if not volleyball.is_dead:

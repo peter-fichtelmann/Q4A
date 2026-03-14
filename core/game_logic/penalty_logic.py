@@ -30,7 +30,7 @@ class PenaltyLogic:
         Args:
             dt: Delta game time since last frame in seconds
         """
-        volleyball = self.state.get_volleyball()
+        volleyball = self.state.volleyball
 
         def _check_delay_velocity(volleyball: VolleyBall) -> bool|float:
             """
@@ -167,11 +167,11 @@ class PenaltyLogic:
             self.logger.warning(f"Potential third dodgeball interference if beat attempt not successful")
         else:
             self.logger.warning(f"Third dodgeball interference by team {player.team} of player {player.id} with dodgeball {dodgeball.id}")
-            volleyball = self.state.get_volleyball()
+            volleyball = self.state.volleyball
             # Back to hoops for player
             player.is_knocked_out = True
             second_dodgeball_priority = {}
-            for second_dodgeball in self.state.get_dodgeballs():
+            for second_dodgeball in self.state.dodgeballs:
                 if second_dodgeball.id == dodgeball.id:
                     continue
                 priority = 0.0
@@ -206,5 +206,5 @@ class PenaltyLogic:
             self.state.third_dodgeball = None
             self.state.third_dodgeball_team = None
             self.state.potential_third_dodgeball_interference_kwargs = None
-            for dodgeball in self.state.get_dodgeballs():
+            for dodgeball in self.state.dodgeballs:
                 dodgeball.beat_attempt_time = 0.0 # reset beat attempt time

@@ -46,7 +46,7 @@ class HoopDefence:
         self.move_around_hoop_blockage = move_around_hoop_blockage
 
     def __call__(self, dt: float, assigned_beater_ids: List[str]):
-        volleyball = self.logic.state.get_volleyball()
+        volleyball = self.logic.state.volleyball
         
         volleyball_hoop_distances = {
             hoop.id: (volleyball.position.x - hoop.position.x) ** 2 + (volleyball.position.y - hoop.position.y) ** 2

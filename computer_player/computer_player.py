@@ -83,7 +83,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 self.defence_hoops_0.append(hoop)
             else:
                 self.defence_hoops_1.append(hoop)
-        volleyball_radius = self.logic.state.get_volleyball().radius if self.logic.state.get_volleyball() is not None else 0
+        volleyball_radius = self.logic.state.volleyball.radius if self.logic.state.volleyball is not None else 0
         self.move_around_hoop_blockage_team_0 = MoveAroundHoopBlockage(
             defence_hoops=self.defence_hoops_0,
             move_buffer_factor=self.move_buffer_factor,
@@ -216,7 +216,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 if beater.has_ball and beater.id in self.cpu_player_ids:
                     # check if in defence and volleyball holding chaser close, if so throw at volleyball holder and get the assigned ball
                     if beater.team != attacking_team:
-                        volleyball = self.logic.state.get_volleyball()
+                        volleyball = self.logic.state.volleyball
                         if volleyball.holder_id is not None:
                             volleyball_holder = self.logic.state.players[volleyball.holder_id]
                             if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
@@ -315,7 +315,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
 
     def _determine_attacking_team(self, dt: float) -> Tuple[int, str, Vector2]:
         """Return the attacking team and player id of the chaser/keeper assigned to the volleyball"""
-        volleyball  = self.logic.state.get_volleyball()
+        volleyball  = self.logic.state.volleyball
         if volleyball.turnover_to_player is not None:
             player = self.logic.state.players[volleyball.turnover_to_player]
             return player.team, player.id, None

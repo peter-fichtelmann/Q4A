@@ -205,7 +205,7 @@ class DiamondAttack:
                 next_volleyball_holder_id: str,
                 intercepting_position: Optional[Vector2] = None
                 ):
-        volleyball = self.logic.state.get_volleyball()
+        volleyball = self.logic.state.volleyball
         attacking_chaser_keeper = [self.logic.state.players[player_id] for player_id in self.attacking_chaser_keeper_ids]
         not_knocked_out_chaser_keeper = [
             player for player in attacking_chaser_keeper if (
