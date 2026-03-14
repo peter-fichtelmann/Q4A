@@ -55,7 +55,7 @@ class DodgeballLogic:
                         if dodgeball.turnover_to_player is not None:
                             dodgeball.turnover_to_player = None
                             player.is_receiving_turnover_ball = False
-                        self.logger.info(f"Player {player.id} picked up dodgeball {dodgeball.id}")
+                        self.logger.info("Player %s picked up dodgeball %s", player.id, dodgeball.id)
                     return True
         return False
 
@@ -74,30 +74,35 @@ class DodgeballLogic:
         if len(dodgeballs) == 0:
             return  # No dodgeballs exist
         for dodgeball in dodgeballs:
+            # Distances are sorted ascending; once above this threshold no player can interact.
+            max_interaction_dist_sq = (dodgeball.radius + self.state.max_player_radius) ** 2
             # for other_id, distance in self._get_sorted_distances(dodgeball.id).items():
             for other_id, distance in self.state.squared_distances.get(dodgeball.id, []):
-                if other_id in self.state.players.keys():
-                    player = self.state.players[other_id]
-                    if not player.is_knocked_out:
-                        if distance < (player.radius + dodgeball.radius) ** 2:
-                            if dodgeball.turnover_to_player is not None and dodgeball.turnover_to_player != player.id:
-                                continue # dodgeball in turnover can only be picked up by designated player
-                            else:
-                                # check if loose dead dodgeball or beater of same team
-                                if dodgeball.possession_team is None or (
-                                    dodgeball.possession_team == player.team and player.role == PlayerRole.BEATER
-                                    ) or (
-                                    dodgeball.turnover_to_player is not None and dodgeball.possession_team != player.team and player.is_receiving_turnover_ball
-                                    ): # ball pickup with dead dodgeball or beater own team or ball in turnover to other team
-                                    if self._check_dodgeball_possession_of_player(player, dodgeball):
-                                        break
-                                else: # beat checks
-                                    self._check_beats(player, dodgeball)
-                                    # if self._check_beats(player, dodgeball):
-                                        # break only one beat allowed?
+                if distance > max_interaction_dist_sq:
+                    break
+                player = self.state.players.get(other_id)
+                if player is None:
+                    continue
+                if not player.is_knocked_out:
+                    if distance < (player.radius + dodgeball.radius) ** 2:
+                        if dodgeball.turnover_to_player is not None and dodgeball.turnover_to_player != player.id:
+                            continue # dodgeball in turnover can only be picked up by designated player
+                        else:
+                            # check if loose dead dodgeball or beater of same team
+                            if dodgeball.possession_team is None or (
+                                dodgeball.possession_team == player.team and player.role == PlayerRole.BEATER
+                                ) or (
+                                dodgeball.turnover_to_player is not None and dodgeball.possession_team != player.team and player.is_receiving_turnover_ball
+                                ): # ball pickup with dead dodgeball or beater own team or ball in turnover to other team
+                                if self._check_dodgeball_possession_of_player(player, dodgeball):
+                                    break
+                            else: # beat checks
+                                self._check_beats(player, dodgeball, dodgeballs)
+                                # if self._check_beats(player, dodgeball):
+                                    # break only one beat allowed?
 
 
-    def _check_beats(self, player: Player, dodgeball: Ball) -> bool:
+    def _check_beats(self, player: Player, dodgeball: Ball, dodgeballs: list) -> bool:
         """
         Check if a dodgeball hits (beats) a player and handle the knockout.
         
@@ -148,7 +153,7 @@ class DodgeballLogic:
                 ball.velocity.x = 0
                 ball.velocity.y = 0
                 ball.possession_team = None
-                self.logger.info(f"Player {player.id} dropped ball {ball.id} due to knockout")
+                self.logger.info("Player %s dropped ball %s due to knockout", player.id, ball.id)
                 player.has_ball = None
             # dodgeball.possession_team = None # Only one beat at once?
             normal = Vector2(
@@ -159,8 +164,8 @@ class DodgeballLogic:
             normal.x /= normal_mag
             normal.y /= normal_mag
             dodgeball.velocity = dodgeball.velocity.reflect(normal, dodgeball.reflect_velocity_loss)
-            self.logger.info(f"Player {player.id} was knocked out by dodgeball {dodgeball.id}")
-            for dodgeball in self.state.get_dodgeballs():
+            self.logger.info("Player %s was knocked out by dodgeball %s", player.id, dodgeball.id)
+            for dodgeball in dodgeballs:
                 dodgeball.beat_attempt_time = 0.0 # reset beat attempt time
             self.state.potential_third_dodgeball_interference_kwargs = None # reset third dodgeball interference kwargs
             self.state.third_dodgeball = None
@@ -225,7 +230,7 @@ class DodgeballLogic:
                         if thrown_dodgeball.beat_attempt_time == 0.0:
                             # "initialize" beat_attempt_time
                             thrown_dodgeball.beat_attempt_time = dt
-                            self.logger.debug(f"Initiating beat attempt time for dodgeball {thrown_dodgeball.id}")
+                            self.logger.debug("Initiating beat attempt time for dodgeball %s", thrown_dodgeball.id)
 
                 
                     # reasonable beat attempt 
@@ -276,7 +281,7 @@ class DodgeballLogic:
                     third_dodgeball_id = dodgeballs_per_team['dead_dodgeballs'][0]
                     # third_dodgeball = self.state.balls[third_dodgeball_id]
                     self.state.third_dodgeball = third_dodgeball_id
-                    self.logger.info(f"Third dodgeball {third_dodgeball_id} assigned to team {self.state.third_dodgeball_team}")
+                    self.logger.info("Third dodgeball %s assigned to team %s", third_dodgeball_id, self.state.third_dodgeball_team)
             else:
                 # third dodgeball exists
                 # checks if still third dodgeball

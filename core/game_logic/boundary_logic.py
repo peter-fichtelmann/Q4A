@@ -1,5 +1,6 @@
 import logging
 import random
+from core.game_logic.utility_logic import UtilityLogic
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 from typing import Optional
@@ -151,19 +152,20 @@ class BoundaryLogic:
             return  # Inbounding procedure already started
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.state.squared_distances.get(volleyball.id, []):
-            if other_id in self.state.players.keys():
-                player = self.state.players[other_id]
-                if player.team != volleyball.possession_team: # inbounding player other team
-                    if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
-                        if player.inbounding is None:
-                            if not player.has_ball:
-                                if not player.is_knocked_out: # what happens if all chasers/keeper of team are knocked out?
-                                    self.logger.info(f"Inbounding procedure started by player {player.id} for volleyball {volleyball.id}")
-                                    player.inbounding = volleyball.id
-                                    player.dodgeball_immunity = True # chaser/keeper immune while inbounding
-                                    volleyball.inbounder = player.id
-                                    volleyball.holder_id = None
-                                    break
+            player = self.state.players.get(other_id)
+            if player is None:
+                continue
+            if player.team != volleyball.possession_team: # inbounding player other team
+                if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
+                    if player.inbounding is None:
+                        if not player.has_ball:
+                            if not player.is_knocked_out: # what happens if all chasers/keeper of team are knocked out?
+                                self.logger.info(f"Inbounding procedure started by player {player.id} for volleyball {volleyball.id}")
+                                player.inbounding = volleyball.id
+                                player.dodgeball_immunity = True # chaser/keeper immune while inbounding
+                                volleyball.inbounder = player.id
+                                volleyball.holder_id = None
+                                break
 
     def _inbounding_free_way(self, dt: float) -> None:
         """
@@ -199,48 +201,50 @@ class BoundaryLogic:
         # Check players too close to inbounding player
         # for other_id, distance in self._get_sorted_distances(inbounding_player.id).items():
         for other_id, distance in self.state.squared_distances.get(inbounding_player.id, []):
-            if other_id in self.state.players.keys():
-                other_player = self.state.players[other_id]
-                if distance < (4 * (other_player.radius)) ** 2:
-                    move_away_speed = other_player.max_speed
-                    move_vector, normal = self._calculate_move_away_vector(inbounding_player, other_player, dt, move_away_speed)
-                    if move_vector is not None:
-                        players_to_move[other_id] = move_vector
-                        normals_players_to_move[other_id] = normal
-                else:
-                    break
+            other_player = self.state.players.get(other_id)
+            if other_player is None:
+                continue
+            if distance < (4 * (other_player.radius)) ** 2:
+                move_away_speed = other_player.max_speed
+                move_vector, normal = self._calculate_move_away_vector(inbounding_player, other_player, dt, move_away_speed)
+                if move_vector is not None:
+                    players_to_move[other_id] = move_vector
+                    normals_players_to_move[other_id] = normal
+            else:
+                break
         
         # Check players too close to volleyball (but prioritize moving away from inbounding player)
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.state.squared_distances.get(volleyball.id, []):
-            if other_id in self.state.players.keys():
-                if other_id != inbounding_player.id:
-                    other_player = self.state.players[other_id]
-                    if distance < (4 * (other_player.radius)) ** 2:
-                        # Only move away from volleyball if not already moving away from inbounding player
-                        move_away_speed = other_player.max_speed
-                        move_vector, normal = self._calculate_move_away_vector(volleyball, other_player, dt, move_away_speed)
-                        if move_vector is not None:
-                            if players_to_move.get(other_id) is not None:
-                                move_vector_existing = players_to_move[other_id]
-                                normal_existing = normals_players_to_move[other_id]
-                                # if normals in opposite direction, add smell perpendicular vector to avoid deadlock
-                                similar_orientation = (normal.x * normal_existing.y - normal.y * normal_existing.x)**2 < 0.15
-                                opposite_direction = (normal.x * normal_existing.x + normal.y * normal_existing.y) < 0
-                                # print((normal.x * normal_existing.y - normal.y * normal_existing.x)**2)
-                                # print('normals:', normal.x, normal.y, normal_existing.x, normal_existing.y)
-                                # print(similar_orientation, opposite_direction)
-                                if similar_orientation and opposite_direction: # same direction
-                                    # add small perpendicular vector with random direction to previous move vector
-                                    sign = random.choice([-1, 1])
-                                    move_vector.x = move_vector_existing.x + sign * normal_existing.y * move_away_speed * dt * 0.5
-                                    move_vector.y = move_vector_existing.y + sign * -normal_existing.x * move_away_speed * dt * 0.5
-                                    self.logger.debug(f"Added perpendicular vector to avoid deadlock for player {other_id} during inbounding free way")
-                                else:
-                                    continue
-                            players_to_move[other_id]= move_vector
-                    else:
-                        break
+            if other_id != inbounding_player.id:
+                other_player = self.state.players.get(other_id)
+                if other_player is None:
+                    continue
+                if distance < (4 * (other_player.radius)) ** 2:
+                    # Only move away from volleyball if not already moving away from inbounding player
+                    move_away_speed = other_player.max_speed
+                    move_vector, normal = self._calculate_move_away_vector(volleyball, other_player, dt, move_away_speed)
+                    if move_vector is not None:
+                        if players_to_move.get(other_id) is not None:
+                            move_vector_existing = players_to_move[other_id]
+                            normal_existing = normals_players_to_move[other_id]
+                            # if normals in opposite direction, add smell perpendicular vector to avoid deadlock
+                            similar_orientation = (normal.x * normal_existing.y - normal.y * normal_existing.x)**2 < 0.15
+                            opposite_direction = (normal.x * normal_existing.x + normal.y * normal_existing.y) < 0
+                            # print((normal.x * normal_existing.y - normal.y * normal_existing.x)**2)
+                            # print('normals:', normal.x, normal.y, normal_existing.x, normal_existing.y)
+                            # print(similar_orientation, opposite_direction)
+                            if similar_orientation and opposite_direction: # same direction
+                                # add small perpendicular vector with random direction to previous move vector
+                                sign = random.choice([-1, 1])
+                                move_vector.x = move_vector_existing.x + sign * normal_existing.y * move_away_speed * dt * 0.5
+                                move_vector.y = move_vector_existing.y + sign * -normal_existing.x * move_away_speed * dt * 0.5
+                                self.logger.debug(f"Added perpendicular vector to avoid deadlock for player {other_id} during inbounding free way")
+                            else:
+                                continue
+                        players_to_move[other_id]= move_vector
+                else:
+                    break
         
         # Apply all movements
         for player_id, move_vector in players_to_move.items():
@@ -264,22 +268,24 @@ class BoundaryLogic:
         if not volleyball.is_dead:
             return  # Volleyball not dead, no free way needed
         keeper = None
-        for player in self.state.players.values():
+        players = self.state.players.values()
+        for player in players:
             if player.role == PlayerRole.KEEPER and player.team == volleyball.possession_team:
                 keeper = player
                 break
-        for player in self.state.players.values():
+        for player in players:
             # Check players too close to keeper
             # for other_id, distance in self._get_sorted_distances(keeper.id).items():
             for other_id, distance in self.state.squared_distances.get(keeper.id, []):
-                if other_id in self.state.players.keys():
-                    other_player = self.state.players[other_id]
-                    if distance < (4 * (other_player.radius)) ** 2:
-                        move_away_speed = other_player.max_speed
-                        move_vector, normal = self._calculate_move_away_vector(keeper, other_player, dt, move_away_speed)
-                        if move_vector is not None:
-                            other_player.position.x += move_vector.x
-                            other_player.position.y += move_vector.y
+                other_player = self.state.players.get(other_id)
+                if other_player is None:
+                    continue
+                if distance < (4 * (other_player.radius)) ** 2:
+                    move_away_speed = other_player.max_speed
+                    move_vector, normal = self._calculate_move_away_vector(keeper, other_player, dt, move_away_speed)
+                    if move_vector is not None:
+                        other_player.position.x += move_vector.x
+                        other_player.position.y += move_vector.y
         
 
     def _calculate_move_away_vector(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> Optional[tuple[Vector2, Vector2]]:
@@ -309,7 +315,7 @@ class BoundaryLogic:
             move_away_entity.position.x - move_free_entity.position.x,
             move_away_entity.position.y - move_free_entity.position.y
         )
-        normal_mag = (normal.x**2 + normal.y**2) ** 0.5
+        normal_mag = UtilityLogic._magnitude(normal)
         if normal_mag == 0:
             self.logger.warning("Zero normal magnitude in inbounding free way (entities at same position)")
             return None

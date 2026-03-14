@@ -38,35 +38,39 @@ class VolleyballLogic:
         Once picked up, volleyball follows the player's movement.
         """
         volleyball = self.state.get_volleyball()
-        if not volleyball or volleyball.holder_id is not None:
+        if not volleyball:
             return  # Volleyball either doesn't exist or is held
         if volleyball.holder_id is not None:
             return # volleyball already in possession
+        max_pickup_dist_sq = (volleyball.radius + self.state.max_player_radius) ** 2
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.state.squared_distances.get(volleyball.id, []):
-            if other_id in self.state.players.keys():
-                player = self.state.players[other_id]
-                if volleyball.turnover_to_player is not None and volleyball.turnover_to_player != player.id:
-                    continue # volleyball in turnover can only be picked up by designated player
-                if not player.is_knocked_out:
-                    if player.catch_cooldown <= 0.0:
-                        if volleyball.is_dead and not (player.role == PlayerRole.KEEPER and volleyball.possession_team == player.team):
-                            continue # only keeper possess dead volleyball
-                        if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
-                            if distance < (player.radius + volleyball.radius) ** 2:
-                                if volleyball.inbounder is None or player.id == volleyball.inbounder: # no inbounding or inbounding player
-                                    # Player picks up the volleyball
-                                    volleyball.holder_id = player.id
-                                    volleyball.possession_team = player.team
-                                    player.has_ball = volleyball.id
-                                    # volleyball.position = player.position
-                                    if volleyball.turnover_to_player is not None:
-                                        volleyball.turnover_to_player = None
-                                        player.is_receiving_turnover_ball = False
-                                    self.logger.info(f"Player {player.id} picked up the volleyball")
-                                    break
-                            else:
-                                break  # Beyond pickup range, stop checking further players
+            if distance > max_pickup_dist_sq:
+                break
+            player = self.state.players.get(other_id)
+            if player is None:
+                continue
+            if volleyball.turnover_to_player is not None and volleyball.turnover_to_player != player.id:
+                continue # volleyball in turnover can only be picked up by designated player
+            if not player.is_knocked_out:
+                if player.catch_cooldown <= 0.0:
+                    if volleyball.is_dead and not (player.role == PlayerRole.KEEPER and volleyball.possession_team == player.team):
+                        continue # only keeper possess dead volleyball
+                    if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
+                        if distance < (player.radius + volleyball.radius) ** 2:
+                            if volleyball.inbounder is None or player.id == volleyball.inbounder: # no inbounding or inbounding player
+                                # Player picks up the volleyball
+                                volleyball.holder_id = player.id
+                                volleyball.possession_team = player.team
+                                player.has_ball = volleyball.id
+                                # volleyball.position = player.position
+                                if volleyball.turnover_to_player is not None:
+                                    volleyball.turnover_to_player = None
+                                    player.is_receiving_turnover_ball = False
+                                self.logger.info("Player %s picked up the volleyball", player.id)
+                                break
+                        else:
+                            break  # Beyond pickup range, stop checking further players
 
     def _check_goals(self) -> None:
         """
