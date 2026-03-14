@@ -342,9 +342,54 @@ class BeaterThrowDecider:
 class ThrowDirector:
     """Calculates the throw vector to a moving receiver e.g. for passes and beats"""
     @staticmethod
-    def get_throw_direction(player: Player, receiver: Player):
+    def get_throw_direction_static_receiver(player: Player, receiver: Player):
         return  Vector2(
             receiver.position.x - player.position.x,
             receiver.position.y - player.position.y
         )
-        
+
+    @staticmethod
+    def get_throw_direction_moving_receiver(player: Player, receiver: Player):
+        """
+        Assume constant ball velocity.
+
+        Used first solution via sympy solve:
+
+        import sympy as sp
+
+            v_b_x, v_b_y = sp.symbols('v_b_x v_b_y', real=True, imaginary=False)
+            z = sp.symbols('z', positive=True, real=True, imaginary=False)
+            s_b_x, s_b_y, s_p_x, s_p_y = sp.symbols('s_b_x s_b_y s_p_x s_p_y', constant=True, real=True, nonnegative=True, imaginary=False)
+            v_p_x, v_p_y = sp.symbols('v_p_x v_p_y', constant=True, real=True, imaginary=False)
+            v_b_value_sq = sp.symbols('v_b_value_sq', constant=True, positive=True, real=True, imaginary=False)
+            # Your example system
+            eq1 = (s_b_x - s_p_x) + (v_b_x - v_p_x) * dt
+            eq2 = (s_b_y - s_p_y) + (v_b_y - v_p_y) * dt
+            eq3 = v_b_x**2 + v_b_y**2 - v_b_value_sq
+
+            solutions = sp.nonlinsolve([eq1, eq2, eq3], (v_b_x, v_b_y, dt))
+        """
+        # assume ball starts at player position
+        s_b_x = player.position.x
+        s_b_y = player.position.y
+        s_p_x = receiver.position.x
+        s_p_y = receiver.position.y
+        v_p_x = receiver.velocity.x
+        v_p_y = receiver.velocity.y
+        v_b_value_sq = player.throw_velocity**2
+        # print('s_b_x', s_b_x)
+        # print('s_b_y', s_b_y)
+        # print('s_p_x', s_p_x)
+        # print('s_p_y', s_p_y)
+        # print('v_p_x', v_p_x)
+        # print('v_p_y', v_p_y)
+        # print('v_b_value_sq', v_b_value_sq)
+        root = math.sqrt(s_b_x**2*v_b_value_sq - s_b_x**2*v_p_y**2 + 2*s_b_x*s_b_y*v_p_x*v_p_y - 2*s_b_x*s_p_x*v_b_value_sq + 2*s_b_x*s_p_x*v_p_y**2 - 2*s_b_x*s_p_y*v_p_x*v_p_y + s_b_y**2*v_b_value_sq - s_b_y**2*v_p_x**2 - 2*s_b_y*s_p_x*v_p_x*v_p_y - 2*s_b_y*s_p_y*v_b_value_sq + 2*s_b_y*s_p_y*v_p_x**2 + s_p_x**2*v_b_value_sq - s_p_x**2*v_p_y**2 + 2*s_p_x*s_p_y*v_p_x*v_p_y + s_p_y**2*v_b_value_sq - s_p_y**2*v_p_x**2)
+        v_b_x = (-s_b_x*s_b_y*v_p_y + s_b_x*s_p_y*v_p_y - s_b_x*root + s_b_y**2*v_p_x + s_b_y*s_p_x*v_p_y - 2*s_b_y*s_p_y*v_p_x - s_p_x*s_p_y*v_p_y + s_p_x*root + s_p_y**2*v_p_x)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2) 
+        v_b_y = (s_b_x**2*v_p_y - s_b_x*s_b_y*v_p_x - 2*s_b_x*s_p_x*v_p_y + s_b_x*s_p_y*v_p_x + s_b_y*s_p_x*v_p_x - s_b_y*root + s_p_x**2*v_p_y - s_p_x*s_p_y*v_p_x + s_p_y*root)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2)
+        # dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)/(v_b_value_sq - v_p_x**2 - v_p_y**2) + root/(v_b_value_sq - v_p_x**2 - v_p_y**2)
+        # print('v_b_x', v_b_x)
+        # print('v_b_y', v_b_y)
+        # print('dt', dt)
+        return Vector2(v_b_x, v_b_y)
+        # dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)/(v_b_value_sq - v_p_x**2 - v_p_y**2) + root/(v_b_value_sq - v_p_x**2 - v_p_y**2)

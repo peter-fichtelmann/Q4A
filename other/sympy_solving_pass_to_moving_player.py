@@ -2,8 +2,9 @@ import sympy as sp
 
 v_b_x, v_b_y = sp.symbols('v_b_x v_b_y')
 z = sp.symbols('z', positive=True)
-s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value = sp.symbols('s_b_x s_b_y s_p_x s_p_y v_p_x v_p_y v_b_value', constant=True)
-a_value = sp.symbols('a_value', constant=True)
+s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y = sp.symbols('s_b_x s_b_y s_p_x s_p_y v_p_x v_p_y', constant=True)
+v_b_value = sp.symbols('v_b_value', constant=True, positive=True)
+a_value = sp.symbols('a_value', constant=True, positive=True)
 # Your example system
 a = (-a_value*v_b_x/v_b_value)
 eq1 = 2 * (s_b_x - s_p_x) / a + 2 * (v_b_x - v_p_x) / a * z + z**2

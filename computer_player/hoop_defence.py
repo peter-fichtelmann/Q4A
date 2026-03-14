@@ -140,7 +140,7 @@ class HoopDefence:
         if volleyball.holder_id is not None:
             volleyball_holder = self.logic.state.players[volleyball.holder_id]
             if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
-                throw_direction = ThrowDirector.get_throw_direction(beater, volleyball_holder)
+                throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, volleyball_holder)
                 self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
 
                     

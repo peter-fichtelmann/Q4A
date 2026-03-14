@@ -220,7 +220,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         if volleyball.holder_id is not None:
                             volleyball_holder = self.logic.state.players[volleyball.holder_id]
                             if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
-                                throw_direction = ThrowDirector.get_throw_direction(beater, volleyball_holder)
+                                throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, volleyball_holder)
                                 self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
                                 continue
                     # check for pass to beater buddy, else pass back to hoops   
@@ -228,7 +228,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     if not (beater_buddy.is_knocked_out) and not (beater_buddy.id in assigned_beater_ids) and not (beater_buddy.has_ball):
                         # pass to teammate if they not knocked out, not assigned a dodgeball or already having a dodgeball
                         self.logger.debug(f"Beater {beater.id} has ball and is passing to teammate {beater_buddy.id}")
-                        throw_direction = ThrowDirector.get_throw_direction(beater, beater_buddy)
+                        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, beater_buddy)
                         self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
                         # move beater buddy to throwing player (at the moment only for one dt step)
                         beater_buddy.direction = Vector2(
