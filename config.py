@@ -2,6 +2,10 @@ import logging
 
 class Config:
     GAME_LOGIC_UPDATE_LOG_LEVEL = logging.DEBUG
+    GAME_LOGIC_STEP_PROFILING_ENABLED = True
+    GAME_LOGIC_STEP_PROFILE_START_TICK = 0
+    GAME_LOGIC_STEP_PROFILE_NUM_TICKS = 300
+    GAME_LOGIC_STEP_PROFILE_TOP_N = 40
     FPS = 20 # frame rate per 
     GAME_TIME_TO_REAL_TIME_RATIO = 3 # 1 second real time = 3 seconds game time
     PITCH_WIDTH = 33

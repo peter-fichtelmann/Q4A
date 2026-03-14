@@ -88,6 +88,11 @@ class GameRoom:
         self.max_history_seconds: int = 120
         # internal counter for broadcast logging
         self._broadcast_count = 0
+        # per-room update tick counter (increments each game_logic.update call)
+        self.game_tick_count: int = 0
+        # one-shot profiling window state
+        self.step_profile_started: bool = False
+        self.step_profile_finished: bool = False
 
         self._initialize_pitch()
         # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
@@ -942,6 +947,28 @@ async def startup_event():
 async def health_check():
     return Response(content='{"status": "ok"}', status_code=200)
 
+
+def _log_step_profile_report(room: GameRoom) -> None:
+    """Log step-profiler summary for a room."""
+    report = room.game_logic.get_step_profile_report()
+    if not report:
+        logger.info(f"No step profiling data captured for room={room.room_id}")
+        return
+
+    top_n = max(1, int(getattr(Config, 'GAME_LOGIC_STEP_PROFILE_TOP_N', len(report))))
+    logger.info(
+        f"Step profile summary room={room.room_id} profiled_ticks={max(0, room.game_tick_count - int(Config.GAME_LOGIC_STEP_PROFILE_START_TICK))} top_n={top_n}"
+    )
+    for row in report[:top_n]:
+        logger.info(
+            "step=%s calls=%s avg_ms=%.4f max_ms=%.4f total_ms=%.4f",
+            row['step'],
+            row['calls'],
+            row['avg_ms'],
+            row['max_ms'],
+            row['total_ms'],
+        )
+
 async def game_loop_manager():
     """Manage game loops for all active rooms"""
     clock_tick = 1.0 / Config.FPS
@@ -957,9 +984,28 @@ async def game_loop_manager():
             continue
         for room_id, room in list(lobby_manager.rooms.items()):
             if room.game_started:
+                if Config.GAME_LOGIC_STEP_PROFILING_ENABLED and not room.step_profile_finished:
+                    profile_start_tick = max(0, int(Config.GAME_LOGIC_STEP_PROFILE_START_TICK))
+                    profile_num_ticks = max(0, int(Config.GAME_LOGIC_STEP_PROFILE_NUM_TICKS))
+                    profile_end_tick = profile_start_tick + profile_num_ticks
+
+                    if profile_num_ticks > 0:
+                        if (not room.step_profile_started) and room.game_tick_count >= profile_start_tick:
+                            room.game_logic.enable_step_profiling(reset_stats=True)
+                            room.step_profile_started = True
+                            logger.info(
+                                f"Enabled game_logic step profiling for room={room.room_id} at room_tick={room.game_tick_count}"
+                            )
+
+                        if room.step_profile_started and room.game_tick_count >= profile_end_tick:
+                            room.game_logic.disable_step_profiling()
+                            room.step_profile_finished = True
+                            _log_step_profile_report(room)
+
                 # Update game logic
                 game_logic_start = time.monotonic()
                 room.game_logic.update(clock_tick_game)
+                room.game_tick_count += 1
                 logic_update_times.append(time.monotonic() - game_logic_start)
                 if room.computer_player is not None and (tick_counter % Config.COMPUTER_PLAYER_TICK_RATE == 0):
                     cpu_player_start = time.monotonic()

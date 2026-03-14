@@ -49,10 +49,12 @@ class PhysicalContactLogic:
         # TODO prevent any contact with protected keeper
 
         # reset in contact player ids from last update (in separate loop because in other loop attributes of other players set)
-        for player in self.state.players.values():
+        players = list(self.state.players.values())
+        for player in players:
             # resetting each update and adding back if still persisting
             player.in_contact_player_ids = []
-        for i, player in enumerate(list(self.state.players.values())[:-1]):
+        
+        for i, player in enumerate(players[:-1]):
             if player.is_knocked_out:
                 continue
             # for other_id, distance in self._get_sorted_distances(player.id).items():
