@@ -15,11 +15,11 @@ class GameState:
     team_1 = 1
     players: Dict[str, Player] = field(default_factory=dict)  # player_id -> Player
     balls: Dict[str, Ball] = field(default_factory=dict)       # ball_id -> Ball
-    volleyball: VolleyBall = field(init=False)
+    volleyball: VolleyBall = None
     dodgeballs: List[DodgeBall] = field(default_factory=list)
     hoops: Dict[str, Hoop] = field(default_factory=dict)       # hoop_id -> Hoop
     score: List[int] = field(default_factory=lambda: [0, 0])  # [team0, team1]
-    max_player_radius: float = field(init=False)
+    max_player_radius: float = 0.35
     squared_distances: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
     squared_distances_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
     game_time: float = 0.0                                    # Seconds elapsed
@@ -36,16 +36,6 @@ class GameState:
     set_score: Optional[int] = None                           # Snitch capture score
     game_phase: str = "waiting"  # waiting, active, ended
     seeker_floor_seconds: int = 1200  # Time before seeker can enter
-
-    def __post_init__(self):
-        self.max_player_radius = max((p.radius for p in self.players.values()), default=0.0)
-        dodgeballs = []
-        for ball in self.balls.values():
-            if ball.ball_type == BallType.VOLLEYBALL:
-                self.volleyball = ball
-            elif ball.ball_type == BallType.DODGEBALL:
-                dodgeballs.append(ball)
-        self.dodgeballs = dodgeballs
     
     def add_player(self, player: Player) -> None:
         """Add a player to the game state."""
@@ -74,6 +64,16 @@ class GameState:
     def add_ball(self, ball: Ball) -> None:
         """Add a ball to the game state."""
         self.balls[ball.id] = ball
+
+    def add_volleyball(self, volleyball: VolleyBall) -> None:
+        """Add the volleyball to the game state."""
+        self.volleyball = volleyball
+        self.balls[volleyball.id] = volleyball
+
+    def add_dodgeball(self, dodgeball: DodgeBall) -> None:
+        """Add a dodgeball to the game state."""
+        self.dodgeballs.append(dodgeball)
+        self.balls[dodgeball.id] = dodgeball
     
     def get_ball(self, ball_id: str) -> Optional[Ball]:
         """Retrieve a ball by ID."""

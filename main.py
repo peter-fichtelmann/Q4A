@@ -132,7 +132,7 @@ class GameRoom:
             deacceleration_rate=Config.BALL_DEACCELERATION_RATE,
             reflect_velocity_loss=Config.BALL_REFLECT_VELOCITY_LOSS
         )
-        self.game_state.add_ball(volleyball)
+        self.game_state.add_volleyball(volleyball)
 
         # Add 3 bludgers
         for i, position in enumerate([
@@ -148,7 +148,7 @@ class GameRoom:
                 reflect_velocity_loss=Config.BALL_REFLECT_VELOCITY_LOSS,
                 dead_velocity_threshold=Config.DODGEBALL_DEAD_VELOCITY_THRESHOLD
             )
-            self.game_state.add_ball(dodgeball)
+            self.game_state.add_dodgeball(dodgeball)
 
     def add_cpu_player(self, team: int, role: str):
         cpu_id = str(uuid.uuid4())
@@ -540,8 +540,6 @@ async def websocket_lobby(websocket: WebSocket):
                     for player_id, player_data in room.players.items():
                         n_players_per_role_per_team[player_data["team"]][player_data["role"]] += 1
 
-
-
                     if n_players_per_role_per_team[0]["chaser"] < Config.N_CHASERS_TEAM_0:
                         for _ in range(Config.N_CHASERS_TEAM_0 - n_players_per_role_per_team[0]["chaser"]):
                             room.add_cpu_player(team=0, role="chaser")
@@ -560,6 +558,8 @@ async def websocket_lobby(websocket: WebSocket):
                     if n_players_per_role_per_team[1]["beater"] < Config.N_BEATERS_TEAM_1:
                         for _ in range(Config.N_BEATERS_TEAM_1 - n_players_per_role_per_team[1]["beater"]):
                             room.add_cpu_player(team=1, role="beater")
+
+                    room.game_state.max_player_radius = max(player.radius for player in room.game_state.players.values())
 
                     room.game_started = True
                     # reinitialize game logic system with all players and balls
@@ -849,7 +849,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             volleyball = None
             # prefer GameState helper if available
             try:
-                volleyball = gs.get_volleyball()
+                volleyball = gs.volleyball
             except Exception:
                 volleyball = None
             v_delay = float(getattr(volleyball, 'delay_of_game_timer', 0.0) or 0.0) if volleyball else 0.0
