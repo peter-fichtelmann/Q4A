@@ -66,9 +66,7 @@ class PenaltyLogic:
             else:
                  return None # volleyball not in own half
             for other_id, distance in self.state.squared_distances_ball_player[volleyball.id]:
-                player = self.state.players.get(other_id)
-                if player is None:
-                    continue
+                player = self.state.players[other_id]
                 if player.team != volleyball.possession_team:
                     if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
                         if distance < self.state.no_delay_of_game_opponent_chaser_squared_distance_threshold:

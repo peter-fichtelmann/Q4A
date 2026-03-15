@@ -214,13 +214,16 @@ class BasicLogic:
                     continue # dead volleyball does not collide
             if ball_1.turnover_to_player is not None:
                 continue # balls in turnover do not collide
+            if ball_1.holder_id is not None:
+                continue # only check free balls
             for j in range(i + 1, n_balls):
                 ball_2 = balls[j]
-                if ball_2.is_dead if hasattr(ball_2, "is_dead") else False:
-                    continue # dead balls do not collide
+                if ball_2.ball_type == BallType.VOLLEYBALL:
+                    if ball_2.is_dead:
+                        continue # dead volleyball does not collide
                 if ball_2.turnover_to_player is not None:
                     continue # balls in turnover do not collide
-                if ball_1.holder_id is not None or ball_2.holder_id is not None:
+                if ball_2.holder_id is not None:
                     continue # only check free balls
                 # dist_sq = GameLogic._squared_distance(ball_1.position, ball_2.position)
                 dist_sq = self.state.squared_distances_ball_ball_dicts[ball_1.id][ball_2.id]

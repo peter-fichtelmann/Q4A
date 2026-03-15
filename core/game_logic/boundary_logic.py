@@ -152,9 +152,7 @@ class BoundaryLogic:
             return  # Inbounding procedure already started
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.state.squared_distances_ball_player.get(volleyball.id, []):
-            player = self.state.players.get(other_id)
-            if player is None:
-                continue
+            player = self.state.players[other_id]
             if player.team != volleyball.possession_team: # inbounding player other team
                 if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
                     if player.inbounding is None:
@@ -217,9 +215,7 @@ class BoundaryLogic:
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.state.squared_distances_ball_player.get(volleyball.id, []):
             if other_id != inbounding_player.id:
-                other_player = self.state.players.get(other_id)
-                if other_player is None:
-                    continue
+                other_player = self.state.players[other_id]
                 if distance < (4 * (other_player.radius)) ** 2:
                     # Only move away from volleyball if not already moving away from inbounding player
                     move_away_speed = other_player.max_speed

@@ -79,6 +79,7 @@ class UtilityLogic:
                 continue # knocked out players do not interact with game
             for ball in balls:
                 # Skip beater-volleyball combinations (any order)
+                # no additional check in volleyball logic
                 if (player.role == PlayerRole.BEATER and ball.ball_type == BallType.VOLLEYBALL):
                     continue
                 squared_distance = self._squared_distance(player.position, ball.position)
