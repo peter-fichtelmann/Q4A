@@ -215,7 +215,8 @@ class BasicLogic:
                 continue # dead balls do not collide
             if ball_1.turnover_to_player is not None:
                 continue # balls in turnover do not collide
-            for ball_2 in balls[i+1:]:
+            for j in range(i + 1, n_balls):
+                ball_2 = balls[j]
                 if ball_2.is_dead if hasattr(ball_2, "is_dead") else False:
                     continue # dead balls do not collide
                 if ball_2.turnover_to_player is not None:
