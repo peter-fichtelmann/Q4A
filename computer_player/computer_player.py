@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import logging
+from time import perf_counter_ns
 from typing import Dict, List, Tuple
 from core.game_logic.game_logic import GameLogic
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
@@ -9,6 +11,55 @@ from computer_player.computer_player_utility import InterceptionRatioCalculator,
 import random
 
 from core.game_logic.utility_logic import UtilityLogic
+
+
+@dataclass
+class _StepProfileStats:
+    calls: int = 0
+    total_ns: int = 0
+    max_ns: int = 0
+
+    def add(self, elapsed_ns: int) -> None:
+        self.calls += 1
+        self.total_ns += elapsed_ns
+        if elapsed_ns > self.max_ns:
+            self.max_ns = elapsed_ns
+
+
+class _ComputerPlayerStepProfiler:
+    """Low-overhead optional profiler for computer-player steps."""
+
+    def __init__(self):
+        self.enabled: bool = False
+        self.stats: dict[str, _StepProfileStats] = {}
+
+    def reset(self) -> None:
+        self.stats.clear()
+
+    def time_call(self, step_name: str, fn, *args, **kwargs):
+        if not self.enabled:
+            return fn(*args, **kwargs)
+
+        stats = self.stats.setdefault(step_name, _StepProfileStats())
+        start_ns = perf_counter_ns()
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            stats.add(perf_counter_ns() - start_ns)
+
+    def report(self) -> list[dict[str, float | int | str]]:
+        rows = []
+        for step_name, stats in self.stats.items():
+            avg_ms = (stats.total_ns / stats.calls / 1e6) if stats.calls else 0.0
+            rows.append({
+                'step': step_name,
+                'calls': stats.calls,
+                'avg_ms': avg_ms,
+                'max_ms': stats.max_ns / 1e6,
+                'total_ms': stats.total_ns / 1e6,
+            })
+        rows.sort(key=lambda item: float(item['total_ms']), reverse=True)
+        return rows
 
 class ComputerPlayer(ABC):
     """
@@ -21,6 +72,24 @@ class ComputerPlayer(ABC):
         self.cpu_players = [self.logic.state.players[player_id] for player_id in cpu_player_ids]
         self.logger = logging.getLogger("computer_player")
         self.logger.setLevel(computer_player_log_level)
+        self._step_profiler = _ComputerPlayerStepProfiler()
+
+    def enable_step_profiling(self, reset_stats: bool = True) -> None:
+        if reset_stats:
+            self._step_profiler.reset()
+        self._step_profiler.enabled = True
+
+    def disable_step_profiling(self) -> None:
+        self._step_profiler.enabled = False
+
+    def get_step_profile_report(self) -> list[dict[str, float | int | str]]:
+        return self._step_profiler.report()
+
+    def reset_step_profile(self) -> None:
+        self._step_profiler.reset()
+
+    def _profile_call(self, step_name: str, fn, *args, **kwargs):
+        return self._step_profiler.time_call(step_name, fn, *args, **kwargs)
 
     @abstractmethod
     def make_move(self, dt: float):
@@ -44,7 +113,7 @@ class RandomComputerPlayer(ComputerPlayer):
             player.direction.y += random.uniform(-1, 1)
             throwing_decision = random.random() < self.throwing_probability
             if throwing_decision:
-                self.logic.process_action_logic.process_throw_action(player.id)
+                self._profile_call('random.process_throw_action', self.logic.process_action_logic.process_throw_action, player.id)
             # always try to tackle if not throwing
             self.logic.process_action_logic.process_tackle_action(player.id)
 
@@ -114,21 +183,36 @@ class RuleBasedComputerPlayer(ComputerPlayer):
 
     def make_move(self, dt: float):
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
-        attacking_team, next_volleyball_holder_id, intercepting_position = self._determine_attacking_team(dt)
-        assigned_beater_ids = self._determine_beater_ball_getting(dt, attacking_team)
+        attacking_team, next_volleyball_holder_id, intercepting_position = self._profile_call(
+            'rule_based._determine_attacking_team',
+            self._determine_attacking_team,
+            dt,
+        )
+        assigned_beater_ids = self._profile_call(
+            'rule_based._determine_beater_ball_getting',
+            self._determine_beater_ball_getting,
+            dt,
+            attacking_team,
+        )
         if attacking_team is None:
             # both teams in attacking mode
             # TODO implement
             pass
-        HoopDefence(
+        hoop_defence = self._profile_call(
+            'rule_based.HoopDefence.init',
+            HoopDefence,
             logic = self.logic,
             defence_cpu_player_ids=[cpu_player.id for cpu_player in self.cpu_players if cpu_player.team != attacking_team],
             defence_team=self.logic.state.team_0 if attacking_team != 0 else self.logic.state.team_1,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_0 if attacking_team != 0 else self.move_around_hoop_blockage_team_1,
             beater_throw_decider=self.beater_throw_decider,
             **self.hoop_defence_kwargs,
-            )(dt, assigned_beater_ids)
-        DiamondAttack(
+        )
+        self._profile_call('rule_based.HoopDefence.__call__', hoop_defence, dt, assigned_beater_ids)
+
+        diamond_attack = self._profile_call(
+            'rule_based.DiamondAttack.init',
+            DiamondAttack,
             logic=self.logic,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_0 if attacking_team == 0 else self.move_around_hoop_blockage_team_1,
             interception_ratio_calculator_opponent=self.interception_ratio_calculator_team_1 if attacking_team == 0 else self.interception_ratio_calculator_team_0, # inverse because we need hoop blockage of opponent team
@@ -136,11 +220,14 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             attack_team=attacking_team,
             **self.diamond_attack_kwargs,
             logger=self.logger
-             )(
-                dt=dt,
-                next_volleyball_holder_id=next_volleyball_holder_id,
-                intercepting_position=intercepting_position,
-            )
+        )
+        self._profile_call(
+            'rule_based.DiamondAttack.__call__',
+            diamond_attack,
+            dt=dt,
+            next_volleyball_holder_id=next_volleyball_holder_id,
+            intercepting_position=intercepting_position,
+        )
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
 
     def _determine_beater_ball_getting(self, dt: float, attacking_team: int) -> List[str]:
@@ -162,7 +249,10 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         if third_dodgeball_team is not None:
             # TODO implement the rare case when control beater missed throw and wants to run to get thrown dodgeball back/oppenent tries to get this one
             # If there is a third dodgeball team, assign beater players to get the dodgeball
-            self.logger.debug(f"Third dodgeball on team {third_dodgeball_team}, determining beater assignment to get the dodgeball")
+            self.logger.debug(
+                "Third dodgeball on team %s, determining beater assignment to get the dodgeball",
+                third_dodgeball_team,
+            )
             third_dodgeball = self.logic.state.balls[self.logic.state.third_dodgeball]
             squared_distance_and_direction_to_dodgeball_dict = {}
             for beater in self.beaters:
@@ -177,7 +267,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 # assign beater with lowest squared distance to dodgeball to get the dodgeball
                 beater_id = min(squared_distance_and_direction_to_dodgeball_dict.keys(), key=lambda k: squared_distance_and_direction_to_dodgeball_dict[k][0])
                 beater = self.logic.state.players[beater_id]
-                self.logger.debug(f"Beater {beater.id} assigned to get third dodgeball for team {third_dodgeball_team}")
+                self.logger.debug("Beater %s assigned to get third dodgeball for team %s", beater.id, third_dodgeball_team)
                 assigned_beater_ids.append(beater_id)
                     # move towards the dodgeball
                 if beater.id in self.cpu_player_ids:
@@ -227,7 +317,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     beater_buddy = [player for player in self.beaters if player.id != beater_id and player.team == beater.team][0]
                     if not (beater_buddy.is_knocked_out) and not (beater_buddy.id in assigned_beater_ids) and not (beater_buddy.has_ball):
                         # pass to teammate if they not knocked out, not assigned a dodgeball or already having a dodgeball
-                        self.logger.debug(f"Beater {beater.id} has ball and is passing to teammate {beater_buddy.id}")
+                        self.logger.debug("Beater %s has ball and is passing to teammate %s", beater.id, beater_buddy.id)
                         throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, beater_buddy)
                         self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
                         # move beater buddy to throwing player (at the moment only for one dt step)
@@ -238,7 +328,11 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         assigned_beater_ids.append(beater_buddy.id)
                     else:
                         # pass back to central hoop
-                        self.logger.debug(f"Beater {beater.id} has ball but teammate {beater_buddy.id} is not available, passing back to hoops")
+                        self.logger.debug(
+                            "Beater %s has ball but teammate %s is not available, passing back to hoops",
+                            beater.id,
+                            beater_buddy.id,
+                        )
                         if beater.team == 0:
                             central_hoop = self.defence_hoops_0[1]
                         else:

@@ -158,7 +158,7 @@ class BoundaryLogic:
                     if player.inbounding is None:
                         if not player.has_ball:
                             if not player.is_knocked_out: # what happens if all chasers/keeper of team are knocked out?
-                                self.logger.info(f"Inbounding procedure started by player {player.id} for volleyball {volleyball.id}")
+                                self.logger.info("Inbounding procedure started by player %s for volleyball %s", player.id, volleyball.id)
                                 player.inbounding = volleyball.id
                                 player.dodgeball_immunity = True # chaser/keeper immune while inbounding
                                 volleyball.inbounder = player.id
@@ -235,7 +235,7 @@ class BoundaryLogic:
                                 sign = random.choice([-1, 1])
                                 move_vector.x = move_vector_existing.x + sign * normal_existing.y * move_away_speed * dt * 0.5
                                 move_vector.y = move_vector_existing.y + sign * -normal_existing.x * move_away_speed * dt * 0.5
-                                self.logger.debug(f"Added perpendicular vector to avoid deadlock for player {other_id} during inbounding free way")
+                                self.logger.debug("Added perpendicular vector to avoid deadlock for player %s during inbounding free way", other_id)
                             else:
                                 continue
                         players_to_move[other_id]= move_vector

@@ -96,6 +96,10 @@ class GameRoom:
         # one-shot profiling window state
         self.step_profile_started: bool = False
         self.step_profile_finished: bool = False
+        # computer-player step profiling counters/state (counts make_move calls)
+        self.cpu_move_tick_count: int = 0
+        self.cpu_step_profile_started: bool = False
+        self.cpu_step_profile_finished: bool = False
 
         self._initialize_pitch()
         # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
@@ -317,13 +321,13 @@ async def websocket_lobby(websocket: WebSocket):
                 # Client disconnected normally
                 break
             except Exception as e:
-                logger.exception(f"Error receiving text from websocket for client={client_id}: {e}")
+                logger.exception("Error receiving text from websocket for client=%s: %s", client_id, e)
                 break
 
             try:
                 message = json.loads(data)
             except Exception as e:  
-                logger.exception(f"Failed to parse JSON from client={client_id}: {e} data={data}")
+                logger.exception("Failed to parse JSON from client=%s: %s data=%s", client_id, e, data)
                 # skip invalid message and continue
                 continue
 
@@ -681,7 +685,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 # Client disconnected normally
                 break
             except Exception as e:
-                logger.exception(f"Error receiving from websocket for room={room_id} player={player_id}: {e}")
+                logger.exception("Error receiving from websocket for room=%s player=%s: %s", room_id, player_id, e)
                 break
             # Text messages remain JSON commands
             if raw.get('type') == 'websocket.receive' and 'text' in raw and raw['text'] is not None:
@@ -700,7 +704,13 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                     player = room.game_state.get_player(player_id)
                     if player:
                         # log input for debugging
-                        logger.debug(f"player_input room={room_id} player={player_id} dir=({direction_x},{direction_y})")
+                        logger.debug(
+                            "player_input room=%s player=%s dir=(%s,%s)",
+                            room_id,
+                            player_id,
+                            direction_x,
+                            direction_y,
+                        )
                         player.direction.x = float(direction_x)
                         player.direction.y = float(direction_y)
 
@@ -727,7 +737,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                             player.direction.x = float(dx)
                             player.direction.y = float(dy)
                 except Exception:
-                    logger.exception(f"Failed to parse binary player input for room={room_id} player={player_id}")
+                    logger.exception("Failed to parse binary player input for room=%s player=%s", room_id, player_id)
 
     except WebSocketDisconnect:
         if client_id in room.client_connections:
@@ -955,16 +965,47 @@ def _log_step_profile_report(room: GameRoom) -> None:
     """Log step-profiler summary for a room."""
     report = room.game_logic.get_step_profile_report()
     if not report:
-        logger.info(f"No step profiling data captured for room={room.room_id}")
+        logger.info("No step profiling data captured for room=%s", room.room_id)
         return
 
     top_n = max(1, int(getattr(Config, 'GAME_LOGIC_STEP_PROFILE_TOP_N', len(report))))
     logger.info(
-        f"Step profile summary room={room.room_id} profiled_ticks={max(0, room.game_tick_count - int(Config.GAME_LOGIC_STEP_PROFILE_START_TICK))} top_n={top_n}"
+        "Step profile summary room=%s profiled_ticks=%s top_n=%s",
+        room.room_id,
+        max(0, room.game_tick_count - int(Config.GAME_LOGIC_STEP_PROFILE_START_TICK)),
+        top_n,
     )
     for row in report[:top_n]:
         logger.info(
             "step=%s calls=%s avg_ms=%.4f max_ms=%.4f total_ms=%.4f",
+            row['step'],
+            row['calls'],
+            row['avg_ms'],
+            row['max_ms'],
+            row['total_ms'],
+        )
+
+
+def _log_cpu_step_profile_report(room: GameRoom) -> None:
+    """Log computer-player step-profiler summary for a room."""
+    if room.computer_player is None:
+        return
+
+    report = room.computer_player.get_step_profile_report()
+    if not report:
+        logger.info("No computer-player step profiling data captured for room=%s", room.room_id)
+        return
+
+    top_n = max(1, int(getattr(Config, 'COMPUTER_PLAYER_STEP_PROFILE_TOP_N', len(report))))
+    logger.info(
+        "Computer-player step profile summary room=%s profiled_moves=%s top_n=%s",
+        room.room_id,
+        max(0, room.cpu_move_tick_count - int(Config.COMPUTER_PLAYER_STEP_PROFILE_START_MOVE)),
+        top_n,
+    )
+    for row in report[:top_n]:
+        logger.info(
+            "cpu_step=%s calls=%s avg_ms=%.4f max_ms=%.4f total_ms=%.4f",
             row['step'],
             row['calls'],
             row['avg_ms'],
@@ -1011,8 +1052,27 @@ async def game_loop_manager():
                 room.game_tick_count += 1
                 logic_update_times.append(time.monotonic() - game_logic_start)
                 if room.computer_player is not None and (tick_counter % Config.COMPUTER_PLAYER_TICK_RATE == 0):
+                    if Config.COMPUTER_PLAYER_STEP_PROFILING_ENABLED and not room.cpu_step_profile_finished:
+                        profile_start_move = max(0, int(Config.COMPUTER_PLAYER_STEP_PROFILE_START_MOVE))
+                        profile_num_moves = max(0, int(Config.COMPUTER_PLAYER_STEP_PROFILE_NUM_MOVES))
+                        profile_end_move = profile_start_move + profile_num_moves
+
+                        if profile_num_moves > 0:
+                            if (not room.cpu_step_profile_started) and room.cpu_move_tick_count >= profile_start_move:
+                                room.computer_player.enable_step_profiling(reset_stats=True)
+                                room.cpu_step_profile_started = True
+                                logger.info(
+                                    f"Enabled computer-player step profiling for room={room.room_id} at cpu_move={room.cpu_move_tick_count}"
+                                )
+
+                            if room.cpu_step_profile_started and room.cpu_move_tick_count >= profile_end_move:
+                                room.computer_player.disable_step_profiling()
+                                room.cpu_step_profile_finished = True
+                                _log_cpu_step_profile_report(room)
+
                     cpu_player_start = time.monotonic()
                     room.computer_player.make_move(clock_tick_game * Config.COMPUTER_PLAYER_TICK_RATE)
+                    room.cpu_move_tick_count += 1
                     cpu_player_times.append(time.monotonic() - cpu_player_start)
 
                 # Broadcast state

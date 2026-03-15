@@ -88,10 +88,14 @@ class PenaltyLogic:
                     self.state.delay_of_game_warnings[volleyball.possession_team] = 0
                 self.state.delay_of_game_warnings[volleyball.possession_team] += 1
                 if self.state.delay_of_game_warnings[volleyball.possession_team] <= self.state.max_delay_of_game_warnings:
-                    self.logger.warning(f"Warning {self.state.delay_of_game_warnings[volleyball.possession_team]} for delay of game on team {volleyball.possession_team}")
+                    self.logger.warning(
+                        "Warning %s for delay of game on team %s",
+                        self.state.delay_of_game_warnings[volleyball.possession_team],
+                        volleyball.possession_team,
+                    )
                 else:
                     # Delay of game penalty
-                    self.logger.warning(f"Delay of game penalty on team {volleyball.possession_team}")
+                    self.logger.warning("Delay of game penalty on team %s", volleyball.possession_team)
                     # initiate volleyball turnover
                     self._designate_turnover(volleyball)
                     # TODO implement blue card penalty
@@ -164,9 +168,14 @@ class PenaltyLogic:
                 'dodgeball_id': dodgeball.id,
                 'player_id': player.id,
             }
-            self.logger.warning(f"Potential third dodgeball interference if beat attempt not successful")
+            self.logger.warning("Potential third dodgeball interference if beat attempt not successful")
         else:
-            self.logger.warning(f"Third dodgeball interference by team {player.team} of player {player.id} with dodgeball {dodgeball.id}")
+            self.logger.warning(
+                "Third dodgeball interference by team %s of player %s with dodgeball %s",
+                player.team,
+                player.id,
+                dodgeball.id,
+            )
             volleyball = self.state.volleyball
             # Back to hoops for player
             player.is_knocked_out = True

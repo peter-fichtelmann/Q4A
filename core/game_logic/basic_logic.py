@@ -33,7 +33,7 @@ class BasicLogic:
         # on stick reset check before direction norm
         if player.is_knocked_out and (mag_dir < player.radius + self.state.hoops[f'hoop_{player.team}_center'].thickness):
             player.is_knocked_out = False
-            self.logger.info(f"Player {player.id} has recovered from knockout")
+            self.logger.info("Player %s has recovered from knockout", player.id)
         if mag_dir > 1:
             player.direction.x /= mag_dir
             player.direction.y /= mag_dir
@@ -85,7 +85,7 @@ class BasicLogic:
                             player.direction.y = 0
             if player.inbounding is not None: # inbounding
                 ball = self.state.balls[player.inbounding]
-                squared_distance_to_ball = self.state.squared_distances_ball_player_dicts.get(ball.id, {}).get(player.id)
+                squared_distance_to_ball = UtilityLogic._squared_distance(player.position, ball.position)
                 if squared_distance_to_ball > (player.radius + ball.radius) ** 2:
                     # not reached ball during inbounding
                     player.direction.x = ball.position.x - player.position.x
@@ -102,7 +102,7 @@ class BasicLogic:
                         player.direction.y += 1
                     elif ball.position.y >= self.state.boundaries_y[1] - player.radius: # top boundary
                         player.direction.y -= 1
-                    self.logger.debug(f"Inbounding direction: ({player.direction.x}, {player.direction.y})")
+                    self.logger.debug("Inbounding direction: (%s, %s)", player.direction.x, player.direction.y)
                     player.velocity.x = 0
                     player.velocity.y = 0
                     ball.inbounder = None
@@ -131,7 +131,7 @@ class BasicLogic:
         """
         for ball in self.state.balls.values():
             if ball.turnover_to_player is not None:
-                self.logger.debug(f"Ball turnover to player velocity: {ball.turnover_to_player}")
+                self.logger.debug("Ball turnover to player velocity: %s", ball.turnover_to_player)
                 player = self.state.players.get(ball.turnover_to_player)
                 # reset turnover to other eligible player if player unavailable
                 if player is None:
@@ -263,4 +263,4 @@ class BasicLogic:
                     ball_1.velocity.y *= 1 / mag_velocity_ratio
                     ball_2.velocity.x *= mag_velocity_ratio
                     ball_2.velocity.y *= mag_velocity_ratio
-                    self.logger.debug(f"Ball {ball_1.id} collided with Ball {ball_2.id}")
+                    self.logger.debug("Ball %s collided with Ball %s", ball_1.id, ball_2.id)

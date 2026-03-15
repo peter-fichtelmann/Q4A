@@ -71,7 +71,7 @@ class ProcessActionLogic:
             player.catch_cooldown = 0.0
         player.has_ball = False
 
-        self.logger.info(f"Player {player_id} threw {ball.id}")
+        self.logger.info("Player %s threw %s", player_id, ball.id)
         return True
     
     def process_tackle_action(self, player_id: str) -> bool:
@@ -103,6 +103,6 @@ class ProcessActionLogic:
                             if other_player.team != player.team:
                                 player.tackling_player_ids.append(other_id)
                                 other_player.tackling_player_ids.append(player.id)
-                                self.logger.debug(f"Player {player_id} tackled player {other_id}")
+                                self.logger.debug("Player %s tackled player %s", player_id, other_id)
                                 return True
         return False
