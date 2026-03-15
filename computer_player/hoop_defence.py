@@ -158,17 +158,17 @@ class HoopDefence:
                     if chaser_id in self.defence_cpu_player_ids:
                         # TODO: chasers move with volleyball movement (between hoop x +/-) and chasers acknowledge hoop blockage and move around it if volleyball less than hoop x
                         add_hoop_blockage_x = chaser.radius + volleyball.radius
-                        next_chaser_position = self.logic.basic_logic.get_update_position(chaser, dt)
-                        next_volleyball_position = self.logic.basic_logic.get_update_position(volleyball, dt)
-                        if next_volleyball_position.x > target_hoop.position.x:
+                        next_chaser_position_x, next_chaser_position_y = self.logic.basic_logic.get_update_position(chaser, dt)
+                        next_volleyball_position_x, next_volleyball_position_y = self.logic.basic_logic.get_update_position(volleyball, dt)
+                        if next_volleyball_position_x > target_hoop.position.x:
                             target_position = Vector2(target_hoop.position.x + add_hoop_blockage_x, target_hoop.position.y)
                             # direction_to_hoop = Vector2(
                             #     (target_hoop.position.x + add_hoop_blockage_x) - chaser.position.x,
                             #     target_hoop.position.y - chaser.position.y
                             # )
                             next_direction_to_hoop = Vector2(
-                                (target_hoop.position.x + add_hoop_blockage_x) - next_chaser_position.x,
-                                target_hoop.position.y - next_chaser_position.y
+                                (target_hoop.position.x + add_hoop_blockage_x) - next_chaser_position_x,
+                                target_hoop.position.y - next_chaser_position_y
                             )
                             # x_pos_position = True
                         else:
@@ -178,8 +178,8 @@ class HoopDefence:
                             #     target_hoop.position.y - chaser.position.y
                             # )
                             next_direction_to_hoop = Vector2(
-                                (target_hoop.position.x - add_hoop_blockage_x) - next_chaser_position.x,
-                                target_hoop.position.y - next_chaser_position.y
+                                (target_hoop.position.x - add_hoop_blockage_x) - next_chaser_position_x,
+                                target_hoop.position.y - next_chaser_position_y
                             )
                             # x_pos_position = False
                         #         x_pos_position = False

@@ -67,7 +67,6 @@ class BasicLogic:
         volleyball = self.state.volleyball
         for player in self.state.players.values():
             # Update player velocity based on direction and current state
-            
             if player.is_knocked_out:
                 player.direction.x = self.state.hoops[f'hoop_{player.team}_center'].position.x - player.position.x
                 player.direction.y = self.state.hoops[f'hoop_{player.team}_center'].position.y - player.position.y
@@ -211,8 +210,9 @@ class BasicLogic:
         balls = list(self.state.balls.values())
         n_balls = len(balls)
         for i, ball_1 in enumerate(balls):
-            if ball_1.is_dead if hasattr(ball_1, "is_dead") else False:
-                continue # dead balls do not collide
+            if ball_1.ball_type == BallType.VOLLEYBALL:
+                if ball_1.is_dead:
+                    continue # dead volleyball does not collide
             if ball_1.turnover_to_player is not None:
                 continue # balls in turnover do not collide
             for j in range(i + 1, n_balls):
