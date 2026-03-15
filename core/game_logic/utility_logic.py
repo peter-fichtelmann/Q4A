@@ -29,6 +29,11 @@ class UtilityLogic:
         1. squared_distances_dicts: Nested dict for O(1) lookups between two specific entities: dict[str, dict[str, float]]
         2. squared_distances: Sorted list of nearby entities for each entity (nearest-first): dict[str, List[Tuple[str, float]]]
         
+        one each for:
+        - player-player
+        - ball-ball
+        - player-ball
+
         Skips distance calculations for:
         - Knocked out players
         - Keeper-Beater and Chaser-Beater pairs (no collision yet)
@@ -36,80 +41,134 @@ class UtilityLogic:
         
         This precomputation enables efficient collision detection in subsequent methods.
         """
-        entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
-        for entity in entities_list:
-            if entity.id not in self.state.squared_distances_dicts:
-                self.state.squared_distances_dicts[entity.id] = {}
-        for i, entity_1 in enumerate(entities_list):
-            if i+1 == len(entities_list):
-                break
-            # If entity_1 is knocked out skip pairs involving it
-            if hasattr(entity_1, 'is_knocked_out'):
-                if entity_1.is_knocked_out:
-                    continue
 
-            for entity_2 in entities_list[i+1:]:
-                # Skip pairs where entity_2 is knocked out
-                if hasattr(entity_2, 'is_knocked_out'):
-                    if entity_2.is_knocked_out:
-                        continue
+        players = list(self.state.players.values())
+        n_players = len(players)
+        balls = list(self.state.balls.values())
+        n_balls = len(balls)
+
+        for i in range(n_players - 1):
+            player_1 = players[i]
+            if player_1.is_knocked_out:
+                continue # knocked out players do not interact with game
+            for j in range(i + 1, n_players):
+                player_2 = players[j]
+                if player_2.is_knocked_out:
+                    continue # knocked out players do not interact with game
                 # Skip keeper-beater and chaser-beater combinations (any order)
-                if isinstance(entity_1, Player) and isinstance(entity_2, Player):
-                    if ((entity_1.role == PlayerRole.BEATER and entity_2.role in (PlayerRole.KEEPER, PlayerRole.CHASER)) or
-                        (entity_2.role == PlayerRole.BEATER and entity_1.role in (PlayerRole.KEEPER, PlayerRole.CHASER))):
-                        continue
-                # Skip beater-volleyball combinations (any order)
-                if isinstance(entity_1, Player) and isinstance(entity_2, Ball):
-                    if entity_1.role == PlayerRole.BEATER and entity_2.ball_type == BallType.VOLLEYBALL:
-                        continue
-                if isinstance(entity_2, Player) and isinstance(entity_1, Ball):
-                    if entity_2.role == PlayerRole.BEATER and entity_1.ball_type == BallType.VOLLEYBALL:
-                        continue
-                # if isinstance(entity_2, Ball) and isinstance(entity_1, Ball): # Ball-Ball collisions checked in separate method
-                #     continue
-
+                if ((player_1.role == PlayerRole.BEATER and player_2.role in (PlayerRole.KEEPER, PlayerRole.CHASER)) or
+                    (player_2.role == PlayerRole.BEATER and player_1.role in (PlayerRole.KEEPER, PlayerRole.CHASER))):
+                    continue
                 # Store squared distance for the pair
-                # self.state.squared_distances[(entity_1.id, entity_2.id)] = UtilityLogic._squared_distance(entity_1.position, entity_2.position)
-                squared_distance = UtilityLogic._squared_distance(entity_1.position, entity_2.position)
-                self.state.squared_distances_dicts[entity_1.id][entity_2.id] = squared_distance
-                self.state.squared_distances_dicts[entity_2.id][entity_1.id] = squared_distance
-                # Store or use the distance as needed
-        for entity in entities_list:
-            # sort the inner dict by distance ascending
-            self.state.squared_distances[entity.id] = sorted(self.state.squared_distances_dicts[entity.id].items(), key=itemgetter(1))
-    # def _get_sorted_distances(self, entity_id: str) -> Tuple[str, float]:
-    #     """Return a dict mapping the other-entity id -> squared distance sorted nearest-first.
-    #     """
+                squared_distance = self._squared_distance(player_1.position, player_2.position)
+                if squared_distance <= self.state.min_squared_distance_player_player_calculation:
+                    self.state.squared_distances_player_player_dicts[player_1.id][player_2.id] = squared_distance
+                    self.state.squared_distances_player_player_dicts[player_2.id][player_1.id] = squared_distance
 
-    #     # The internal `self.state.squared_distances` stores distances keyed by a tuple
-    #     # of two entity ids (id1, id2). Filter entries that include `entity_id`,
-    #     # sort them by distance (ascending) and return a dict where keys are the
-    #     # other entity id and values are the squared distances.
+        for i in range(n_balls - 1):
+            ball_1 = balls[i]
+            # no filtering out dead volleyball because in check volleyball possesion keeper can pick up dead volleyball
+            for j in range(i + 1, n_balls):
+                ball_2 = balls[j]
+                squared_distance = self._squared_distance(ball_1.position, ball_2.position)
+                self.state.squared_distances_ball_ball_dicts[ball_1.id][ball_2.id] = squared_distance
+                self.state.squared_distances_ball_ball_dicts[ball_2.id][ball_1.id] = squared_distance
 
-    #     # # Build a filtered dict of pair -> distance where the given entity_id is part of the pair
-    #     # pair_distances = {
-    #     #     pair: dist
-    #     #     for pair, dist in self.state.squared_distances.items()
-    #     #     if entity_id in pair
-    #     # }
+        for player in players:
+            if player.is_knocked_out:
+                continue # knocked out players do not interact with game
+            for ball in balls:
+                # Skip beater-volleyball combinations (any order)
+                if (player.role == PlayerRole.BEATER and ball.ball_type == BallType.VOLLEYBALL):
+                    continue
+                squared_distance = self._squared_distance(player.position, ball.position)
+                # player_ball not needed
+                # self.state.squared_distances_player_ball[player.id][ball.id] = squared_distance
+                self.state.squared_distances_ball_player_dicts[ball.id][player.id] = squared_distance
 
-    #     # # Sort pairs by distance (nearest first). This produces a list of
-    #     # # ((id1, id2), distance) tuples.
-    #     # sorted_pairs = sorted(pair_distances.items(), key=lambda item: item[1])
+        for player in players:
+            self.state.squared_distances_player_player[player.id] = sorted(self.state.squared_distances_player_player_dicts[player.id].items(), key=itemgetter(1))
+            # self.state.squared_distances_player_ball[player.id] = sorted(self.state.squared_distances_player_ball_dicts[player.id].items(), key=itemgetter(1))
 
-    #     # Convert to other_id -> distance mapping preserving the sorted order
-    #     # other_dict: dict = {}
-    #     # for (id1, id2), distance in sorted_pairs:
-    #     #     other_id = id2 if id1 == entity_id else id1
-    #     #     other_dict[other_id] = distance
-    #     sorted_tuples = sorted(self.state.squared_distances[entity_id].items(), key=itemgetter(1))
-    #     # other_dict: dict = {}
-    #     # for other_id, distance in sorted_tuples:
-    #     #     other_dict[other_id] = distance
-    #     # print(other_dict)
-    #     return sorted_tuples
+        for ball in balls:
+            # self.state.squared_distances_ball_ball[ball.id] = sorted(self.state.squared_distances_dicts[ball.id].items(), key=itemgetter(1))
+            self.state.squared_distances_ball_player[ball.id] = sorted(self.state.squared_distances_ball_player_dicts[ball.id].items(), key=itemgetter(1))
 
-    # using math for faster operations square root operations
+
+    #     entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
+    #     for entity in entities_list:
+    #         if entity.id not in self.state.squared_distances_dicts:
+    #             self.state.squared_distances_dicts[entity.id] = {}
+    #     for i, entity_1 in enumerate(entities_list):
+    #         if i+1 == len(entities_list):
+    #             break
+    #         # If entity_1 is knocked out skip pairs involving it
+    #         if hasattr(entity_1, 'is_knocked_out'):
+    #             if entity_1.is_knocked_out:
+    #                 continue
+
+    #         for entity_2 in entities_list[i+1:]:
+    #             # Skip pairs where entity_2 is knocked out
+    #             if hasattr(entity_2, 'is_knocked_out'):
+    #                 if entity_2.is_knocked_out:
+    #                     continue
+    #             # Skip keeper-beater and chaser-beater combinations (any order)
+    #             if isinstance(entity_1, Player) and isinstance(entity_2, Player):
+    #                 if ((entity_1.role == PlayerRole.BEATER and entity_2.role in (PlayerRole.KEEPER, PlayerRole.CHASER)) or
+    #                     (entity_2.role == PlayerRole.BEATER and entity_1.role in (PlayerRole.KEEPER, PlayerRole.CHASER))):
+    #                     continue
+    #             # Skip beater-volleyball combinations (any order)
+    #             if isinstance(entity_1, Player) and isinstance(entity_2, Ball):
+    #                 if entity_1.role == PlayerRole.BEATER and entity_2.ball_type == BallType.VOLLEYBALL:
+    #                     continue
+    #             if isinstance(entity_2, Player) and isinstance(entity_1, Ball):
+    #                 if entity_2.role == PlayerRole.BEATER and entity_1.ball_type == BallType.VOLLEYBALL:
+    #                     continue
+    #             # if isinstance(entity_2, Ball) and isinstance(entity_1, Ball): # Ball-Ball collisions checked in separate method
+    #             #     continue
+
+    #             # Store squared distance for the pair
+    #             # self.state.squared_distances[(entity_1.id, entity_2.id)] = UtilityLogic._squared_distance(entity_1.position, entity_2.position)
+    #             squared_distance = UtilityLogic._squared_distance(entity_1.position, entity_2.position)
+    #             self.state.squared_distances_dicts[entity_1.id][entity_2.id] = squared_distance
+    #             self.state.squared_distances_dicts[entity_2.id][entity_1.id] = squared_distance
+    #             # Store or use the distance as needed
+    #     for entity in entities_list:
+    #         # sort the inner dict by distance ascending
+    #         self.state.squared_distances[entity.id] = sorted(self.state.squared_distances_dicts[entity.id].items(), key=itemgetter(1))
+    # # def _get_sorted_distances(self, entity_id: str) -> Tuple[str, float]:
+    # #     """Return a dict mapping the other-entity id -> squared distance sorted nearest-first.
+    # #     """
+
+    # #     # The internal `self.state.squared_distances` stores distances keyed by a tuple
+    # #     # of two entity ids (id1, id2). Filter entries that include `entity_id`,
+    # #     # sort them by distance (ascending) and return a dict where keys are the
+    # #     # other entity id and values are the squared distances.
+
+    # #     # # Build a filtered dict of pair -> distance where the given entity_id is part of the pair
+    # #     # pair_distances = {
+    # #     #     pair: dist
+    # #     #     for pair, dist in self.state.squared_distances.items()
+    # #     #     if entity_id in pair
+    # #     # }
+
+    # #     # # Sort pairs by distance (nearest first). This produces a list of
+    # #     # # ((id1, id2), distance) tuples.
+    # #     # sorted_pairs = sorted(pair_distances.items(), key=lambda item: item[1])
+
+    # #     # Convert to other_id -> distance mapping preserving the sorted order
+    # #     # other_dict: dict = {}
+    # #     # for (id1, id2), distance in sorted_pairs:
+    # #     #     other_id = id2 if id1 == entity_id else id1
+    # #     #     other_dict[other_id] = distance
+    # #     sorted_tuples = sorted(self.state.squared_distances[entity_id].items(), key=itemgetter(1))
+    # #     # other_dict: dict = {}
+    # #     # for other_id, distance in sorted_tuples:
+    # #     #     other_dict[other_id] = distance
+    # #     # print(other_dict)
+    # #     return sorted_tuples
+
+    # # using math for faster operations square root operations
 
     @staticmethod
     def _distance(pos1: Vector2, pos2: Vector2) -> float:

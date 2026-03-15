@@ -376,11 +376,10 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 )
                 return player.team, player_id, intercepting_position
             # If no intercepting players, determine attacking team based on proximity to volleyball
-            for other_id, distance in self.logic.state.squared_distances.get(volleyball.id, []):
-                if other_id in self.logic.state.players.keys():
-                    player = self.logic.state.players[other_id]
-                    if not player.is_knocked_out:
-                        if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
-                            return player.team, player.id, None
+            for other_id, distance in self.logic.state.squared_distances_ball_player.get(volleyball.id, []):
+                player = self.logic.state.players[other_id]
+                if not player.is_knocked_out:
+                    if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
+                        return player.team, player.id, None
             # if all players are knocked out
             return None, None, None

@@ -20,13 +20,21 @@ class GameState:
     hoops: Dict[str, Hoop] = field(default_factory=dict)       # hoop_id -> Hoop
     score: List[int] = field(default_factory=lambda: [0, 0])  # [team0, team1]
     max_player_radius: float = 0.35
-    squared_distances: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
-    squared_distances_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
+    squared_distances_player_player_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
+    squared_distances_ball_ball_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)     # Nested dict for player-ball distances: {player_id: {ball_id: squared_distance}}
+    squared_distances_ball_player_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for player-ball distances: {ball_id: {player_id: squared_distance}}
+    squared_distances_player_player: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
+    squared_distances_ball_player: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
+    min_squared_distance_player_player_calculation: float = 4 # only calculate and store distances for player pairs that are within this squared distance to save on calculations and memory, since distant players won't interact with each other
+    # squared_distances_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
+    # squared_distances: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
     game_time: float = 0.0                                    # Seconds elapsed
     delay_of_game_time_limit: float = 10.0                     # Time limit before delay of game penalty
     delay_of_game_velocity_x_threshold: float = 0.5              # Velocity threshold in x direction the volleyball must exceed to avoid delay of game
     max_delay_of_game_warnings: int = 1                        # Number of warnings before penalty per team
     delay_of_game_warnings: Dict[int|str, int] = field(default_factory=lambda: {0: 0, 1: 0})  # Track warnings for each team
+    no_delay_of_game_opponent_chaser_squared_distance_threshold: float = 4
+    no_delay_of_game_opponent_beater_squared_distance_threshold: float = 16
     third_dodgeball: str = None # third dodgeball id if third dodgeball
     third_dodgeball_team: str = None # team which is assigned the third dodgeball
     potential_third_dodgeball_interference_kwargs: Dict[str, str] = None # third dodgeball id and player id if potential interferenece if not beat attempt

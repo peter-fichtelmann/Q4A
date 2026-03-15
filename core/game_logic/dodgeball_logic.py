@@ -77,7 +77,7 @@ class DodgeballLogic:
             # Distances are sorted ascending; once above this threshold no player can interact.
             max_interaction_dist_sq = (dodgeball.radius + self.state.max_player_radius) ** 2
             # for other_id, distance in self._get_sorted_distances(dodgeball.id).items():
-            for other_id, distance in self.state.squared_distances.get(dodgeball.id, []):
+            for other_id, distance in self.state.squared_distances_ball_player.get(dodgeball.id, []):
                 if distance > max_interaction_dist_sq:
                     break
                 player = self.state.players.get(other_id)

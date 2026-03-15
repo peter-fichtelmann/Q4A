@@ -70,9 +70,12 @@ class GameRoom:
         self.game_state.keeper_zone_x_1 = Config.PITCH_LENGTH - Config.KEEPER_ZONE_X
         self.game_state.midline_x = Config.PITCH_LENGTH / 2
         self.game_state.seeker_floor_seconds = Config.SEEKER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO
+        self.game_state.min_squared_distance_player_player_calculation = Config.MIN_SQUARED_DISTANCE_PLAYER_PLAYER_CALCULATION
         self.game_state.delay_of_game_time_limit = Config.DELAY_OF_GAME_TIME_LIMIT
         self.game_state.delay_of_game_velocity_x_threshold = Config.DELAY_OF_GAME_VELOCITY_X_THRESHOLD
         self.game_state.max_delay_of_game_warnings = Config.MAX_DELAY_OF_GAME_WARNINGS
+        self.game_state.no_delay_of_game_opponent_chaser_squared_distance_threshold = Config.NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD
+        self.game_state.no_delay_of_game_opponent_beater_squared_distance_threshold = Config.NO_DELAY_OF_GAME_OPPONENT_BEATER_SQUARED_DISTANCE_THRESHOLD
         self.game_state.beat_attempt_time_limit = Config.BEAT_ATTEMPT_TIME_LIMIT
         self.game_logic = GameLogic(self.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
         self.client_connections: Dict[str, WebSocket] = {}
@@ -1023,7 +1026,9 @@ async def game_loop_manager():
             max_logic_update_time = max(logic_update_times) * 1000 if logic_update_times else 0
             max_cpu_player_time = max(cpu_player_times) * 1000 if cpu_player_times else 0
             print(f"Tick {tick_counter} - Avg logic update time: {avg_logic_update_time:.1f}ms,  Max logic update time: {max_logic_update_time:.1f}ms")
+            # print(f"logic update time list: {logic_update_times}")
             print(f"Average CPU player time: {avg_cpu_player_time:.1f}ms, Max CPU player time: {max_cpu_player_time:.1f}ms")
+            # print(f"cpu player time list: {cpu_player_times}")
             logic_update_times.clear()
             cpu_player_times.clear()
         tick_counter += 1

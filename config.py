@@ -40,8 +40,13 @@ class Config:
     DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL = 1.4  # m/s in x direction the volleyball must exceed to avoid delay of game; should be slow running speed
     DELAY_OF_GAME_VELOCITY_X_THRESHOLD = DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL / GAME_TIME_TO_REAL_TIME_RATIO
     MAX_DELAY_OF_GAME_WARNINGS = 1  # Number of warnings before penalty per team
+    NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD = 2**2 # squared distance threshold to opponent chasers to prevent delay of game
+    NO_DELAY_OF_GAME_OPPONENT_BEATER_SQUARED_DISTANCE_THRESHOLD = 4**2 # squared distance threshold to opponent beaters to prevent delay of game
 
-    BEAT_ATTEMPT_TIME_LIMIT = 5 # game seconds ball has time to beat player before potential third dodgeball interference
+    # should be at least NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD
+    MIN_SQUARED_DISTANCE_PLAYER_PLAYER_CALCULATION = 4 # only calculate and store distances for player pairs that are within this squared distance to save on calculations and memory, since distant players won't interact with each other
+
+    BEAT_ATTEMPT_TIME_LIMIT = 6 # game seconds ball has time to beat player before potential third dodgeball interference
     
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
     SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter

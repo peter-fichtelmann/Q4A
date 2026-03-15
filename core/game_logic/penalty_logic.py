@@ -65,18 +65,19 @@ class PenaltyLogic:
                     return delay_velocity
             else:
                  return None # volleyball not in own half
-            for other_id, distance in self.state.squared_distances[volleyball.id]:
-                if other_id in self.state.players.keys():
-                    player = self.state.players[other_id]
-                    if player.team != volleyball.possession_team:
-                        if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
-                            if distance < 2:
-                                return None # opponent player close enough to volleyball to prevent delay of game
-                        elif player.role == PlayerRole.BEATER and player.has_ball is not None:
-                            if distance < 4:
-                                return None # opponent loaded beater close enough to volleyball to prevent delay of game
-                            else:
-                                break # no need to check further players
+            for other_id, distance in self.state.squared_distances_ball_player[volleyball.id]:
+                player = self.state.players.get(other_id)
+                if player is None:
+                    continue
+                if player.team != volleyball.possession_team:
+                    if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
+                        if distance < self.state.no_delay_of_game_opponent_chaser_squared_distance_threshold:
+                            return None # opponent player close enough to volleyball to prevent delay of game
+                    elif player.role == PlayerRole.BEATER and player.has_ball is not None:
+                        if distance < self.state.no_delay_of_game_opponent_beater_squared_distance_threshold:
+                            return None # opponent loaded beater close enough to volleyball to prevent delay of game
+                        else:
+                            break # no need to check further players
             return delay_velocity # return how much below threshold the volleyball is
         # delay velocity as weighting factor how severve the delay of game is
         delay_velocity = _check_delay_velocity(volleyball)
@@ -122,31 +123,32 @@ class PenaltyLogic:
         Args:
             ball: The ball to designate turnover for
         """
-        for other_id, distance in self.state.squared_distances.get(ball.id, []):
-            if other_id in self.state.players.keys():
-                player = self.state.players[other_id]
-                if player.team != ball.possession_team:
-                    if ball.ball_type == BallType.VOLLEYBALL:
-                        if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
-                            if not player.has_ball:
+        for other_id, distance in self.state.squared_distances_ball_player.get(ball.id, []):
+            player = self.state.players.get(other_id)
+            if player is None:
+                continue
+            if player.team != ball.possession_team:
+                if ball.ball_type == BallType.VOLLEYBALL:
+                    if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
+                        if not player.has_ball:
+                            ball.turnover_to_player = player.id
+                            if ball.holder_id is not None:
+                                holder = self.state.players.get(ball.holder_id)
+                                holder.has_ball = False
+                                ball.holder_id = None
+                            break
+                elif ball.ball_type == BallType.DODGEBALL:
+                    if player.role == PlayerRole.BEATER:
+                        if not player.has_ball:
+                            if not player.is_receiving_turnover_ball: # prevent multiple turnover balls to same player
                                 ball.turnover_to_player = player.id
+                                player.is_receiving_turnover_ball = True
                                 if ball.holder_id is not None:
                                     holder = self.state.players.get(ball.holder_id)
                                     holder.has_ball = False
                                     ball.holder_id = None
                                 break
-                    elif ball.ball_type == BallType.DODGEBALL:
-                        if player.role == PlayerRole.BEATER:
-                            if not player.has_ball:
-                                if not player.is_receiving_turnover_ball: # prevent multiple turnover balls to same player
-                                    ball.turnover_to_player = player.id
-                                    player.is_receiving_turnover_ball = True
-                                    if ball.holder_id is not None:
-                                        holder = self.state.players.get(ball.holder_id)
-                                        holder.has_ball = False
-                                        ball.holder_id = None
-                                    break
-        # if no egliglibe player: no turnover
+        # if no eligible player: no turnover
 
     def _third_dodgeball_interference(self, player, dodgeball):
         """

@@ -29,7 +29,7 @@ class BasicLogic:
 
     def update_player_velocity(self, player: Player, dt: float):
         # norm player.direction
-        mag_dir = (player.direction.x**2 + player.direction.y**2) ** 0.5
+        mag_dir = UtilityLogic._magnitude(player.direction)
         # on stick reset check before direction norm
         if player.is_knocked_out and (mag_dir < player.radius + self.state.hoops[f'hoop_{player.team}_center'].thickness):
             player.is_knocked_out = False
@@ -41,7 +41,7 @@ class BasicLogic:
         player.velocity.y = player.velocity.y + ( - player.deacceleration_rate * player.velocity.y + player.direction.y * player.acceleration) * dt
         
         # Cap speed
-        speed = (player.velocity.x**2 + player.velocity.y**2) ** 0.5
+        speed = UtilityLogic._magnitude(player.velocity)
         if speed > player.max_speed:
             scale = player.max_speed / speed
             player.velocity.x *= scale
@@ -85,7 +85,7 @@ class BasicLogic:
                             player.direction.y = 0
             if player.inbounding is not None: # inbounding
                 ball = self.state.balls[player.inbounding]
-                squared_distance_to_ball = UtilityLogic._squared_distance(player.position, ball.position)
+                squared_distance_to_ball = self.state.squared_distances_ball_player_dicts.get(ball.id, {}).get(player.id)
                 if squared_distance_to_ball > (player.radius + ball.radius) ** 2:
                     # not reached ball during inbounding
                     player.direction.x = ball.position.x - player.position.x
@@ -105,7 +105,6 @@ class BasicLogic:
                     self.logger.debug(f"Inbounding direction: ({player.direction.x}, {player.direction.y})")
                     player.velocity.x = 0
                     player.velocity.y = 0
-                    ball = self.state.balls[player.inbounding]
                     ball.inbounder = None
                     player.inbounding = None
                     player.dodgeball_immunity = False
@@ -224,7 +223,7 @@ class BasicLogic:
                 if ball_1.holder_id is not None or ball_2.holder_id is not None:
                     continue # only check free balls
                 # dist_sq = GameLogic._squared_distance(ball_1.position, ball_2.position)
-                dist_sq = self.state.squared_distances_dicts[ball_1.id][ball_2.id]
+                dist_sq = self.state.squared_distances_ball_ball_dicts[ball_1.id][ball_2.id]
                 collision_dist_sq = (ball_1.radius + ball_2.radius) ** 2
                 if dist_sq < collision_dist_sq:
                     # Collision occurred

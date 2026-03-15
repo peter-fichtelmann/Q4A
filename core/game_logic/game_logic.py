@@ -70,9 +70,14 @@ class GameLogic:
         self.set_log_level(log_level)
         
         # Initialize distance dictionaries for all entities
-        entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
-        for entity in entities_list:
-            self.state.squared_distances_dicts[entity.id] = {}
+        for player in self.state.players.values():
+            self.state.squared_distances_player_player_dicts[player.id] = {}
+        for ball in self.state.balls.values():
+            self.state.squared_distances_ball_ball_dicts[ball.id] = {}
+            self.state.squared_distances_ball_player_dicts[ball.id] = {}
+        # entities_list = list(list(self.state.players.values()) + list(self.state.balls.values()))
+        # for entity in entities_list:
+        #     self.state.squared_distances_dicts[entity.id] = {}
 
         # Create penalty_logic first since other classes depend on it
         self.penalty_logic = PenaltyLogic(self.state, logger=self.logger)

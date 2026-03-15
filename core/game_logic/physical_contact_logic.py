@@ -66,7 +66,7 @@ class PhysicalContactLogic:
             #         other_player = self.state.players[other_id]
             for j in range(i + 1, n_players):
                 other_player = players[j]
-                distance = self.state.squared_distances_dicts.get(player.id, {}).get(other_player.id)
+                distance = self.state.squared_distances_player_player_dicts.get(player.id, {}).get(other_player.id)
                 if distance is None:
                     continue
                 if other_player.is_knocked_out:

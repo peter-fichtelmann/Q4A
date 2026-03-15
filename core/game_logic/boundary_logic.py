@@ -151,7 +151,7 @@ class BoundaryLogic:
         elif volleyball.inbounder is not None:
             return  # Inbounding procedure already started
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
-        for other_id, distance in self.state.squared_distances.get(volleyball.id, []):
+        for other_id, distance in self.state.squared_distances_ball_player.get(volleyball.id, []):
             player = self.state.players.get(other_id)
             if player is None:
                 continue
@@ -200,7 +200,7 @@ class BoundaryLogic:
         
         # Check players too close to inbounding player
         # for other_id, distance in self._get_sorted_distances(inbounding_player.id).items():
-        for other_id, distance in self.state.squared_distances.get(inbounding_player.id, []):
+        for other_id, distance in self.state.squared_distances_player_player.get(inbounding_player.id, []):
             other_player = self.state.players.get(other_id)
             if other_player is None:
                 continue
@@ -215,7 +215,7 @@ class BoundaryLogic:
         
         # Check players too close to volleyball (but prioritize moving away from inbounding player)
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
-        for other_id, distance in self.state.squared_distances.get(volleyball.id, []):
+        for other_id, distance in self.state.squared_distances_ball_player.get(volleyball.id, []):
             if other_id != inbounding_player.id:
                 other_player = self.state.players.get(other_id)
                 if other_player is None:
@@ -276,7 +276,7 @@ class BoundaryLogic:
         for player in players:
             # Check players too close to keeper
             # for other_id, distance in self._get_sorted_distances(keeper.id).items():
-            for other_id, distance in self.state.squared_distances.get(keeper.id, []):
+            for other_id, distance in self.state.squared_distances_player_player.get(keeper.id, []):
                 other_player = self.state.players.get(other_id)
                 if other_player is None:
                     continue
@@ -286,6 +286,8 @@ class BoundaryLogic:
                     if move_vector is not None:
                         other_player.position.x += move_vector.x
                         other_player.position.y += move_vector.y
+                else:
+                    break
         
 
     def _calculate_move_away_vector(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> Optional[tuple[Vector2, Vector2]]:

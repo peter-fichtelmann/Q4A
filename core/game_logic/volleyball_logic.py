@@ -44,7 +44,7 @@ class VolleyballLogic:
             return # volleyball already in possession
         max_pickup_dist_sq = (volleyball.radius + self.state.max_player_radius) ** 2
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
-        for other_id, distance in self.state.squared_distances.get(volleyball.id, []):
+        for other_id, distance in self.state.squared_distances_ball_player.get(volleyball.id, []):
             if distance > max_pickup_dist_sq:
                 break
             player = self.state.players.get(other_id)
