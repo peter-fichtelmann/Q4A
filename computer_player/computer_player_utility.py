@@ -149,12 +149,12 @@ class InterceptionRatioCalculator:
         self.logger = logger
 
     def update_moving_free_ball_position(self, copy_moving_entity: object, dt: float):
-        copy_moving_entity.velocity = self.logic.basic_logic.get_free_ball_velocity(copy_moving_entity, dt)
-        copy_moving_entity.position = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
+        copy_moving_entity.velocity.x, copy_moving_entity.velocity.y = self.logic.basic_logic.get_free_ball_velocity(copy_moving_entity, dt)
+        copy_moving_entity.position.x, copy_moving_entity.position.y = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
 
     def update_moving_player_position(self, copy_moving_entity: Player, dt: float):
         self.logic.basic_logic.update_player_velocity(copy_moving_entity, dt)
-        copy_moving_entity.position = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
+        copy_moving_entity.position.x, copy_moving_entity.position.y = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
 
     def get_dt_stepsize(self, copy_moving_entity: object, max_distance_per_step: Optional[float], max_dt_per_step: Optional[int]) -> float:
         dt = max_distance_per_step / (UtilityLogic._magnitude(copy_moving_entity.velocity) + 1e-6) if max_distance_per_step is not None else 0.1

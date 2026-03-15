@@ -1,4 +1,5 @@
 import logging
+from typing import Tuple
 from core.game_logic.utility_logic import UtilityLogic
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
@@ -112,11 +113,11 @@ class BasicLogic:
                     self.logger.info("Inbounding procedure ended by ball re-entering pitch")
             self.update_player_velocity(player, dt)
 
-    def get_free_ball_velocity(self, ball: Ball, dt: float) -> Vector2:
+    def get_free_ball_velocity(self, ball: Ball, dt: float) -> Tuple[float, float]:
         """Update a ball's velocity based on its current velocity and friction."""
-        velocity = Vector2(ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt,
-                           ball.velocity.y - ball.deacceleration_rate * ball.velocity.y * dt)
-        return velocity
+        velocity_x = ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt
+        velocity_y = ball.velocity.y - ball.deacceleration_rate * ball.velocity.y * dt
+        return velocity_x, velocity_y
 
     def update_ball_velocities(self, dt: float) -> None:
         """
@@ -150,7 +151,7 @@ class BasicLogic:
                             ball.velocity.y = ball.velocity.y / mag_dir * player.throw_velocity  
             elif ball.holder_id is None:
                 # Free balls experience friction/deceleration
-                ball.velocity = self.get_free_ball_velocity(ball, dt)
+                ball.velocity.x, ball.velocity.y = self.get_free_ball_velocity(ball, dt)
                 # if dodgeball below threshold then dead
                 if ball.ball_type == BallType.DODGEBALL:
                     squared_velocity_mag = UtilityLogic._squared_sum(ball.velocity.x, ball.velocity.y)
@@ -163,17 +164,16 @@ class BasicLogic:
                     ball.velocity.x = holder.velocity.x
                     ball.velocity.y = holder.velocity.y
 
-    def get_update_position(self, entity: object, dt: float) -> Vector2:
+    def get_update_position(self, entity: object, dt: float) -> Tuple[float, float]:
         """Update position of a player or ball based on its velocity."""
-        return Vector2(entity.position.x + entity.velocity.x * dt,
-                       entity.position.y + entity.velocity.y * dt)
+        return entity.position.x + entity.velocity.x * dt, entity.position.y + entity.velocity.y * dt
 
     def update_positions(self, dt: float) -> None:
         """Update positions of players and balls based on their velocities."""
         for player in self.state.players.values():
             player.previous_position.x = player.position.x
             player.previous_position.y = player.position.y
-            player.position = self.get_update_position(player, dt)
+            player.position.x, player.position.y = self.get_update_position(player, dt)
             # print(f'Player {player.id} position: {player.position.x}, {player.position.y}')
             if player.role == PlayerRole.KEEPER: # dodgeball immunity if keeper in keeper zone
                 if (
@@ -192,7 +192,7 @@ class BasicLogic:
         for ball in self.state.balls.values():
             ball.previous_position.x = ball.position.x
             ball.previous_position.y = ball.position.y
-            ball.position = self.get_update_position(ball, dt)
+            ball.position.x, ball.position.y = self.get_update_position(ball, dt)
     
     def _check_ball_collisions(self):
         """
@@ -209,6 +209,7 @@ class BasicLogic:
         """
         # Check if balls are close enough to other balls to collide
         balls = list(self.state.balls.values())
+        n_balls = len(balls)
         for i, ball_1 in enumerate(balls):
             if ball_1.is_dead if hasattr(ball_1, "is_dead") else False:
                 continue # dead balls do not collide
