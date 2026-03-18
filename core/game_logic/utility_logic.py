@@ -213,6 +213,10 @@ class UtilityLogic:
         return math.hypot(vector.x, vector.y)
     
     @staticmethod
+    def _magnitude_without_vector(value_1: float, value_2: float):
+        return math.hypot(value_1, value_2)
+    
+    @staticmethod
     def _squared_sum(value_1: float, value_2: float) -> float:
         return value_1**2 + value_2**2
     

@@ -161,6 +161,71 @@ class InterceptionRatioCalculator:
         if max_dt_per_step is not None and dt > max_dt_per_step:
             dt = max_dt_per_step
         return dt
+    
+    def beam_angle(self,
+                moving_entity: object,
+                intercepting_player_ids: List[str],
+                target_position: Optional[Vector2] = None,
+                moving_entity_target_vector: Optional[Vector2] = None,
+                is_in_front_target: bool = True
+                ) -> Tuple[float, Dict[str]]:
+        """
+        Calculate the beam angle as dot products to the moving_entity-target vector from all players.
+        If dot product close to 1 enough then part of beam and interception likely.
+
+        if is_in_front_target
+        1) Calculate dot product between player_target_vector and moving_entity_target_vector.
+        If 0 or positive -> similar directions and thus in front of target (closer to moving_entity)
+
+        2) Calculate dot product between moving_entity_player_vector and moving_entity_target_vector
+        The vectors are normalized, so the dot product directly corresponds to the beam angle.
+
+
+        Does not take velocities into account at the moment.
+
+        Returns player with smallest beam angle (highest dot product) and dict of player ids: dot products
+        """
+        # add case handling: target_position is None
+        if moving_entity_target_vector is None:
+            moving_entity_target_vector = Vector2(
+                target_position.x - moving_entity.position.x,
+                target_position.y - moving_entity.position.y
+            )
+        mag_moving_entity_target_vector = UtilityLogic._magnitude(moving_entity_target_vector)
+        moving_entity_target_vector.x /= mag_moving_entity_target_vector
+        moving_entity_target_vector.y /= mag_moving_entity_target_vector
+        max_dot_product = 0
+        beam_angle_player_dict = {}
+        for player_id in intercepting_player_ids:
+            player = self.logic.state.players[player_id]
+            if player.is_knocked_out:
+                # TODO Take knocked out players into account, when they close enough center hoop
+                continue
+            if is_in_front_target:
+                # check if player is not behind target
+                player_target_vector_x = target_position.x - player.position.x
+                player_target_vector_y = target_position.y - player.position.y
+                dot_product_player_target = player_target_vector_x * moving_entity_target_vector.x + player_target_vector_y * mag_moving_entity_target_vector.y
+                # orthogonal or in front of target
+                if dot_product_player_target < 0:
+                    # TODO Allow if distance player-target close enough
+                    continue
+            moving_entity_player_vector_x = player.position.x - moving_entity.position.x
+            moving_entity_player_vector_y = player.position.y - moving_entity.position.y
+            mag_moving_entity_player_vector = UtilityLogic._magnitude_without_vector(
+                moving_entity_player_vector_x,
+                moving_entity_player_vector_y
+            )
+            moving_entity_player_vector_x /= mag_moving_entity_player_vector
+            moving_entity_player_vector_y /= mag_moving_entity_player_vector
+            dot_product = moving_entity_target_vector.x * moving_entity_player_vector_x + moving_entity_target_vector.y * moving_entity_player_vector_y
+            
+            
+            if dot_product > max_dot_product:
+                max_dot_product = dot_product
+            beam_angle_player_dict[player.id] = dot_product
+        return max_dot_product, beam_angle_player_dict
+
 
 
     def __call__(self,
