@@ -1,4 +1,5 @@
 import logging
+import math
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
@@ -117,21 +118,24 @@ class VolleyballLogic:
         if volleyball.crossed_hoop is not None:
             hoop_id, cross_y = volleyball.crossed_hoop
             hoop = self.state.hoops[hoop_id]
-            passed_distance = ((volleyball.position.x - hoop.position.x) ** 2 + (volleyball.position.y - cross_y) ** 2) ** 0.5
-            if passed_distance > volleyball.radius: # whole ball has passed through hoop
+            passed_squared_distance = (volleyball.position.x - hoop.position.x) ** 2 + (volleyball.position.y - cross_y) ** 2
+            if passed_squared_distance > volleyball.radius ** 2: # whole ball has passed through hoop
                 # Goal scored!
+                self.logger.info("Goal scored by team %s through hoop %s!", hoop.team, hoop_id)
                 self.state.update_score(hoop.team, 10)
                 volleyball.crossed_hoop = None
-                volleyball.holder_id = None
+                if volleyball.holder_id is not None:
+                    # if player run with ball through hoop, so no throwing afterwards should be possible
+                    volleyball_holder = self.state.players[volleyball.holder_id]
+                    volleyball_holder.has_ball = False
+                    volleyball.holder_id = None 
                 for player in self.state.players.values():
                     if player.team == hoop.team:
                         if player.role == PlayerRole.KEEPER: # only if a keeper exists dead volleyball
                             volleyball.possession_team = player.team
                             volleyball.is_dead = True
                             return
-                volleyball.possession_team = None # if no keeper
-                # TODO: Dead volleyball -> make alive process by keeper
-                
+                volleyball.possession_team = None # if no keeper                
 
             # Check if ball position is within hoop radius
             # dist_x = volleyball.position.x - hoop.position.x
