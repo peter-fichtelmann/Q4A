@@ -36,7 +36,7 @@ class ProcessActionLogic:
         
         Args:
             player_id: The ID of the player throwing the ball
-            
+            throw_direction: The direction in which the ball is thrown
         Returns:
             True if throw was successful, False if player has no ball or doesn't exist
         """
