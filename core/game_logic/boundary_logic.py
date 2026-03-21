@@ -280,11 +280,6 @@ class BoundaryLogic:
             if distance < (4 * (other_player.radius)) ** 2:
                 move_away_speed = other_player.max_speed
                 move_vector, normal = self._calculate_move_away_vector(keeper, other_player, dt, move_away_speed)
-                self.logger.debug("Other player id %s", other_id)
-                self.logger.debug("Move vector %s", move_vector)
-                self.logger.debug('Other player velocity %s, ', other_player.velocity)
-                self.logger.debug('Other player position %s, keeper position %s ', other_player.position, keeper.position)
-                self.logger.debug('Distance to keeper %s, distance_comparison %s', distance, (4 * (other_player.radius)) ** 2)
                 if move_vector is not None:
                     other_player.position.x += move_vector.x
                     other_player.position.y += move_vector.y
