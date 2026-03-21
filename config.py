@@ -78,6 +78,7 @@ class Config:
             'score_interception_max_dt_steps': 20, # for DiamondAttack, how many dt steps to look ahead when scoring
             'score_interception_max_distance_per_step': 2 * PLAYER_RADIUS, # for DiamondAttack, max distance to move per step when scoring so that no intercepting player is skipped
             'score_interception_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for DiamondAttack, max dt per step when scoring in s GAME_TIME
+            'score_squared_max_distance': 8**2, # for DiamondAttack, maximum  squared distance from volleyball to consider scoring
             'scoring_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a score
             'chaser_evade_beater_weight': 3.5,
             'chaser_evade_chaser_keeper_weight': 1,

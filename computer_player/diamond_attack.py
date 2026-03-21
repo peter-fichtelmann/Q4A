@@ -1,5 +1,6 @@
 import itertools
 import logging
+import math
 from typing import Dict, Optional, List
 
 from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage, MoveUtility
@@ -19,6 +20,7 @@ class DiamondAttack:
                 score_interception_max_dt_steps: int = 10,
                 score_interception_max_distance_per_step: Optional[float] = None,
                 score_interception_max_dt_per_step: Optional[int] = None,
+                score_squared_max_distance: float = 64, # only consider scoring on hoops within this squared distance from the volleyball for efficiency, since if it's too far the interception score calculation won't be accurate and it's unlikely to be a good scoring opportunity
                 scoring_threshold: float = 0.8,
                 chaser_evade_beater_weight: float = 4,
                 chaser_evade_chaser_keeper_weight: float = 2,
@@ -34,7 +36,7 @@ class DiamondAttack:
         self.score_interception_max_dt_steps = score_interception_max_dt_steps
         self.score_interception_max_distance_per_step = score_interception_max_distance_per_step
         self.score_interception_max_dt_per_step = score_interception_max_dt_per_step
-
+        self.score_squared_max_distance = score_squared_max_distance
         self.scoring_threshold = scoring_threshold
         self.chaser_evade_beater_weight = chaser_evade_beater_weight
         self.chaser_evade_chaser_keeper_weight = chaser_evade_chaser_keeper_weight
@@ -66,26 +68,28 @@ class DiamondAttack:
     def get_intercepting_scores_for_hoops(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player):
         intercepting_scores_dict = {}
         for hoop in self.attack_hoops:
-            copy_volleyball = volleyball.copy()
             volleyball_hoop_vector = Vector2(
-                hoop.position.x - copy_volleyball.position.x,
-                hoop.position.y - copy_volleyball.position.y
+                hoop.position.x - volleyball.position.x,
+                hoop.position.y - volleyball.position.y
             )
-            mag_volleyball_hoop_vector = UtilityLogic._magnitude(volleyball_hoop_vector)
-            if mag_volleyball_hoop_vector == 0:
+            squared_volleyball_hoop_distance = volleyball_hoop_vector.x**2 + volleyball_hoop_vector.y**2
+            if self.score_squared_max_distance > squared_volleyball_hoop_distance:
                 continue
+            copy_volleyball = volleyball.copy()
+            mag_volleyball_hoop_vector = math.sqrt(squared_volleyball_hoop_distance)
             copy_volleyball.velocity.x = volleyball_holder.throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector
             copy_volleyball.velocity.y = volleyball_holder.throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
+
             # intercepting_score, scores_info = self.interception_ratio_calculator_opponent(
-            #      dt=dt,
-            #      moving_entity=copy_volleyball,
-            #      intercepting_player_ids=self.defending_chaser_keeper_ids,
-            #      max_dt_steps=self.score_interception_max_dt_steps,
-            #      target_position=hoop.position,
-            #      only_first_intercepting=False,
-            #      max_distance_per_step=self.score_interception_max_distance_per_step,
-            #      max_dt_per_step=self.score_interception_max_dt_per_step
-            # )
+        #      dt=dt,
+        #      moving_entity=copy_volleyball,
+        #      intercepting_player_ids=self.defending_chaser_keeper_ids,
+        #      max_dt_steps=self.score_interception_max_dt_steps,
+        #      target_position=hoop.position,
+        #      only_first_intercepting=False,
+        #      max_distance_per_step=self.score_interception_max_distance_per_step,
+        #      max_dt_per_step=self.score_interception_max_dt_per_step
+        # )
             beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_ratio_calculator_opponent.beam_cosine_angle(
                 moving_entity=copy_volleyball,
                 intercepting_player_ids=self.defending_chaser_keeper_ids,
@@ -104,6 +108,9 @@ class DiamondAttack:
 
     def score_attempt(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player):
         intercepting_scores_dict = self.get_intercepting_scores_for_hoops(dt, volleyball, volleyball_holder)
+        # if no intercepting_scores, then probably to far away to score
+        if len(intercepting_scores_dict) == 0:
+            return
         # get hoop with highest interception score (lowest chance of being intercepted)
         best_hoop_id = min(intercepting_scores_dict, key=intercepting_scores_dict.get)
         best_score = intercepting_scores_dict[best_hoop_id]
