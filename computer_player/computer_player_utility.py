@@ -165,7 +165,7 @@ class InterceptionRatioCalculator:
     def beam_cosine_angle(self,
                 moving_entity: object,
                 intercepting_player_ids: List[str],
-                target_position: Optional[Vector2] = None,
+                target_position: Optional[Vector2] = None, # not needed if is in front target is False
                 moving_entity_target_vector: Optional[Vector2] = None,
                 is_in_front_target: bool = True
                 ) -> Tuple[float, Dict[str, float]]:
@@ -185,6 +185,8 @@ class InterceptionRatioCalculator:
 
         Returns player with smallest beam angle (highest dot product) and dict of player ids: dot products
         """
+        if target_position is None and is_in_front_target:
+            raise ValueError("target_position must be provided if is_in_front_target is True")
         # add case handling: target_position is None
         if moving_entity_target_vector is None:
             moving_entity_target_vector = Vector2(
@@ -259,7 +261,7 @@ class InterceptionRatioCalculator:
         squared_cosine_angle = mag_moving_entity_velocity**2 / (mag_player_velocity**2 + mag_moving_entity_velocity**2 + 1e-6)
         cosine_angle = math.sqrt(squared_cosine_angle)
         interception_score = (1 - beam_cosine_angle) / (1 - cosine_angle + 1e-6) 
-        self.logger.debug('cosine_angle: %s, beam_cosine_angle: %s, interception_score: %s', cosine_angle, beam_cosine_angle, interception_score)
+        # self.logger.debug('cosine_angle: %s, beam_cosine_angle: %s, interception_score: %s', cosine_angle, beam_cosine_angle, interception_score)
         return interception_score
 
 

@@ -3,7 +3,7 @@ import logging
 import math
 from typing import Dict, Optional, List
 
-from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage, MoveUtility
+from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage, MoveUtility, ThrowDirector
 from core.entities import Player, PlayerRole, Vector2, VolleyBall
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
@@ -26,6 +26,8 @@ class DiamondAttack:
                 chaser_evade_chaser_keeper_weight: float = 2,
                 chaser_evade_teamate_chaser_keeper_weight: float = 1,
                 positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
+                passing_evade_vector_position_penalty_weight: float = 100,
+                passing_threshold: float = 0.8, # minimum interception score (chance of not being intercepted) to attempt a pass
                 logger: Optional[logging.Logger] = None
                 ):
         self.logic = logic
@@ -42,6 +44,8 @@ class DiamondAttack:
         self.chaser_evade_chaser_keeper_weight = chaser_evade_chaser_keeper_weight
         self.chaser_evade_teamate_chaser_keeper_weight = chaser_evade_teamate_chaser_keeper_weight
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
+        self.passing_evade_vector_position_penalty_weight = passing_evade_vector_position_penalty_weight
+        self.passing_threshold = passing_threshold
         self.logger = logger or logging.getLogger("computer_player")
 
         self.attack_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team != attack_team]
@@ -73,7 +77,7 @@ class DiamondAttack:
                 hoop.position.y - volleyball.position.y
             )
             squared_volleyball_hoop_distance = volleyball_hoop_vector.x**2 + volleyball_hoop_vector.y**2
-            if self.score_squared_max_distance > squared_volleyball_hoop_distance:
+            if squared_volleyball_hoop_distance > self.score_squared_max_distance:
                 continue
             copy_volleyball = volleyball.copy()
             mag_volleyball_hoop_vector = math.sqrt(squared_volleyball_hoop_distance)
@@ -106,11 +110,11 @@ class DiamondAttack:
         # self.logger.debug("intercepting_scores_dict %s", intercepting_scores_dict)
         return intercepting_scores_dict
 
-    def score_attempt(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player):
+    def score_attempt(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player) -> bool:
         intercepting_scores_dict = self.get_intercepting_scores_for_hoops(dt, volleyball, volleyball_holder)
         # if no intercepting_scores, then probably to far away to score
         if len(intercepting_scores_dict) == 0:
-            return
+            return False
         # get hoop with highest interception score (lowest chance of being intercepted)
         best_hoop_id = min(intercepting_scores_dict, key=intercepting_scores_dict.get)
         best_score = intercepting_scores_dict[best_hoop_id]
@@ -122,30 +126,20 @@ class DiamondAttack:
                 best_hoop.position.y - volleyball_holder.position.y
             )
             self.logic.process_action_logic.process_throw_action(volleyball_holder.id)
+            return True
+        return False
     
-    def player_positioning(self, player: Player, move_vector: Optional[Vector2] = None):
+    def player_positioning(self, player: Player, total_evade_vector: Vector2, move_vector: Optional[Vector2] = None):
         if move_vector is None:
             move_vector = Vector2(
                 1 - 2 * self.attack_team, # 1 for team 0 attacking, -1 for team 1 attacking
                 0
             )
         # check distance to loaded opponent beater and evade if too close
-        evade_vectors = []
-        for other_player in self.logic.state.players.values():
-            if other_player.team != self.attack_team:
-                if other_player.role == PlayerRole.BEATER and other_player.has_ball:
-                    evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_beater_weight)
-                    evade_vectors.append(evade_vector)
-                elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]: # if chaser or keeper, also check distance and evade if too close
-                    evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_chaser_keeper_weight)
-                    evade_vectors.append(evade_vector)
-            elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and other_player.id != player.id: # also evade teammates who are chasers or keepers to avoid clustering
-                evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_teamate_chaser_keeper_weight)
-                evade_vectors.append(evade_vector)
-        for evade_vector in evade_vectors:
+        
             # self.logger.debug("Evade vector for player %s from opponent: %s", player.id, evade_vector)
-            move_vector.x += evade_vector.x
-            move_vector.y += evade_vector.y
+        move_vector.x += total_evade_vector.x
+        move_vector.y += total_evade_vector.y
         move_vector = MoveUtility.adjust_move_vector_to_avoid_boundary(
             player.position,
             move_vector,
@@ -198,6 +192,81 @@ class DiamondAttack:
                     )
                 move_vectors_dict[player.id] = move_vector
         return move_vectors_dict
+    
+    def evade_vectors_calculation(self) -> Dict[str, Vector2]:
+        evade_vectors_dict = {}
+        for player_id in self.attacking_chaser_keeper_ids:
+            player = self.logic.state.players[player_id]
+            total_evade_vector = Vector2(0, 0)
+            for other_player in self.logic.state.players.values():
+                if other_player.team != self.attack_team:
+                    if other_player.role == PlayerRole.BEATER and other_player.has_ball:
+                        evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_beater_weight)
+                        total_evade_vector.x += evade_vector.x
+                        total_evade_vector.y += evade_vector.y
+                    elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]: # if chaser or keeper, also check distance and evade if too close
+                        evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_chaser_keeper_weight)
+                        total_evade_vector.x += evade_vector.x
+                        total_evade_vector.y += evade_vector.y
+                elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and other_player.id != player.id: # also evade teammates who are chasers or keepers to avoid clustering
+                    evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_teamate_chaser_keeper_weight)
+                    total_evade_vector.x += evade_vector.x
+                    total_evade_vector.y += evade_vector.y
+            evade_vectors_dict[player.id] = total_evade_vector
+        return evade_vectors_dict
+
+    def player_passing(self,
+                       volleyball: VolleyBall,
+                       volleyball_holder: Player,
+                       evade_vectors_dict: Dict[str, Vector2],
+                       ):
+        """
+        Calculate position penalty for each teammate chaser/keeper based on:
+            - their squared distance to the closest attack hoop (the closer the better, since they can receive the ball and have a better chance to score or draw opponents when closer to the hoops)
+            - their total_evade_vector magnitude (the higher the more pressure on that player, so the less likely we want to pass to them)
+
+        Sort teammates by lowest position penalty. If the lowest score is the volleyball_holder keep the ball. Otherwise, check with beam interception if passing to that teammate is an option.
+        """
+        position_penalty_dict = {}
+        for player_id in self.attacking_chaser_keeper_ids:
+            player = self.logic.state.players[player_id]
+            if player.is_knocked_out:
+                continue
+            closest_attack_hoop_squared_distance = min([
+                UtilityLogic._squared_distance(player.position, hoop.position) for hoop in self.attack_hoops
+            ])
+            evade_vector = evade_vectors_dict.get(player.id, Vector2(0, 0))
+            squared_mag_evade_vector = evade_vector.x**2 + evade_vector.y**2
+            position_penalty = closest_attack_hoop_squared_distance + self.passing_evade_vector_position_penalty_weight * squared_mag_evade_vector
+            position_penalty_dict[player.id] = position_penalty
+            # self.logger.debug("Player %s position penalty: %s, closest_attack_hoop_squared_distance: %s, squared_mag_evade_vector: %s", player.id, position_penalty, closest_attack_hoop_squared_distance, squared_mag_evade_vector)
+        sorted_position_penalty = sorted(position_penalty_dict.items(), key=lambda x: x[1])
+        
+        # loop through sorted position penalty and pass to the first teammate that has a good enough interception score, if there is no such teammate then keep the ball
+        for player_id, position_penalty in sorted_position_penalty:
+            best_player_id, best_position_penalty = sorted_position_penalty[0]
+            if best_player_id == volleyball_holder.id:
+                self.logger.debug("Best player to pass to is current holder %s with position penalty %s, so keeping the ball", best_player_id, best_position_penalty)
+                return
+            best_player = self.logic.state.players[best_player_id]
+            throw_direction = ThrowDirector.get_throw_direction_moving_receiver(volleyball_holder, best_player)
+            beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_ratio_calculator_opponent.beam_cosine_angle(
+                moving_entity=volleyball,
+                intercepting_player_ids=self.defending_chaser_keeper_ids,
+                target_position=best_player.position, # approximate with current position instead of predicted position
+                moving_entity_target_vector=throw_direction
+            )
+            interception_score = self.interception_ratio_calculator_opponent.interception_score_from_beam_cosine_angle(
+                beam_cosine_angle=beam_cosine_angle,
+                beam_angle_player_id=beam_cosine_angle_player_id,
+                mag_moving_entity_velocity=volleyball_holder.throw_velocity,
+                # squared_moving_entity_target_distance=UtilityLogic._squared_distance(volleyball.position, best_player.position)
+            )
+            if interception_score > self.passing_threshold:
+                self.logger.info("Passing from player %s to player %s with position penalty %s and interception score %s", volleyball_holder.id, best_player_id, best_position_penalty, interception_score)
+                self.logic.process_action_logic.process_throw_action(volleyball_holder.id, throw_direction=throw_direction)
+                return
+
 
     def solve_assignment_problem(self, player_positions: List[Vector2], target_positions: List[Vector2]):
         if len(player_positions) == 0 or len(target_positions) == 0:
@@ -230,13 +299,20 @@ class DiamondAttack:
         # if volleyball.holder_id is not None:
         #     self.get_intercepting_scores_for_hoops(dt, volleyball, self.logic.state.players[volleyball.holder_id])
         move_vector_dict = self.move_chaser_keeper_hoops(not_knocked_out_chaser_keeper)
+        evade_vectors_dict = self.evade_vectors_calculation()
+        # for debugging
+        # if volleyball.holder_id is not None and volleyball.holder_id not in self.attack_cpu_player_ids:
+        #     self.player_passing(volleyball=volleyball, volleyball_holder=self.logic.state.players[volleyball.holder_id], evade_vectors_dict=evade_vectors_dict)
+
         if next_volleyball_holder_id in self.attack_cpu_player_ids:
             if volleyball.holder_id is None:
                 self.move_to_volleyball(volleyball, next_volleyball_holder_id, intercepting_position)
             else: # already hold of volleyball
                 volleyball_holder = self.logic.state.players[volleyball.holder_id]
-                self.player_positioning(volleyball_holder, move_vector_dict.get(volleyball_holder.id, None)) # position volleyball holder to evade opponents while holding the ball
-                self.score_attempt(dt, volleyball, volleyball_holder)
+                self.player_positioning(volleyball_holder, evade_vectors_dict.get(volleyball_holder.id, Vector2(0, 0)), move_vector_dict.get(volleyball_holder.id, None)) # position volleyball holder to evade opponents while holding the ball
+                tries_to_score = self.score_attempt(dt, volleyball, volleyball_holder)
+                if not tries_to_score:
+                    self.player_passing(volleyball=volleyball, volleyball_holder=volleyball_holder, evade_vectors_dict=evade_vectors_dict)
         # elif volleyball.holder_id is not None:
         #     self.get_intercepting_scores_for_hoops(dt, volleyball, self.logic.state.players[volleyball.holder_id])
         # if (# volleyball in own half
@@ -248,5 +324,5 @@ class DiamondAttack:
             if player_id != next_volleyball_holder_id: # dealing with volleyball holder before
                 player = self.logic.state.players[player_id]
                 if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
-                    self.player_positioning(player, move_vector_dict.get(player.id, None))
+                    self.player_positioning(player, evade_vectors_dict.get(player.id, Vector2(0, 0)), move_vector_dict.get(player.id, None))
 
