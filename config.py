@@ -56,11 +56,11 @@ class Config:
     SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter
 
     N_CHASERS_TEAM_0 = 3
-    N_CHASERS_TEAM_1 = 3
+    N_CHASERS_TEAM_1 = 2
     N_KEEPERS_TEAM_0 = 1
-    N_KEEPERS_TEAM_1 = 1
+    N_KEEPERS_TEAM_1 = 0
     N_BEATERS_TEAM_0 = 2
-    N_BEATERS_TEAM_1 = 2
+    N_BEATERS_TEAM_1 = 0
 
 
     COMPUTER_PLAYER_TICK_RATE = 5 # number of game ticks between computer player updates

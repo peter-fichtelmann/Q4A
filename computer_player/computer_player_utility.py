@@ -162,15 +162,15 @@ class InterceptionRatioCalculator:
             dt = max_dt_per_step
         return dt
     
-    def beam_angle(self,
+    def beam_cosine_angle(self,
                 moving_entity: object,
                 intercepting_player_ids: List[str],
                 target_position: Optional[Vector2] = None,
                 moving_entity_target_vector: Optional[Vector2] = None,
                 is_in_front_target: bool = True
-                ) -> Tuple[float, Dict[str]]:
+                ) -> Tuple[float, Dict[str, float]]:
         """
-        Calculate the beam angle as dot products to the moving_entity-target vector from all players.
+        Calculate the beam cosine angle as dot products of the normed moving_entity-target vector to the normed moving_entity-player vectors.
         If dot product close to 1 enough then part of beam and interception likely.
 
         if is_in_front_target
@@ -195,6 +195,7 @@ class InterceptionRatioCalculator:
         moving_entity_target_vector.x /= mag_moving_entity_target_vector
         moving_entity_target_vector.y /= mag_moving_entity_target_vector
         max_dot_product = 0
+        max_dot_product_player_id = None
         beam_angle_player_dict = {}
         for player_id in intercepting_player_ids:
             player = self.logic.state.players[player_id]
@@ -205,7 +206,7 @@ class InterceptionRatioCalculator:
                 # check if player is not behind target
                 player_target_vector_x = target_position.x - player.position.x
                 player_target_vector_y = target_position.y - player.position.y
-                dot_product_player_target = player_target_vector_x * moving_entity_target_vector.x + player_target_vector_y * mag_moving_entity_target_vector.y
+                dot_product_player_target = player_target_vector_x * moving_entity_target_vector.x + player_target_vector_y * moving_entity_target_vector.y
                 # orthogonal or in front of target
                 if dot_product_player_target < 0:
                     # TODO Allow if distance player-target close enough
@@ -223,9 +224,43 @@ class InterceptionRatioCalculator:
             
             if dot_product > max_dot_product:
                 max_dot_product = dot_product
+                max_dot_product_player_id = player.id
             beam_angle_player_dict[player.id] = dot_product
-        return max_dot_product, beam_angle_player_dict
+        return max_dot_product, max_dot_product_player_id, beam_angle_player_dict
+    
+    def interception_score_from_beam_cosine_angle(self,
+                                                  beam_cosine_angle: float,
+                                                  beam_angle_player_id: str,
+                                                #   squared_moving_entity_target_distance: float,
+                                                  mag_moving_entity_velocity: float,
+                                                  
+                                                  ) -> float:
+        """
+        Assume a rectangular triangle between moving_entity, target and player with maximum distance to intercept.
+        
+        cos(angle) = s_t / hypotenuse = s_t / (s_p^2 + s_t^2)^0.5 where s_p is the distance to player and s_t is the distance to target.
 
+        Assuming constant moving_entity and max player velocity, s_p = s_t * v_p / v_e where v_p is player velocity and v_e is moving entity velocity.
+
+        So calculating with squared distances to avoid square root:
+
+        cos(angle)^2 = (s_t^2) / (s_t^2 * v_p^2 / v_e^2 + s_t^2) = 1 / (v_p^2 / v_e^2 + 1)
+
+        Large cosine means small angle.
+
+        The larger the score, the less likey the interception.
+
+        """
+        if beam_cosine_angle == 0:
+            # no interception
+            return 1
+        # TODO incorporate individual player velocity also regarding current velocity direction
+        mag_player_velocity = self.logic.state.players[beam_angle_player_id].max_speed
+        squared_cosine_angle = mag_moving_entity_velocity**2 / (mag_player_velocity**2 + mag_moving_entity_velocity**2 + 1e-6)
+        cosine_angle = math.sqrt(squared_cosine_angle)
+        interception_score = (1 - beam_cosine_angle) / (1 - cosine_angle + 1e-6) 
+        self.logger.debug('cosine_angle: %s, beam_cosine_angle: %s, interception_score: %s', cosine_angle, beam_cosine_angle, interception_score)
+        return interception_score
 
 
     def __call__(self,

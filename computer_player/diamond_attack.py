@@ -71,22 +71,31 @@ class DiamondAttack:
                 hoop.position.x - copy_volleyball.position.x,
                 hoop.position.y - copy_volleyball.position.y
             )
-            mag_volleyball_hoop_vector = (volleyball_hoop_vector.x**2 + volleyball_hoop_vector.y**2) ** 0.5
+            mag_volleyball_hoop_vector = UtilityLogic._magnitude(volleyball_hoop_vector)
             if mag_volleyball_hoop_vector == 0:
                 continue
-            copy_volleyball.velocity = Vector2(
-                volleyball_holder.throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector,
-                volleyball_holder.throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
-            )
-            intercepting_score, scores_info = self.interception_ratio_calculator_opponent(
-                 dt=dt,
-                 moving_entity=copy_volleyball,
-                 intercepting_player_ids=self.defending_chaser_keeper_ids,
-                 max_dt_steps=self.score_interception_max_dt_steps,
-                 target_position=hoop.position,
-                 only_first_intercepting=False,
-                 max_distance_per_step=self.score_interception_max_distance_per_step,
-                 max_dt_per_step=self.score_interception_max_dt_per_step
+            copy_volleyball.velocity.x = volleyball_holder.throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector
+            copy_volleyball.velocity.y = volleyball_holder.throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
+            # intercepting_score, scores_info = self.interception_ratio_calculator_opponent(
+            #      dt=dt,
+            #      moving_entity=copy_volleyball,
+            #      intercepting_player_ids=self.defending_chaser_keeper_ids,
+            #      max_dt_steps=self.score_interception_max_dt_steps,
+            #      target_position=hoop.position,
+            #      only_first_intercepting=False,
+            #      max_distance_per_step=self.score_interception_max_distance_per_step,
+            #      max_dt_per_step=self.score_interception_max_dt_per_step
+            # )
+            beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_ratio_calculator_opponent.beam_cosine_angle(
+                moving_entity=copy_volleyball,
+                intercepting_player_ids=self.defending_chaser_keeper_ids,
+                target_position=hoop.position,
+                moving_entity_target_vector=volleyball_hoop_vector)
+            intercepting_score = self.interception_ratio_calculator_opponent.interception_score_from_beam_cosine_angle(
+                beam_cosine_angle=beam_cosine_angle,
+                beam_angle_player_id=beam_cosine_angle_player_id,
+                mag_moving_entity_velocity=volleyball_holder.throw_velocity,
+                # squared_moving_entity_target_distance=mag_volleyball_hoop_vector**2,
             )
             intercepting_scores_dict[hoop.id] = intercepting_score
             # self.logger.debug("Interception info per hoop %s: %s, %s", hoop.id, intercepting_score, scores_info)
@@ -211,6 +220,8 @@ class DiamondAttack:
             player for player in attacking_chaser_keeper if (
                 not player.is_knocked_out and player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]
             )]
+        # if volleyball.holder_id is not None:
+        #     self.get_intercepting_scores_for_hoops(dt, volleyball, self.logic.state.players[volleyball.holder_id])
         move_vector_dict = self.move_chaser_keeper_hoops(not_knocked_out_chaser_keeper)
         if next_volleyball_holder_id in self.attack_cpu_player_ids:
             if volleyball.holder_id is None:
