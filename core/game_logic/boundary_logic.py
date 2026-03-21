@@ -269,21 +269,27 @@ class BoundaryLogic:
             if player.role == PlayerRole.KEEPER and player.team == volleyball.possession_team:
                 keeper = player
                 break
-        for player in players:
-            # Check players too close to keeper
-            # for other_id, distance in self._get_sorted_distances(keeper.id).items():
-            for other_id, distance in self.state.squared_distances_player_player.get(keeper.id, []):
-                other_player = self.state.players.get(other_id)
-                if other_player is None:
-                    continue
-                if distance < (4 * (other_player.radius)) ** 2:
-                    move_away_speed = other_player.max_speed
-                    move_vector, normal = self._calculate_move_away_vector(keeper, other_player, dt, move_away_speed)
-                    if move_vector is not None:
-                        other_player.position.x += move_vector.x
-                        other_player.position.y += move_vector.y
-                else:
-                    break
+        if keeper is None:
+            return
+        # Check players too close to keeper
+        # for other_id, distance in self._get_sorted_distances(keeper.id).items():
+        for other_id, distance in self.state.squared_distances_player_player.get(keeper.id, []):
+            other_player = self.state.players.get(other_id)
+            if other_player is None:
+                continue
+            if distance < (4 * (other_player.radius)) ** 2:
+                move_away_speed = other_player.max_speed
+                move_vector, normal = self._calculate_move_away_vector(keeper, other_player, dt, move_away_speed)
+                self.logger.debug("Other player id %s", other_id)
+                self.logger.debug("Move vector %s", move_vector)
+                self.logger.debug('Other player velocity %s, ', other_player.velocity)
+                self.logger.debug('Other player position %s, keeper position %s ', other_player.position, keeper.position)
+                self.logger.debug('Distance to keeper %s, distance_comparison %s', distance, (4 * (other_player.radius)) ** 2)
+                if move_vector is not None:
+                    other_player.position.x += move_vector.x
+                    other_player.position.y += move_vector.y
+            else:
+                break
         
 
     def _calculate_move_away_vector(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> Optional[tuple[Vector2, Vector2]]:
@@ -335,6 +341,8 @@ class BoundaryLogic:
             (normal.x * move_away_speed - other_velocity_along_normal.x) * jitter_factor_x,
             (normal.y * move_away_speed - other_velocity_along_normal.y) * jitter_factor_y
         )
+        # self.logger.debug("Calculated move away vector (%s, %s) for player %s to move away from entity %s during inbounding free way", move_away_vector.x, move_away_vector.y, move_away_entity.id, move_free_entity.id)
+        # self.logger.debug("other velocity along normal: (%s, %s), other velocity perpendicular: (%s, %s)", other_velocity_along_normal.x, other_velocity_along_normal.y, other_velocity_perpendicular.x, other_velocity_perpendicular.y)
         return Vector2(move_away_vector.x * dt, move_away_vector.y * dt), normal
 
     # def _move_away(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> None:
