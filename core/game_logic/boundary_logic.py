@@ -102,7 +102,7 @@ class BoundaryLogic:
                     moving_entity.velocity.x = 0
                     moving_entity.velocity.y = 0
                     if moving_entity.ball_type == BallType.VOLLEYBALL:
-                        if moving_entity.holder_id is None and not moving_entity.is_dead:
+                        if moving_entity.holder_id is None:
                             # volleyball going out of bounds only if not hold
                             self._start_inbounding_procedure()
                 if hasattr(moving_entity, "has_ball"):
@@ -150,6 +150,18 @@ class BoundaryLogic:
             return
         elif volleyball.inbounder is not None:
             return  # Inbounding procedure already started
+        elif volleyball.is_dead:
+            # dead volleyball assign keeper of possession team as inbounder
+            if volleyball.possession_team == self.state.team_0:
+                keeper = self.state.keeper_team_0
+            else:
+                keeper = self.state.keeper_team_1
+            if keeper is not None:
+                self.logger.info("Inbounding procedure started by keeper %s for dead volleyball %s", keeper.id, volleyball.id)
+                keeper.inbounding = volleyball.id
+                volleyball.inbounder = keeper.id
+                keeper.dodgeball_immunity = True
+            return
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.state.squared_distances_ball_player.get(volleyball.id, []):
             player = self.state.players[other_id]

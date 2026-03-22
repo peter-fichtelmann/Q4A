@@ -166,6 +166,8 @@ class VolleyballLogic:
         
         The volleyball becomes alive when:
         - It is held by the keeper of the team that possesses it (was scored against) in their own half
+
+        A volleyball make alive counter prevents immediate alive status to prevent issues when the dead ball went out of bounds.
         """
         volleyball = self.state.volleyball
         if volleyball is None:
@@ -188,3 +190,6 @@ class VolleyballLogic:
             
             # Keeper is in own half, ball becomes alive
             volleyball.is_dead = False
+
+
+

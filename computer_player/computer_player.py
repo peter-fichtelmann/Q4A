@@ -418,6 +418,14 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             return player.team, player.id, None
         if volleyball.holder_id is not None:
             return volleyball.possession_team, volleyball.holder_id, None
+        if volleyball.is_dead:
+            volleyball_holder_id = None
+            # get keeper who might get control of dead volleyball
+            for player in self.logic.state.players.values():
+                if player.has_ball == volleyball.id:
+                    volleyball_holder_id = player.id
+                    break
+            return volleyball.possession_team, volleyball_holder_id, None
         else:
             # elif volleyball.velocity.x > 0 or volleyball.velocity.y > 0:
             potential_intercepting_players_0 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 0]

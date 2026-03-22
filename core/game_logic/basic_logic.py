@@ -107,6 +107,7 @@ class BasicLogic:
                     player.velocity.y = 0
                     ball.inbounder = None
                     player.inbounding = None
+                    # no worries with setting keeper to false because update position afterwards can set to true again
                     player.dodgeball_immunity = False
                     self.logger.info("Inbounding procedure ended by ball re-entering pitch")
             self.update_player_velocity(player, dt)

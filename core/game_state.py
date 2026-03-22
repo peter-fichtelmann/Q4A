@@ -14,6 +14,8 @@ class GameState:
     team_0 = 0
     team_1 = 1
     players: Dict[str, Player] = field(default_factory=dict)  # player_id -> Player
+    keeper_team_0: Player = None
+    keeper_team_1: Player = None
     balls: Dict[str, Ball] = field(default_factory=dict)       # ball_id -> Ball
     volleyball: VolleyBall = None
     dodgeballs: List[DodgeBall] = field(default_factory=list)
@@ -48,11 +50,20 @@ class GameState:
     def add_player(self, player: Player) -> None:
         """Add a player to the game state."""
         self.players[player.id] = player
+        if player.role == PlayerRole.KEEPER:
+            if player.team == self.team_0:
+                self.keeper_team_0 = player
+            elif player.team == self.team_1:
+                self.keeper_team_1 = player
     
     def remove_player(self, player_id: str) -> None:
         """Remove a player from the game state."""
         if player_id in self.players:
             del self.players[player_id]
+            if self.keeper_team_0.id == player_id:
+                self.keeper_team_0 = None
+            elif self.keeper_team_1.id == player_id:
+                self.keeper_team_1 = None
     
     def get_player(self, player_id: str) -> Optional[Player]:
         """Retrieve a player by ID."""
@@ -102,6 +113,17 @@ class GameState:
     def update_player(self, player: Player) -> None:
         """Update player data in the game state."""
         if player.id in self.players:
+            previous_player = self.players[player.id]
+            if previous_player.role == PlayerRole.KEEPER:
+                if previous_player.team == self.team_0:
+                    self.keeper_team_0 = None
+                elif previous_player.team == self.team_1:
+                    self.keeper_team_1 = None
+            if player.role == PlayerRole.KEEPER:
+                if player.team == self.team_0:
+                    self.keeper_team_0 = player
+                elif player.team == self.team_1:
+                    self.keeper_team_1 = player
             self.players[player.id] = player
 
     def copy(self) -> 'GameState':
