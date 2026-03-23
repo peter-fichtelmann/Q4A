@@ -121,6 +121,7 @@ class GameLogic:
         
         # Update player positions and ball positions
         self.basic_logic.update_positions(dt)
+        self.basic_logic.check_keeper_special_powers() # e.g. dodgeball immunity, protected keeper
         # free way for volleyball inbounder
         self.boundary_logic._inbounding_free_way(dt)
         self.boundary_logic._making_alive_keeper_free_way(dt)
