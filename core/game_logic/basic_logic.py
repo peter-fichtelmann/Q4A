@@ -112,6 +112,32 @@ class BasicLogic:
                     self.logger.info("Inbounding procedure ended by ball re-entering pitch")
             self.update_player_velocity(player, dt)
 
+    def check_keeper_special_powers(self):
+        """
+        Check if beaters are immune to beats due to dead volleyball or if they are in their own keeper zone.
+        
+        Check for protected keeper
+        """
+        # TODO Add protected keeper
+        keeper_0 = self.state.keeper_team_0
+        keeper_1 = self.state.keeper_team_1
+        if self.state.keeper_zone_x_0 >= keeper_0.position.x - keeper_0.radius:
+            keeper_0.dodgeball_immunity = True
+        else:
+            keeper_0.dodgeball_immunity = False
+        if keeper_1.position.x <= self.state.keeper_zone_x_1 + keeper_1.radius:
+            keeper_1.dodgeball_immunity = True
+        else:
+            keeper_1.dodgeball_immunity = False
+        volleyball = self.state.volleyball
+        if volleyball is not None:
+            if volleyball.is_dead:
+                if volleyball.possession_team == self.state.team_0:
+                    keeper_0.dodgeball_immunity = True
+                else:
+                    keeper_1.dodgeball_immunity = True
+
+
     def get_free_ball_velocity(self, ball: Ball, dt: float) -> Tuple[float, float]:
         """Update a ball's velocity based on its current velocity and friction."""
         velocity_x = ball.velocity.x - ball.deacceleration_rate * ball.velocity.x * dt
@@ -174,15 +200,6 @@ class BasicLogic:
             player.previous_position.y = player.position.y
             player.position.x, player.position.y = self.get_update_position(player, dt)
             # print(f'Player {player.id} position: {player.position.x}, {player.position.y}')
-            if player.role == PlayerRole.KEEPER: # dodgeball immunity if keeper in keeper zone
-                if (
-                    (player.team == self.state.team_0 and self.state.keeper_zone_x_0 >= player.position.x - player.radius)
-                    or
-                    (player.team == self.state.team_1 and player.position.x <= self.state.keeper_zone_x_1 + player.radius)
-                ):
-                    player.dodgeball_immunity = True
-                else:
-                    player.dodgeball_immunity = False
             if player.catch_cooldown > dt:
                 player.catch_cooldown -= dt
             else:
