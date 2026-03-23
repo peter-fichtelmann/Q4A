@@ -169,6 +169,7 @@ class GameLogic:
             ('physical._enforce_tackle', self.physical_contact_logic, '_enforce_tackle'),
             ('basic.update_ball_velocities', self.basic_logic, 'update_ball_velocities'),
             ('basic.update_positions', self.basic_logic, 'update_positions'),
+            ('basic.check_keeper_special_powers', self.basic_logic, 'check_keeper_special_powers'),
             ('boundary._inbounding_free_way', self.boundary_logic, '_inbounding_free_way'),
             ('boundary._making_alive_keeper_free_way', self.boundary_logic, '_making_alive_keeper_free_way'),
             ('boundary._enforce_hoop_blockage', self.boundary_logic, '_enforce_hoop_blockage'),
