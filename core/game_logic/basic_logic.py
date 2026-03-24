@@ -84,32 +84,34 @@ class BasicLogic:
                                 player.direction.x = 1
                             player.direction.y = 0
             if player.inbounding is not None: # inbounding
-                ball = self.state.balls[player.inbounding]
-                squared_distance_to_ball = UtilityLogic._squared_distance(player.position, ball.position)
-                if squared_distance_to_ball > (player.radius + ball.radius) ** 2:
-                    # not reached ball during inbounding
-                    player.direction.x = ball.position.x - player.position.x
-                    player.direction.y = ball.position.y - player.position.y
-                else:
-                    # perpendicular inbounding direction or 45 degree angle away from boundary if on corner
-                    player.direction.x = 0
-                    player.direction.y = 0
-                    if ball.position.x <= self.state.boundaries_x[0] + player.radius: # left boundary
-                        player.direction.x += 1
-                    elif ball.position.x >= self.state.boundaries_x[1] - player.radius: # right boundary
-                        player.direction.x -= 1
-                    if ball.position.y <= self.state.boundaries_y[0] + player.radius: # bottom boundary
-                        player.direction.y += 1
-                    elif ball.position.y >= self.state.boundaries_y[1] - player.radius: # top boundary
-                        player.direction.y -= 1
-                    self.logger.debug("Inbounding direction: (%s, %s)", player.direction.x, player.direction.y)
-                    player.velocity.x = 0
-                    player.velocity.y = 0
-                    ball.inbounder = None
-                    player.inbounding = None
-                    # no worries with setting keeper to false because update position afterwards can set to true again
-                    player.dodgeball_immunity = False
-                    self.logger.info("Inbounding procedure ended by ball re-entering pitch")
+                # keeper with dead volleyball could be assigned to inbound while being knocked out
+                if not player.is_knocked_out: 
+                    ball = self.state.balls[player.inbounding]
+                    squared_distance_to_ball = UtilityLogic._squared_distance(player.position, ball.position)
+                    if squared_distance_to_ball > (player.radius + ball.radius) ** 2:
+                        # not reached ball during inbounding
+                        player.direction.x = ball.position.x - player.position.x
+                        player.direction.y = ball.position.y - player.position.y
+                    else:
+                        # perpendicular inbounding direction or 45 degree angle away from boundary if on corner
+                        player.direction.x = 0
+                        player.direction.y = 0
+                        if ball.position.x <= self.state.boundaries_x[0] + player.radius: # left boundary
+                            player.direction.x += 1
+                        elif ball.position.x >= self.state.boundaries_x[1] - player.radius: # right boundary
+                            player.direction.x -= 1
+                        if ball.position.y <= self.state.boundaries_y[0] + player.radius: # bottom boundary
+                            player.direction.y += 1
+                        elif ball.position.y >= self.state.boundaries_y[1] - player.radius: # top boundary
+                            player.direction.y -= 1
+                        self.logger.debug("Inbounding direction: (%s, %s)", player.direction.x, player.direction.y)
+                        player.velocity.x = 0
+                        player.velocity.y = 0
+                        ball.inbounder = None
+                        player.inbounding = None
+                        # no worries with setting keeper to false because can be set true before Dodgeball checks again by keeper powers
+                        player.dodgeball_immunity = False
+                        self.logger.info("Inbounding procedure ended by ball re-entering pitch")
             self.update_player_velocity(player, dt)
 
     def check_keeper_special_powers(self):
