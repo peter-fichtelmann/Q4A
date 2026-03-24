@@ -263,6 +263,127 @@ class InterceptionRatioCalculator:
         interception_score = (1 - beam_cosine_angle) / (1 - cosine_angle + 1e-6) 
         # self.logger.debug('cosine_angle: %s, beam_cosine_angle: %s, interception_score: %s', cosine_angle, beam_cosine_angle, interception_score)
         return interception_score
+    
+
+    def line_interception(self,
+                          moving_entity: object,
+                          intercepting_player_ids: List[str],
+                          ) -> Tuple[float, str, Vector2, Dict[str, float|Vector2]]:
+        """
+        Check the line from moving_entity to target_position for intercepting with players in intercepting_player_ids.
+        Calculate the interception time. 
+        Return the player with the lowest interception time.
+        """
+        lowest_interception_dt = float('inf')
+        lowest_interception_dt_player_id = None
+        interception_info_dict = {}
+        for player_id in intercepting_player_ids:
+            player = self.logic.state.players[player_id]
+            penalty_time = 0.0
+            player_position_x = player.position.x
+            player_position_y = player.position.y
+            if player.is_knocked_out:
+                # TODO Take knocked time for knocked out players to recover into account
+                dx = self.state.hoops[f'hoop_{player.team}_center'].position.x - player.position.x
+                dy = self.state.hoops[f'hoop_{player.team}_center'].position.y - player.position.y
+                distance_to_own_hoop = UtilityLogic._magnitude_without_vector(dx, dy)
+                penalty_time = distance_to_own_hoop / player.max_speed
+                # use hoop position as player position
+                player_position_x = self.state.hoops[f'hoop_{player.team}_center'].position.x
+                player_position_y = self.state.hoops[f'hoop_{player.team}_center'].position.y
+            interception_time = self.get_interception_time(
+                player_position_x=player_position_x,
+                player_position_y=player_position_y,
+                moving_entity_position_x=moving_entity.position.x,
+                moving_entity_position_y=moving_entity.position.y,
+                moving_entity_velocity_x=moving_entity.velocity.x,
+                moving_entity_velocity_y=moving_entity.velocity.y,
+                player_max_speed=player.max_speed
+            )
+            if interception_time == float('inf'):
+                continue
+            interception_time += penalty_time
+            if interception_time < lowest_interception_dt:
+                lowest_interception_dt = interception_time
+                lowest_interception_dt_player_id = player_id
+            interception_position = Vector2(
+                moving_entity.position.x + moving_entity.velocity.x * interception_time,
+                moving_entity.position.y + moving_entity.velocity.y * interception_time
+            )
+            interception_info_dict[player_id] = (interception_time, interception_position)
+
+
+            # self.logger.debug(f"Player {player_id} has interception time {interception_time}")
+        interception_position = Vector2(
+            moving_entity.position.x + moving_entity.velocity.x * lowest_interception_dt,
+            moving_entity.position.y + moving_entity.velocity.y * lowest_interception_dt
+        )
+        self.logger.debug(f"Lowest interception time is {lowest_interception_dt} by player {lowest_interception_dt_player_id} at position ({interception_position.x}, {interception_position.y})")
+        return lowest_interception_dt, lowest_interception_dt_player_id, interception_position, interception_info_dict
+
+    @staticmethod
+    def get_interception_time(
+        player_position_x: float,
+        player_position_y: float,
+        moving_entity_position_x: float,
+        moving_entity_position_y: float,
+        moving_entity_velocity_x: float,
+        moving_entity_velocity_y: float,
+        player_max_speed: float
+        ) -> float:
+        """
+        Similiar to get_throw_direction_moving_receiver but instead of throwin ball, throwing yourself with max_speed
+
+        Assume constant ball velocity. Assume player starts with max speed.
+
+        Used first solution via sympy solve:
+
+        import sympy as sp
+
+            v_b_x, v_b_y = sp.symbols('v_b_x v_b_y', real=True, imaginary=False)
+            z = sp.symbols('z', positive=True, real=True, imaginary=False)
+            s_b_x, s_b_y, s_p_x, s_p_y = sp.symbols('s_b_x s_b_y s_p_x s_p_y', constant=True, real=True, nonnegative=True, imaginary=False)
+            v_p_x, v_p_y = sp.symbols('v_p_x v_p_y', constant=True, real=True, imaginary=False)
+            v_b_value_sq = sp.symbols('v_b_value_sq', constant=True, positive=True, real=True, imaginary=False)
+            # Your example system
+            eq1 = (s_b_x - s_p_x) + (v_b_x - v_p_x) * dt
+            eq2 = (s_b_y - s_p_y) + (v_b_y - v_p_y) * dt
+            eq3 = v_b_x**2 + v_b_y**2 - v_b_value_sq
+
+            solutions = sp.nonlinsolve([eq1, eq2, eq3], (v_b_x, v_b_y, dt))
+        """
+        # assume ball starts at player position
+        s_b_x = player_position_x
+        s_b_y = player_position_y
+        s_p_x = moving_entity_position_x
+        s_p_y = moving_entity_position_y
+        v_p_x = moving_entity_velocity_x
+        v_p_y = moving_entity_velocity_y
+        v_b_value_sq = player_max_speed**2
+        # print('s_b_x', s_b_x)
+        # print('s_b_y', s_b_y)
+        # print('s_p_x', s_p_x)
+        # print('s_p_y', s_p_y)
+        # print('v_p_x', v_p_x)
+        # print('v_p_y', v_p_y)
+        # print('v_b_value_sq', v_b_value_sq)
+        inner_root = s_b_x**2*v_b_value_sq - s_b_x**2*v_p_y**2 + 2*s_b_x*s_b_y*v_p_x*v_p_y - 2*s_b_x*s_p_x*v_b_value_sq + 2*s_b_x*s_p_x*v_p_y**2 - 2*s_b_x*s_p_y*v_p_x*v_p_y + s_b_y**2*v_b_value_sq - s_b_y**2*v_p_x**2 - 2*s_b_y*s_p_x*v_p_x*v_p_y - 2*s_b_y*s_p_y*v_b_value_sq + 2*s_b_y*s_p_y*v_p_x**2 + s_p_x**2*v_b_value_sq - s_p_x**2*v_p_y**2 + 2*s_p_x*s_p_y*v_p_x*v_p_y + s_p_y**2*v_b_value_sq - s_p_y**2*v_p_x**2
+        divider = (v_b_value_sq - v_p_x**2 - v_p_y**2)
+        if inner_root >= 0 and divider != 0:
+            root = math.sqrt(inner_root)
+            inverse_divider = 1 / divider
+            # v_b_x = (-s_b_x*s_b_y*v_p_y + s_b_x*s_p_y*v_p_y - s_b_x*root + s_b_y**2*v_p_x + s_b_y*s_p_x*v_p_y - 2*s_b_y*s_p_y*v_p_x - s_p_x*s_p_y*v_p_y + s_p_x*root + s_p_y**2*v_p_x)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2) 
+            # v_b_y = (s_b_x**2*v_p_y - s_b_x*s_b_y*v_p_x - 2*s_b_x*s_p_x*v_p_y + s_b_x*s_p_y*v_p_x + s_b_y*s_p_x*v_p_x - s_b_y*root + s_p_x**2*v_p_y - s_p_x*s_p_y*v_p_x + s_p_y*root)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2)
+            dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)*inverse_divider + root*inverse_divider
+            if dt < 0:
+                dt = float('inf')
+                # raise ValueError(f"Negative interception time, no valid interception with: \n s_b_x {player_position_x}, s_b_y {player_position_y}, s_p_x {moving_entity_position_x}, s_p_y {moving_entity_position_y}, v_p_x {moving_entity_velocity_x}, v_p_y {moving_entity_velocity_y}, player_max_speed {player_max_speed}")        
+        else:
+            # no intercept, ball to fast
+            dt = float('inf')
+        return dt
+        # print('v_b_x', v_b_x)
+        # print('v_b_y', v_b_y)
 
 
     def __call__(self,
@@ -494,4 +615,3 @@ class ThrowDirector:
         # print('v_b_y', v_b_y)
         # print('dt', dt)
         return Vector2(v_b_x, v_b_y)
-        # dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)/(v_b_value_sq - v_p_x**2 - v_p_y**2) + root/(v_b_value_sq - v_p_x**2 - v_p_y**2)

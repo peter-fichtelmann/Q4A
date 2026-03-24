@@ -273,30 +273,56 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 if beater.id in self.cpu_player_ids:
                     beater.direction = squared_distance_and_direction_to_dodgeball_dict[beater.id][1]
         else: # no third dodgeball, so no team already has two dodgeballs in possesion
-            step_ratio_dicts = {}
+            # step_ratio_dicts = {}
+            interception_info_dicts = {}
+            min_interception_time_dodgeball_dict = {}
             for dodgeball in self.logic.state.balls.values():
                 if dodgeball.ball_type == BallType.DODGEBALL:
                     if dodgeball.possession_team is None:
                         # If there is a dead dodgeball which is not the third dodgeball, assign beater players to get the dodgeball
                         # does not matter which interception ratio calculator as beaters are not blocked by hoops
-                        _, step_ratio_dict = self.interception_ratio_calculator_team_0(
-                            dt=dt,
+                        min_interception_time, _, _, interception_info_dict = self.interception_ratio_calculator_team_0.line_interception(
                             moving_entity=dodgeball,
-                            intercepting_player_ids=[beater.id for beater in self.beaters if not beater.is_knocked_out],
-                            target_position=None,
-                            only_first_intercepting=True, # in rare cases if one beater would get two dodgeball, this could cause issues so only assign one beater per dodgeball
-                            max_dt_steps=self.determine_attacking_team_max_dt_steps,
-                            max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
-                            max_dt_per_step=self.determine_attacking_team_max_dt_per_step
+                            intercepting_player_ids=[beater.id for beater in self.beaters],
                         )
-                        step_ratio_dicts[dodgeball.id] = step_ratio_dict
+                        interception_info_dicts[dodgeball.id] = interception_info_dict
+                        min_interception_time_dodgeball_dict[dodgeball.id] = min_interception_time
+
+                        # _, step_ratio_dict = self.interception_ratio_calculator_team_0(
+                        #     dt=dt,
+                        #     moving_entity=dodgeball,
+                        #     intercepting_player_ids=[beater.id for beater in self.beaters if not beater.is_knocked_out],
+                        #     target_position=None,
+                        #     only_first_intercepting=True, # in rare cases if one beater would get two dodgeball, this could cause issues so only assign one beater per dodgeball
+                        #     max_dt_steps=self.determine_attacking_team_max_dt_steps,
+                        #     max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
+                        #     max_dt_per_step=self.determine_attacking_team_max_dt_per_step
+                        # )
+                        # step_ratio_dicts[dodgeball.id] = step_ratio_dict
             # sort step_ratio_dicts by lowest step in step_ratio_dicts[dodgeball_id][beater_id] = (step, step_ratio, intercepting_position)
             # each step_ratio_dict has only one beater_id entry due to only_first_intercepting=True, so we can sort by step directly
             unassigned_dodgeball_ids = []
-            while len(step_ratio_dicts) > 0:
-                # assign beaters to dodgeballs based on interception ratio calculation, if beater already assigned, perform another interception ratio calculation without the assigned beater until all step_ratio_dicts are processed or all beaters are assigned, then assign remaining dodgeballs based on proximity
-                step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids = self._interception_based_beater_assignment(dt, step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids)
-                # self.logger.debug(f"Assigned beater ids after interception based assignment: {assigned_beater_ids}, unassigned dodgeball ids: {unassigned_dodgeball_ids}, remaining step ratio dicts: {len(step_ratio_dicts.keys())}")
+            sorted_dodgeball_ids = sorted(min_interception_time_dodgeball_dict.keys(), key=lambda dodgeball_id: min_interception_time_dodgeball_dict[dodgeball_id])
+            for dodgeball_id in sorted_dodgeball_ids:
+                if len(interception_info_dicts[dodgeball_id]) > 0:
+                    for beater_id in interception_info_dicts[dodgeball_id].keys():
+                        if beater_id not in assigned_beater_ids:
+                            beater = self.logic.state.players[beater_id]
+                            dodgeball = self.logic.state.balls[dodgeball_id]
+                            # self.logger.debug(f"Beater {beater.id} assigned to get dodgeball {dodgeball.id} which is not currently possessed by any team with interception time {interception_time}")
+                            assigned_beater_ids.append(beater_id)
+                            # move towards the dodgeball
+                            if beater.id in self.cpu_player_ids:
+                                _, intercepting_position = interception_info_dicts[dodgeball_id][beater_id]
+                                beater.direction = Vector2(
+                                        intercepting_position.x - beater.position.x,
+                                        intercepting_position.y - beater.position.y
+                                    )
+                            break
+            # while len(step_ratio_dicts) > 0:
+            #     # assign beaters to dodgeballs based on interception ratio calculation, if beater already assigned, perform another interception ratio calculation without the assigned beater until all step_ratio_dicts are processed or all beaters are assigned, then assign remaining dodgeballs based on proximity
+            #     step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids = self._interception_based_beater_assignment(dt, step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids)
+            #     # self.logger.debug(f"Assigned beater ids after interception based assignment: {assigned_beater_ids}, unassigned dodgeball ids: {unassigned_dodgeball_ids}, remaining step ratio dicts: {len(step_ratio_dicts.keys())}")
             if len(unassigned_dodgeball_ids) > 0:
                 assigned_beater_ids = self._distance_based_beater_assignment(unassigned_dodgeball_ids, assigned_beater_ids)
 
@@ -427,56 +453,64 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     break
             return volleyball.possession_team, volleyball_holder_id, None
         else:
-            # elif volleyball.velocity.x > 0 or volleyball.velocity.y > 0:
-            potential_intercepting_players_0 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 0]
-            potential_intercepting_players_1 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 1]
-            # need to consider two cases due to different move_hoop_blockage
-            _, step_ratio_dict_team_0 = self.interception_ratio_calculator_team_0(
-                dt=dt,
+            _, assigned_player_id, intercepting_position, _ = self.interception_ratio_calculator_team_0.line_interception(
                 moving_entity=volleyball,
-                intercepting_player_ids=potential_intercepting_players_0,
-                target_position=None,
-                only_first_intercepting=True,
-                max_dt_steps=self.determine_attacking_team_max_dt_steps,
-                max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
-                max_dt_per_step=self.determine_attacking_team_max_dt_per_step
-
+                intercepting_player_ids=[player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]],
             )
-            _, step_ratio_dict_team_1 = self.interception_ratio_calculator_team_1(
-                dt=dt,
-                moving_entity=volleyball,
-                intercepting_player_ids=potential_intercepting_players_1,
-                target_position=None,
-                only_first_intercepting=True,
-                max_dt_steps=self.determine_attacking_team_max_dt_steps,
-                max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
-                max_dt_per_step=self.determine_attacking_team_max_dt_per_step
-            )
-            step_ratio_dict = {**step_ratio_dict_team_0, **step_ratio_dict_team_1}
-            step_ratio_dict = {}
-            if len(step_ratio_dict) > 0:
-                if len(step_ratio_dict) > 1:
-                    # get player with lowest step in step_ratio_dict[player_id] = (step, step_ratio)
-                    min_step = float('inf')
-                    min_player_id = None
-                    for player_id, (step, step_ratio, _) in step_ratio_dict.items():
-                        if step < min_step:
-                            min_step = step
-                            min_player_id = player_id
-                    player_id = min_player_id
+            if assigned_player_id is not None:
+                assigned_player = self.logic.state.players[assigned_player_id]
+                attacking_team = assigned_player.team
+                return attacking_team, assigned_player_id, intercepting_position
+            # # elif volleyball.velocity.x > 0 or volleyball.velocity.y > 0:
+            # potential_intercepting_players_0 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 0]
+            # potential_intercepting_players_1 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 1]
+            # # need to consider two cases due to different move_hoop_blockage
+            # _, step_ratio_dict_team_0 = self.interception_ratio_calculator_team_0(
+            #     dt=dt,
+            #     moving_entity=volleyball,
+            #     intercepting_player_ids=potential_intercepting_players_0,
+            #     target_position=None,
+            #     only_first_intercepting=True,
+            #     max_dt_steps=self.determine_attacking_team_max_dt_steps,
+            #     max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
+            #     max_dt_per_step=self.determine_attacking_team_max_dt_per_step
 
-                else:
-                    player_id = list(step_ratio_dict.keys())[0]
-                player = self.logic.state.players[player_id]               
-                intercepting_position = step_ratio_dict[player_id][2]
-                self.logger.debug(
-                    "Ball potentially intercepted by player %s from position %s in team %s with details %s",
-                    player_id,
-                    player.position,
-                    player.team,
-                    step_ratio_dict[player_id],
-                )
-                return player.team, player_id, intercepting_position
+            # )
+            # _, step_ratio_dict_team_1 = self.interception_ratio_calculator_team_1(
+            #     dt=dt,
+            #     moving_entity=volleyball,
+            #     intercepting_player_ids=potential_intercepting_players_1,
+            #     target_position=None,
+            #     only_first_intercepting=True,
+            #     max_dt_steps=self.determine_attacking_team_max_dt_steps,
+            #     max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
+            #     max_dt_per_step=self.determine_attacking_team_max_dt_per_step
+            # )
+            # step_ratio_dict = {**step_ratio_dict_team_0, **step_ratio_dict_team_1}
+            # step_ratio_dict = {}
+            # if len(step_ratio_dict) > 0:
+            #     if len(step_ratio_dict) > 1:
+            #         # get player with lowest step in step_ratio_dict[player_id] = (step, step_ratio)
+            #         min_step = float('inf')
+            #         min_player_id = None
+            #         for player_id, (step, step_ratio, _) in step_ratio_dict.items():
+            #             if step < min_step:
+            #                 min_step = step
+            #                 min_player_id = player_id
+            #         player_id = min_player_id
+
+            #     else:
+            #         player_id = list(step_ratio_dict.keys())[0]
+            #     player = self.logic.state.players[player_id]               
+            #     intercepting_position = step_ratio_dict[player_id][2]
+            #     self.logger.debug(
+            #         "Ball potentially intercepted by player %s from position %s in team %s with details %s",
+            #         player_id,
+            #         player.position,
+            #         player.team,
+            #         step_ratio_dict[player_id],
+            #     )
+            #     return player.team, player_id, intercepting_position
             # If no intercepting players, determine attacking team based on proximity to volleyball
             for other_id, distance in self.logic.state.squared_distances_ball_player.get(volleyball.id, []):
                 player = self.logic.state.players[other_id]
