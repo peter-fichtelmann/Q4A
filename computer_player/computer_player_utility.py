@@ -283,9 +283,9 @@ class InterceptionRatioCalculator:
             player_position_x = player.position.x
             player_position_y = player.position.y
             if player.is_knocked_out:
-                # TODO Take knocked time for knocked out players to recover into account
-                dx = self.state.hoops[f'hoop_{player.team}_center'].position.x - player.position.x
-                dy = self.state.hoops[f'hoop_{player.team}_center'].position.y - player.position.y
+                # Take estimated knocked time for knocked out players to recover into account
+                dx = self.logic.state.hoops[f'hoop_{player.team}_center'].position.x - player.position.x
+                dy = self.logic.state.hoops[f'hoop_{player.team}_center'].position.y - player.position.y
                 distance_to_own_hoop = UtilityLogic._magnitude_without_vector(dx, dy)
                 penalty_time = distance_to_own_hoop / player.max_speed
                 # use hoop position as player position
