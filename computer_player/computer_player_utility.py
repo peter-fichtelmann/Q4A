@@ -306,20 +306,20 @@ class InterceptionRatioCalculator:
             if interception_time < lowest_interception_dt:
                 lowest_interception_dt = interception_time
                 lowest_interception_dt_player_id = player_id
-            interception_position = Vector2(
-                moving_entity.position.x + moving_entity.velocity.x * interception_time,
-                moving_entity.position.y + moving_entity.velocity.y * interception_time
-            )
-            interception_info_dict[player_id] = (interception_time, interception_position)
+            # interception_position = Vector2(
+            #     moving_entity.position.x + moving_entity.velocity.x * interception_time,
+            #     moving_entity.position.y + moving_entity.velocity.y * interception_time
+            # )
+            interception_info_dict[player_id] = interception_time
 
 
             # self.logger.debug(f"Player {player_id} has interception time {interception_time}")
-        interception_position = Vector2(
-            moving_entity.position.x + moving_entity.velocity.x * lowest_interception_dt,
-            moving_entity.position.y + moving_entity.velocity.y * lowest_interception_dt
-        )
-        self.logger.debug(f"Lowest interception time is {lowest_interception_dt} by player {lowest_interception_dt_player_id} at position ({interception_position.x}, {interception_position.y})")
-        return lowest_interception_dt, lowest_interception_dt_player_id, interception_position, interception_info_dict
+        # interception_position = Vector2(
+        #     moving_entity.position.x + moving_entity.velocity.x * lowest_interception_dt,
+        #     moving_entity.position.y + moving_entity.velocity.y * lowest_interception_dt
+        # )
+        # self.logger.debug(f"Lowest interception time is {lowest_interception_dt} by player {lowest_interception_dt_player_id} at position ({interception_position.x}, {interception_position.y})")
+        return lowest_interception_dt, lowest_interception_dt_player_id, interception_info_dict
 
     @staticmethod
     def get_interception_time(

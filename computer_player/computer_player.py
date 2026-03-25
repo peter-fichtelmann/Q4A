@@ -274,19 +274,22 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     beater.direction = squared_distance_and_direction_to_dodgeball_dict[beater.id][1]
         else: # no third dodgeball, so no team already has two dodgeballs in possesion
             # step_ratio_dicts = {}
-            interception_info_dicts = {}
+            sorted_interception_per_dodgeball_dict = {}
             min_interception_time_dodgeball_dict = {}
             for dodgeball in self.logic.state.balls.values():
                 if dodgeball.ball_type == BallType.DODGEBALL:
                     if dodgeball.possession_team is None:
                         # If there is a dead dodgeball which is not the third dodgeball, assign beater players to get the dodgeball
                         # does not matter which interception ratio calculator as beaters are not blocked by hoops
-                        min_interception_time, _, _, interception_info_dict = self.interception_ratio_calculator_team_0.line_interception(
+                        min_interception_time, _, interception_info_dict = self.interception_ratio_calculator_team_0.line_interception(
                             moving_entity=dodgeball,
                             intercepting_player_ids=[beater.id for beater in self.beaters],
                         )
-                        interception_info_dicts[dodgeball.id] = interception_info_dict
+                        sorted_info_dict = sorted(interception_info_dict.items(), key=lambda item: item[1]) # sort by interception time
+                        print('sorted_info_dict for dodgeball id ', dodgeball.id, ': ', sorted_info_dict)
+                        sorted_interception_per_dodgeball_dict[dodgeball.id] = sorted_info_dict
                         min_interception_time_dodgeball_dict[dodgeball.id] = min_interception_time
+
 
                         # _, step_ratio_dict = self.interception_ratio_calculator_team_0(
                         #     dt=dt,
@@ -302,22 +305,28 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             # sort step_ratio_dicts by lowest step in step_ratio_dicts[dodgeball_id][beater_id] = (step, step_ratio, intercepting_position)
             # each step_ratio_dict has only one beater_id entry due to only_first_intercepting=True, so we can sort by step directly
             unassigned_dodgeball_ids = []
-            sorted_dodgeball_ids = sorted(min_interception_time_dodgeball_dict.keys(), key=lambda dodgeball_id: min_interception_time_dodgeball_dict[dodgeball_id])
+            sorted_dodgeball_ids = sorted(min_interception_time_dodgeball_dict.keys(), key=lambda dodgeball_id: min_interception_time_dodgeball_dict[dodgeball_id]) 
+            # print('sorted dodgeball ids by interception time: ', sorted_dodgeball_ids)
+            # print('sorted interception info dicts: ', sorted_interception_per_dodgeball_dict)
             for dodgeball_id in sorted_dodgeball_ids:
-                if len(interception_info_dicts[dodgeball_id]) > 0:
-                    for beater_id in interception_info_dicts[dodgeball_id].keys():
+                if len(sorted_interception_per_dodgeball_dict[dodgeball_id]) > 0:
+                    for beater_id, interception_time in sorted_interception_per_dodgeball_dict[dodgeball_id]:
                         if beater_id not in assigned_beater_ids:
                             beater = self.logic.state.players[beater_id]
                             dodgeball = self.logic.state.balls[dodgeball_id]
-                            # self.logger.debug(f"Beater {beater.id} assigned to get dodgeball {dodgeball.id} which is not currently possessed by any team with interception time {interception_time}")
                             assigned_beater_ids.append(beater_id)
                             # move towards the dodgeball
                             if beater.id in self.cpu_player_ids:
-                                _, intercepting_position = interception_info_dicts[dodgeball_id][beater_id]
+                                interception_position = Vector2(
+                                    dodgeball.position.x + dodgeball.velocity.x * interception_time,
+                                    dodgeball.position.y + dodgeball.velocity.y * interception_time
+                                )
                                 beater.direction = Vector2(
-                                        intercepting_position.x - beater.position.x,
-                                        intercepting_position.y - beater.position.y
+                                        interception_position.x - beater.position.x,
+                                        interception_position.y - beater.position.y
                                     )
+                                self.logger.debug(f"CPU Beater {beater.id} positioned at {beater.position} assigned to get dodgeball {dodgeball.id} with interception time {interception_time}")
+
                             break
             # while len(step_ratio_dicts) > 0:
             #     # assign beaters to dodgeballs based on interception ratio calculation, if beater already assigned, perform another interception ratio calculation without the assigned beater until all step_ratio_dicts are processed or all beaters are assigned, then assign remaining dodgeballs based on proximity
@@ -343,7 +352,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     beater_buddy = [player for player in self.beaters if player.id != beater_id and player.team == beater.team][0]
                     if not (beater_buddy.is_knocked_out) and not (beater_buddy.id in assigned_beater_ids) and not (beater_buddy.has_ball):
                         # pass to teammate if they not knocked out, not assigned a dodgeball or already having a dodgeball
-                        self.logger.debug("Beater %s has ball and is passing to teammate %s", beater.id, beater_buddy.id)
+                        # self.logger.debug("Beater %s has ball and is passing to teammate %s", beater.id, beater_buddy.id)
                         throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, beater_buddy)
                         self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
                         # move beater buddy to throwing player (at the moment only for one dt step)
@@ -354,11 +363,11 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         assigned_beater_ids.append(beater_buddy.id)
                     else:
                         # pass back to central hoop
-                        self.logger.debug(
-                            "Beater %s has ball but teammate %s is not available, passing back to hoops",
-                            beater.id,
-                            beater_buddy.id,
-                        )
+                        # self.logger.debug(
+                        #     "Beater %s has ball but teammate %s is not available, passing back to hoops",
+                        #     beater.id,
+                        #     beater_buddy.id,
+                        # )
                         if beater.team == 0:
                             central_hoop = self.defence_hoops_0[1]
                         else:
@@ -431,6 +440,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 if beater.id in self.cpu_player_ids:
                     direction_to_dodgeball = squared_distances_dict[(beater_id, dodgeball_id)][1]
                     beater.direction = direction_to_dodgeball
+                    self.logger.debug("CPU Beater %s positioned at %s assigned to get dodgeball %s based on proximity", beater.id, beater.position, dodgeball.id)
         return assigned_beater_ids
 
     def _determine_attacking_team(self, dt: float) -> Tuple[int, str, Vector2]:
@@ -453,14 +463,18 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     break
             return volleyball.possession_team, volleyball_holder_id, None
         else:
-            _, assigned_player_id, intercepting_position, _ = self.interception_ratio_calculator_team_0.line_interception(
+            lowest_interception_time, assigned_player_id, _ = self.interception_ratio_calculator_team_0.line_interception(
                 moving_entity=volleyball,
                 intercepting_player_ids=[player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]],
             )
             if assigned_player_id is not None:
                 assigned_player = self.logic.state.players[assigned_player_id]
                 attacking_team = assigned_player.team
-                return attacking_team, assigned_player_id, intercepting_position
+                interception_position = Vector2(
+                volleyball.position.x + volleyball.velocity.x * lowest_interception_time,
+                volleyball.position.y + volleyball.velocity.y * lowest_interception_time
+            )
+                return attacking_team, assigned_player_id, interception_position
             # # elif volleyball.velocity.x > 0 or volleyball.velocity.y > 0:
             # potential_intercepting_players_0 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 0]
             # potential_intercepting_players_1 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 1]

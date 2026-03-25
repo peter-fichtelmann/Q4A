@@ -123,20 +123,23 @@ class BasicLogic:
         # TODO Add protected keeper
         keeper_0 = self.state.keeper_team_0
         keeper_1 = self.state.keeper_team_1
-        if self.state.keeper_zone_x_0 >= keeper_0.position.x - keeper_0.radius:
-            keeper_0.dodgeball_immunity = True
-        else:
-            keeper_0.dodgeball_immunity = False
-        if keeper_1.position.x <= self.state.keeper_zone_x_1 + keeper_1.radius:
-            keeper_1.dodgeball_immunity = True
-        else:
-            keeper_1.dodgeball_immunity = False
+        if keeper_0 is not None:
+            if self.state.keeper_zone_x_0 >= keeper_0.position.x - keeper_0.radius:
+                keeper_0.dodgeball_immunity = True
+            else:
+                keeper_0.dodgeball_immunity = False
+        
+        if keeper_1 is not None:
+            if keeper_1.position.x <= self.state.keeper_zone_x_1 + keeper_1.radius:
+                keeper_1.dodgeball_immunity = True
+            else:
+                keeper_1.dodgeball_immunity = False
         volleyball = self.state.volleyball
         if volleyball is not None:
             if volleyball.is_dead:
-                if volleyball.possession_team == self.state.team_0:
+                if volleyball.possession_team == self.state.team_0 and keeper_0 is not None:
                     keeper_0.dodgeball_immunity = True
-                else:
+                elif volleyball.possession_team == self.state.team_1 and keeper_1 is not None:
                     keeper_1.dodgeball_immunity = True
 
 
