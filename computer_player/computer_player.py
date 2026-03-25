@@ -276,7 +276,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             # step_ratio_dicts = {}
             sorted_interception_per_dodgeball_dict = {}
             min_interception_time_dodgeball_dict = {}
-            for dodgeball in self.logic.state.balls.values():
+            dodgeballs = self.logic.state.balls.values()
+            for dodgeball in dodgeballs:
                 if dodgeball.ball_type == BallType.DODGEBALL:
                     if dodgeball.possession_team is None:
                         # If there is a dead dodgeball which is not the third dodgeball, assign beater players to get the dodgeball
@@ -286,7 +287,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                             intercepting_player_ids=[beater.id for beater in self.beaters],
                         )
                         sorted_info_dict = sorted(interception_info_dict.items(), key=lambda item: item[1]) # sort by interception time
-                        print('sorted_info_dict for dodgeball id ', dodgeball.id, ': ', sorted_info_dict)
+                        # sorted info dict is a list of Tuples (player_id, interception time)
                         sorted_interception_per_dodgeball_dict[dodgeball.id] = sorted_info_dict
                         min_interception_time_dodgeball_dict[dodgeball.id] = min_interception_time
 
@@ -304,10 +305,9 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         # step_ratio_dicts[dodgeball.id] = step_ratio_dict
             # sort step_ratio_dicts by lowest step in step_ratio_dicts[dodgeball_id][beater_id] = (step, step_ratio, intercepting_position)
             # each step_ratio_dict has only one beater_id entry due to only_first_intercepting=True, so we can sort by step directly
-            unassigned_dodgeball_ids = []
+            # unassigned_dodgeball_ids = []
+            assigned_dodgeball_ids = []
             sorted_dodgeball_ids = sorted(min_interception_time_dodgeball_dict.keys(), key=lambda dodgeball_id: min_interception_time_dodgeball_dict[dodgeball_id]) 
-            # print('sorted dodgeball ids by interception time: ', sorted_dodgeball_ids)
-            # print('sorted interception info dicts: ', sorted_interception_per_dodgeball_dict)
             for dodgeball_id in sorted_dodgeball_ids:
                 if len(sorted_interception_per_dodgeball_dict[dodgeball_id]) > 0:
                     for beater_id, interception_time in sorted_interception_per_dodgeball_dict[dodgeball_id]:
@@ -315,6 +315,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                             beater = self.logic.state.players[beater_id]
                             dodgeball = self.logic.state.balls[dodgeball_id]
                             assigned_beater_ids.append(beater_id)
+                            assigned_dodgeball_ids.append(dodgeball_id)
                             # move towards the dodgeball
                             if beater.id in self.cpu_player_ids:
                                 interception_position = Vector2(
@@ -326,8 +327,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                                         interception_position.y - beater.position.y
                                     )
                                 self.logger.debug(f"CPU Beater {beater.id} positioned at {beater.position} assigned to get dodgeball {dodgeball.id} with interception time {interception_time}")
-
                             break
+            unassigned_dodgeball_ids = [dodgeball.id for dodgeball in dodgeballs if dodgeball.id not in assigned_dodgeball_ids]
             # while len(step_ratio_dicts) > 0:
             #     # assign beaters to dodgeballs based on interception ratio calculation, if beater already assigned, perform another interception ratio calculation without the assigned beater until all step_ratio_dicts are processed or all beaters are assigned, then assign remaining dodgeballs based on proximity
             #     step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids = self._interception_based_beater_assignment(dt, step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids)
