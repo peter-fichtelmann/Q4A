@@ -28,6 +28,7 @@ class DiamondAttack:
                 positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
                 passing_evade_vector_position_penalty_weight: float = 100,
                 passing_threshold: float = 0.8, # minimum interception score (chance of not being intercepted) to attempt a pass
+                passing_squared_max_distance: float = 400,
                 logger: Optional[logging.Logger] = None
                 ):
         self.logic = logic
@@ -46,6 +47,7 @@ class DiamondAttack:
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
         self.passing_evade_vector_position_penalty_weight = passing_evade_vector_position_penalty_weight
         self.passing_threshold = passing_threshold
+        self.passing_squared_max_distance = passing_squared_max_distance
         self.logger = logger or logging.getLogger("computer_player")
 
         self.attack_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team != attack_team]
@@ -227,10 +229,13 @@ class DiamondAttack:
 
         Sort teammates by lowest position penalty. If the lowest score is the volleyball_holder keep the ball. Otherwise, check with beam interception if passing to that teammate is an option.
         """
+        # TODO Prevent passing through own hoops
         position_penalty_dict = {}
         for player_id in self.attacking_chaser_keeper_ids:
             player = self.logic.state.players[player_id]
             if player.is_knocked_out:
+                continue
+            if self.logic.state.squared_distances_ball_player[volleyball.id][player_id] > self.passing_squared_max_distance:
                 continue
             closest_attack_hoop_squared_distance = min([
                 UtilityLogic._squared_distance(player.position, hoop.position) for hoop in self.attack_hoops

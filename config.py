@@ -23,7 +23,7 @@ class Config:
     DODGEBALL_RADIUS = 0.70 / 2 / 3.14 # 68 centimeters and 70 centimeters in circumference (approximately 0.111 m)
     PLAYER_RADIUS = 0.35
 
-    PLAYER_MAX_SPEED_REAL = 3 # m/s per real second
+    PLAYER_MAX_SPEED_REAL = 3.5 # m/s per real second
     PLAYER_MIN_SPEED_REAL = 1 # m/s per real second
     PLAYER_THROW_VELOCITY_REAL = 11 # m/s per real second
     PLAYER_ACCELERATION_REAL = 3 # m/s2 per real second
@@ -86,6 +86,7 @@ class Config:
             'positioning_boundary_buffer_distance': 3, # for DiamondAttack, distance from boundary at which to start evading boundary
             'passing_evade_vector_position_penalty_weight': 100,
             'passing_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a pass
+            'passing_squared_max_distance': 17**2, # for DiamondAttack, maximum squared distance from volleyball to consider passing
         },
         'hoop_defence_kwargs': {
             'beater_evade_beater_buddy_weight': 3,
