@@ -121,8 +121,12 @@ class VolleyballLogic:
             passed_squared_distance = (volleyball.position.x - hoop.position.x) ** 2 + (volleyball.position.y - cross_y) ** 2
             if passed_squared_distance > volleyball.radius ** 2: # whole ball has passed through hoop
                 # Goal scored!
-                self.logger.info("Goal scored by team %s through hoop %s!", hoop.team, hoop_id)
-                self.state.update_score(hoop.team, 10)
+                if hoop.team == self.state.team_0:
+                    scoring_team = self.state.team_1
+                else:
+                    scoring_team = self.state.team_0
+                self.logger.info("Goal scored by team %s through hoop %s!", scoring_team, hoop_id)
+                self.state.update_score(scoring_team, 10)
                 volleyball.crossed_hoop = None
                 if volleyball.holder_id is not None:
                     # if player run with ball through hoop, so no throwing afterwards should be possible
