@@ -289,8 +289,8 @@ class InterceptionRatioCalculator:
                 distance_to_own_hoop = UtilityLogic._magnitude_without_vector(dx, dy)
                 penalty_time = distance_to_own_hoop / player.max_speed
                 # use hoop position as player position
-                player_position_x = self.state.hoops[f'hoop_{player.team}_center'].position.x
-                player_position_y = self.state.hoops[f'hoop_{player.team}_center'].position.y
+                player_position_x = self.logic.state.hoops[f'hoop_{player.team}_center'].position.x
+                player_position_y = self.logic.state.hoops[f'hoop_{player.team}_center'].position.y
             interception_time = self.get_interception_time(
                 player_position_x=player_position_x,
                 player_position_y=player_position_y,
