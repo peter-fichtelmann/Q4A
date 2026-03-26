@@ -276,7 +276,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             # step_ratio_dicts = {}
             sorted_interception_per_dodgeball_dict = {}
             min_interception_time_dodgeball_dict = {}
-            dodgeballs = self.logic.state.balls.values()
+            dodgeballs = self.logic.state.dodgeballs
             for dodgeball in dodgeballs:
                 if dodgeball.ball_type == BallType.DODGEBALL:
                     if dodgeball.possession_team is None:
@@ -326,9 +326,11 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                                         interception_position.x - beater.position.x,
                                         interception_position.y - beater.position.y
                                     )
-                                self.logger.debug(f"CPU Beater {beater.id} positioned at {beater.position} assigned to get dodgeball {dodgeball.id} with interception time {interception_time}")
+                                # self.logger.debug(f"CPU Beater {beater.id} positioned at {beater.position} assigned to get dodgeball {dodgeball.id} with interception time {interception_time}")
                             break
-            unassigned_dodgeball_ids = [dodgeball.id for dodgeball in dodgeballs if dodgeball.id not in assigned_dodgeball_ids]
+            # only dodgeballs whereas possesion is None (sorted dodgeball ids) and not assigned before
+            unassigned_dodgeball_ids = [dodgeball_id for dodgeball_id in sorted_dodgeball_ids if dodgeball_id not in assigned_dodgeball_ids]
+            
             # while len(step_ratio_dicts) > 0:
             #     # assign beaters to dodgeballs based on interception ratio calculation, if beater already assigned, perform another interception ratio calculation without the assigned beater until all step_ratio_dicts are processed or all beaters are assigned, then assign remaining dodgeballs based on proximity
             #     step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids = self._interception_based_beater_assignment(dt, step_ratio_dicts, assigned_beater_ids, unassigned_dodgeball_ids)
@@ -351,6 +353,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                                 continue
                     # check for pass to beater buddy, else pass back to hoops   
                     beater_buddy = [player for player in self.beaters if player.id != beater_id and player.team == beater.team][0]
+                    self.logger.debug("Beater %s team %s. Beater buddy knocked out %s, beater buddy in assigned beater ids %s, beater buddy has ball %s", beater.id, beater.team, beater_buddy.is_knocked_out, beater_buddy.id in assigned_beater_ids, beater_buddy.has_ball)
                     if not (beater_buddy.is_knocked_out) and not (beater_buddy.id in assigned_beater_ids) and not (beater_buddy.has_ball):
                         # pass to teammate if they not knocked out, not assigned a dodgeball or already having a dodgeball
                         # self.logger.debug("Beater %s has ball and is passing to teammate %s", beater.id, beater_buddy.id)
@@ -380,41 +383,41 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
         return assigned_beater_ids
 
-    def _interception_based_beater_assignment(self, dt, step_ratio_dicts: dict, assigned_beater_ids: List[str], unassigned_dodgeball_ids: List[str]):
-        sorted_dodgeball_ids = sorted(step_ratio_dicts.keys(), key=lambda dodgeball_id: list(step_ratio_dicts[dodgeball_id].values())[0][0] if len(step_ratio_dicts[dodgeball_id]) > 0 else float('inf'))
-        step_ratio_dicts_2 = {}
-        for dodgeball_id in sorted_dodgeball_ids:
-            if len(step_ratio_dicts[dodgeball_id]) > 0:
-                beater_id = list(step_ratio_dicts[dodgeball_id].keys())[0]
-                if beater_id not in assigned_beater_ids:
-                    beater = self.logic.state.players[beater_id]
-                    dodgeball = self.logic.state.balls[dodgeball_id]
-                    # self.logger.debug(f"Beater {beater.id} assigned to get dodgeball {dodgeball.id} which is not currently possessed by any team")
-                    assigned_beater_ids.append(beater_id)
-                    # move towards the dodgeball
-                    if beater.id in self.cpu_player_ids:
-                        # if beater has ball, pass to teammate or back to hoops
-                        intercepting_position = step_ratio_dicts[dodgeball_id][beater_id][2]
-                        beater.direction = Vector2(
-                                intercepting_position.x - beater.position.x,
-                                intercepting_position.y - beater.position.y
-                            )
-                else: # perform another interception ratio calculation
-                    unassigned_beater_ids = [beater.id for beater in self.beaters if beater.id not in assigned_beater_ids]
-                    _, step_ratio_dict = self.interception_ratio_calculator_team_0(
-                        dt=dt,
-                        moving_entity=dodgeball,
-                        intercepting_player_ids=unassigned_beater_ids,
-                        target_position=None,
-                        only_first_intercepting=True, # in rare cases if one beater would get two dodgeball, this could cause issues so only assign one beater per dodgeball
-                        max_dt_steps=self.determine_attacking_team_max_dt_steps,
-                        max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
-                        max_dt_per_step=self.determine_attacking_team_max_dt_per_step
-                    )
-                    step_ratio_dicts_2[dodgeball_id] = step_ratio_dict
-            else: # no intercepting beater found, these dodgeballs will be assigned based on proximity in the next step, so add them to unassigned_dodgeball_ids
-                    unassigned_dodgeball_ids.append(dodgeball_id)
-        return step_ratio_dicts_2, assigned_beater_ids, unassigned_dodgeball_ids
+    # def _interception_based_beater_assignment(self, dt, step_ratio_dicts: dict, assigned_beater_ids: List[str], unassigned_dodgeball_ids: List[str]):
+    #     sorted_dodgeball_ids = sorted(step_ratio_dicts.keys(), key=lambda dodgeball_id: list(step_ratio_dicts[dodgeball_id].values())[0][0] if len(step_ratio_dicts[dodgeball_id]) > 0 else float('inf'))
+    #     step_ratio_dicts_2 = {}
+    #     for dodgeball_id in sorted_dodgeball_ids:
+    #         if len(step_ratio_dicts[dodgeball_id]) > 0:
+    #             beater_id = list(step_ratio_dicts[dodgeball_id].keys())[0]
+    #             if beater_id not in assigned_beater_ids:
+    #                 beater = self.logic.state.players[beater_id]
+    #                 dodgeball = self.logic.state.balls[dodgeball_id]
+    #                 # self.logger.debug(f"Beater {beater.id} assigned to get dodgeball {dodgeball.id} which is not currently possessed by any team")
+    #                 assigned_beater_ids.append(beater_id)
+    #                 # move towards the dodgeball
+    #                 if beater.id in self.cpu_player_ids:
+    #                     # if beater has ball, pass to teammate or back to hoops
+    #                     intercepting_position = step_ratio_dicts[dodgeball_id][beater_id][2]
+    #                     beater.direction = Vector2(
+    #                             intercepting_position.x - beater.position.x,
+    #                             intercepting_position.y - beater.position.y
+    #                         )
+    #             else: # perform another interception ratio calculation
+    #                 unassigned_beater_ids = [beater.id for beater in self.beaters if beater.id not in assigned_beater_ids]
+    #                 _, step_ratio_dict = self.interception_ratio_calculator_team_0(
+    #                     dt=dt,
+    #                     moving_entity=dodgeball,
+    #                     intercepting_player_ids=unassigned_beater_ids,
+    #                     target_position=None,
+    #                     only_first_intercepting=True, # in rare cases if one beater would get two dodgeball, this could cause issues so only assign one beater per dodgeball
+    #                     max_dt_steps=self.determine_attacking_team_max_dt_steps,
+    #                     max_distance_per_step=self.determine_attacking_team_max_distance_per_step,
+    #                     max_dt_per_step=self.determine_attacking_team_max_dt_per_step
+    #                 )
+    #                 step_ratio_dicts_2[dodgeball_id] = step_ratio_dict
+    #         else: # no intercepting beater found, these dodgeballs will be assigned based on proximity in the next step, so add them to unassigned_dodgeball_ids
+    #                 unassigned_dodgeball_ids.append(dodgeball_id)
+    #     return step_ratio_dicts_2, assigned_beater_ids, unassigned_dodgeball_ids
 
     def _distance_based_beater_assignment(self, unassigned_dodgeball_ids: List[str], assigned_beater_ids: List[str]):
         # calculate distances to unassigned beaters for unassigned dodgeballs and assign closest beater to each unassigned dodgeball
@@ -441,7 +444,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 if beater.id in self.cpu_player_ids:
                     direction_to_dodgeball = squared_distances_dict[(beater_id, dodgeball_id)][1]
                     beater.direction = direction_to_dodgeball
-                    self.logger.debug("CPU Beater %s positioned at %s assigned to get dodgeball %s based on proximity", beater.id, beater.position, dodgeball.id)
+                    # self.logger.debug("CPU Beater %s positioned at %s assigned to get dodgeball %s based on proximity", beater.id, beater.position, dodgeball.id)
         return assigned_beater_ids
 
     def _determine_attacking_team(self, dt: float) -> Tuple[int, str, Vector2]:

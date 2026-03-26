@@ -25,7 +25,7 @@ class Config:
 
     PLAYER_MAX_SPEED_REAL = 3 # m/s per real second
     PLAYER_MIN_SPEED_REAL = 1 # m/s per real second
-    PLAYER_THROW_VELOCITY_REAL = 12 # m/s per real second
+    PLAYER_THROW_VELOCITY_REAL = 11 # m/s per real second
     PLAYER_ACCELERATION_REAL = 3 # m/s2 per real second
     PLAYER_DEACCELERATION_RATE = 0.5 # ratio of speed lost per second
     PLAYER_MAX_SPEED = PLAYER_MAX_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
@@ -55,10 +55,10 @@ class Config:
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
     SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter
 
-    N_CHASERS_TEAM_0 = 3
-    N_CHASERS_TEAM_1 = 3
-    N_KEEPERS_TEAM_0 = 1
-    N_KEEPERS_TEAM_1 = 1
+    N_CHASERS_TEAM_0 = 0
+    N_CHASERS_TEAM_1 = 0
+    N_KEEPERS_TEAM_0 = 0
+    N_KEEPERS_TEAM_1 = 0
     N_BEATERS_TEAM_0 = 2
     N_BEATERS_TEAM_1 = 2
 
@@ -81,7 +81,7 @@ class Config:
             'score_squared_max_distance': 8**2, # for DiamondAttack, maximum  squared distance from volleyball to consider scoring
             'scoring_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a score
             'chaser_evade_beater_weight': 3.5,
-            'chaser_evade_chaser_keeper_weight': 0.5,
+            'chaser_evade_chaser_keeper_weight': 1,
             'chaser_evade_teamate_chaser_keeper_weight': 1.5,
             'positioning_boundary_buffer_distance': 3, # for DiamondAttack, distance from boundary at which to start evading boundary
             'passing_evade_vector_position_penalty_weight': 100,
