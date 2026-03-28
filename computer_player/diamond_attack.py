@@ -235,7 +235,7 @@ class DiamondAttack:
             player = self.logic.state.players[player_id]
             if player.is_knocked_out:
                 continue
-            if self.logic.state.squared_distances_ball_player[volleyball.id][player_id] > self.passing_squared_max_distance:
+            if self.logic.state.squared_distances_ball_player_dicts[volleyball.id][player_id] > self.passing_squared_max_distance:
                 continue
             closest_attack_hoop_squared_distance = min([
                 UtilityLogic._squared_distance(player.position, hoop.position) for hoop in self.attack_hoops
