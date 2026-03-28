@@ -229,6 +229,8 @@ class DiamondAttack:
 
         Sort teammates by lowest position penalty. If the lowest score is the volleyball_holder keep the ball. Otherwise, check with beam interception if passing to that teammate is an option.
         """
+        if volleyball.is_dead:
+            return # don't pass if ball is dead, just try to get it back to life
         # TODO Prevent passing through own hoops
         position_penalty_dict = {}
         for player_id in self.attacking_chaser_keeper_ids:
@@ -329,5 +331,7 @@ class DiamondAttack:
             if player_id != next_volleyball_holder_id: # dealing with volleyball holder before
                 player = self.logic.state.players[player_id]
                 if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
-                    self.player_positioning(player, evade_vectors_dict.get(player.id, Vector2(0, 0)), move_vector_dict.get(player.id, None))
+                    # not if knocked out, inbounding, or if keeper and volleyball is dead and in their possession (since in that case they should be trying to get the ball back to life instead of positioning for attack)
+                    if not player.is_knocked_out and not player.inbounding and not (player.role == PlayerRole.KEEPER and volleyball.is_dead and volleyball.possession_team == player.team):
+                        self.player_positioning(player, evade_vectors_dict.get(player.id, Vector2(0, 0)), move_vector_dict.get(player.id, None))
 
