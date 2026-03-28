@@ -128,9 +128,8 @@ class BasicLogic:
                 keeper_0.dodgeball_immunity = True
             else:
                 keeper_0.dodgeball_immunity = False
-        
         if keeper_1 is not None:
-            if keeper_1.position.x <= self.state.keeper_zone_x_1 + keeper_1.radius:
+            if self.state.keeper_zone_x_1 <= keeper_1.position.x + keeper_1.radius:
                 keeper_1.dodgeball_immunity = True
             else:
                 keeper_1.dodgeball_immunity = False
