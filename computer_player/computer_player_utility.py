@@ -551,16 +551,26 @@ class BeaterThrowDecider:
     """
     def __init__(
             self,
-            throw_threshold_volleyball_holder: float
+            throw_threshold_volleyball_holder: float,
+            throw_threshold_loaded_beater: float
             ):
         self.squared_throw_threshold_volleyball_holder = throw_threshold_volleyball_holder**2
+        self.squared_throw_threshold_loaded_beater = throw_threshold_loaded_beater**2
 
     def should_throw_at_volleyball_holder(self, beater: Player, volleyball_holder: Player) -> bool:
+        if volleyball_holder.dodgeball_immunity:
+            return False
         squared_distance = UtilityLogic._squared_distance(beater.position, volleyball_holder.position)
         if squared_distance <= self.squared_throw_threshold_volleyball_holder:
             return True
         return False
     
+    def should_throw_at_loaded_beater(self, beater: Player, loaded_beater: Player) -> bool:
+        squared_distance = UtilityLogic._squared_distance(beater.position, loaded_beater.position)
+        if squared_distance <= self.squared_throw_threshold_loaded_beater:
+            return True
+        return False
+
 
 class ThrowDirector:
     """Calculates the throw vector to a moving receiver e.g. for passes and beats"""

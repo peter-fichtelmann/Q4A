@@ -3,7 +3,7 @@ import logging
 import math
 from typing import Dict, Optional, List
 
-from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage, MoveUtility, ThrowDirector
+from computer_player.computer_player_utility import BeaterThrowDecider, InterceptionRatioCalculator, MoveAroundHoopBlockage, MoveUtility, ThrowDirector
 from core.entities import Player, PlayerRole, Vector2, VolleyBall
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
@@ -17,6 +17,7 @@ class DiamondAttack:
                 interception_ratio_calculator_opponent: InterceptionRatioCalculator,
                 attack_cpu_player_ids: List[str],
                 attack_team: int,
+                beater_throw_decider: BeaterThrowDecider,
                 score_interception_max_dt_steps: int = 10,
                 score_interception_max_distance_per_step: Optional[float] = None,
                 score_interception_max_dt_per_step: Optional[int] = None,
@@ -25,6 +26,9 @@ class DiamondAttack:
                 chaser_evade_beater_weight: float = 4,
                 chaser_evade_chaser_keeper_weight: float = 2,
                 chaser_evade_teamate_chaser_keeper_weight: float = 1,
+                unloaded_beater_evade_loaded_opponent_beater_weight: float = -3, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
+                loaded_beater_evade_loaded_opponent_beater_weight: float = -2,
+                loaded_beater_evade_unloaded_opponent_beater_weight: float = 2,
                 positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
                 passing_evade_vector_position_penalty_weight: float = 100,
                 passing_threshold: float = 0.8, # minimum interception score (chance of not being intercepted) to attempt a pass
@@ -36,6 +40,7 @@ class DiamondAttack:
         self.interception_ratio_calculator_opponent = interception_ratio_calculator_opponent
         self.attack_cpu_player_ids = attack_cpu_player_ids
         self.attack_team = attack_team
+        self.beater_throw_decider = beater_throw_decider
         self.score_interception_max_dt_steps = score_interception_max_dt_steps
         self.score_interception_max_distance_per_step = score_interception_max_distance_per_step
         self.score_interception_max_dt_per_step = score_interception_max_dt_per_step
@@ -44,6 +49,9 @@ class DiamondAttack:
         self.chaser_evade_beater_weight = chaser_evade_beater_weight
         self.chaser_evade_chaser_keeper_weight = chaser_evade_chaser_keeper_weight
         self.chaser_evade_teamate_chaser_keeper_weight = chaser_evade_teamate_chaser_keeper_weight
+        self.unloaded_beater_evade_loaded_opponent_beater_weight = unloaded_beater_evade_loaded_opponent_beater_weight
+        self.loaded_beater_evade_loaded_opponent_beater_weight = loaded_beater_evade_loaded_opponent_beater_weight
+        self.loaded_beater_evade_unloaded_opponent_beater_weight = loaded_beater_evade_unloaded_opponent_beater_weight
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
         self.passing_evade_vector_position_penalty_weight = passing_evade_vector_position_penalty_weight
         self.passing_threshold = passing_threshold
@@ -51,8 +59,22 @@ class DiamondAttack:
         self.logger = logger or logging.getLogger("computer_player")
 
         self.attack_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team != attack_team]
-        self.attacking_chaser_keeper_ids = [player.id for player in self.logic.state.players.values() if player.team == attack_team and player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]]
-        self.defending_chaser_keeper_ids = [player.id for player in self.logic.state.players.values() if player.team != attack_team and player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]]
+        self.attacking_chaser_keeper_ids = []
+        self.defending_chaser_keeper_ids = []
+        self.attacking_beater_ids = []
+        self.defending_beater_ids = []
+        for player in self.logic.state.players.values():
+            if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
+                if player.team == attack_team and player.role:
+                    self.attacking_chaser_keeper_ids.append(player.id)
+                else:
+                    self.defending_chaser_keeper_ids.append(player.id)
+            elif player.role == PlayerRole.BEATER:
+                if player.team == attack_team:
+                    self.attacking_beater_ids.append(player.id)
+                else:
+                    self.defending_beater_ids.append(player.id)
+
 
     def move_to_volleyball(self,
                            volleyball: VolleyBall,
@@ -195,7 +217,7 @@ class DiamondAttack:
                 move_vectors_dict[player.id] = move_vector
         return move_vectors_dict
     
-    def evade_vectors_calculation(self) -> Dict[str, Vector2]:
+    def evade_vectors_chaser_keeper_calculation(self) -> Dict[str, Vector2]:
         evade_vectors_dict = {}
         for player_id in self.attacking_chaser_keeper_ids:
             player = self.logic.state.players[player_id]
@@ -274,7 +296,6 @@ class DiamondAttack:
                 self.logic.process_action_logic.process_throw_action(volleyball_holder.id, throw_direction=throw_direction)
                 return
 
-
     def solve_assignment_problem(self, player_positions: List[Vector2], target_positions: List[Vector2]):
         if len(player_positions) == 0 or len(target_positions) == 0:
             return [], float('inf')
@@ -291,11 +312,65 @@ class DiamondAttack:
                 best_cost = cost
                 best_perm = perm            
         return list(best_perm), float(best_cost)
+    
+    def beater_move_action(self, beater: Player, volleyball: VolleyBall):
+        """
+        Beaters making pressure similar to getting BC/ready go.
+
+        Move to volleyball.
+
+        If loaded, evade unloaded opponent beaters.
+
+        Anti-evade towards loaded opponent beaters, the closer the more aggressive towards them.
+
+        Different weights depending on if our beater is loaded.
+        """
+        move_vector = Vector2(
+            volleyball.position.x - beater.position.x,
+            volleyball.position.y - beater.position.y
+        )
+        evade_vectors = []
+        if beater.has_ball:
+            weight_loaded_opponent_beater = self.loaded_beater_evade_loaded_opponent_beater_weight
+        else:
+            weight_loaded_opponent_beater = self.unloaded_beater_evade_loaded_opponent_beater_weight
+        for opponent_beater_id in self.defending_beater_ids:
+            opponent_beater = self.logic.state.players[opponent_beater_id]
+            if opponent_beater.is_knocked_out:
+                continue
+            if opponent_beater.has_ball:
+                evade_vector = MoveUtility.evade(beater.position, opponent_beater.position, weight=weight_loaded_opponent_beater)
+            elif beater.has_ball: 
+                evade_vector = MoveUtility.evade(beater.position, opponent_beater.position, weight=self.loaded_beater_evade_unloaded_opponent_beater_weight)
+            else: # unloaded opponent only matters if beater has ball
+                continue
+            evade_vectors.append(evade_vector)
+        for evade_vector in evade_vectors:    
+            move_vector.x += evade_vector.x
+            move_vector.y += evade_vector.y
+        beater.direction = move_vector
+
+
+    def beater_throw_action(self, beater: Player, volleyball: VolleyBall):
+        if not beater.has_ball:
+            return
+        for opponent_beater_id in self.defending_beater_ids:
+            opponent_beater = self.logic.state.players[opponent_beater_id]
+            if opponent_beater.is_knocked_out:
+                continue
+            if opponent_beater.has_ball:
+                if self.beater_throw_decider.should_throw_at_loaded_beater(beater, opponent_beater):
+                    throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, opponent_beater)
+                    self.logic.process_action_logic.process_throw_action(beater.id, throw_direction=throw_direction)
+                    # throw at first egligble loaded opponent beater
+                    break
+            
 
     def __call__(self,
                 dt: float,
                 next_volleyball_holder_id: str,
-                intercepting_position: Optional[Vector2] = None
+                intercepting_position: Optional[Vector2] = None,
+                assigned_beater_ids: List[str] = []
                 ):
         volleyball = self.logic.state.volleyball
         attacking_chaser_keeper = [self.logic.state.players[player_id] for player_id in self.attacking_chaser_keeper_ids]
@@ -305,8 +380,8 @@ class DiamondAttack:
             )]
         # if volleyball.holder_id is not None:
         #     self.get_intercepting_scores_for_hoops(dt, volleyball, self.logic.state.players[volleyball.holder_id])
-        move_vector_dict = self.move_chaser_keeper_hoops(not_knocked_out_chaser_keeper)
-        evade_vectors_dict = self.evade_vectors_calculation()
+        move_vector__chaser_dict = self.move_chaser_keeper_hoops(not_knocked_out_chaser_keeper)
+        evade_vectors_chaser_dict = self.evade_vectors_chaser_keeper_calculation()
         # for debugging
         # if volleyball.holder_id is not None and volleyball.holder_id not in self.attack_cpu_player_ids:
         #     self.player_passing(volleyball=volleyball, volleyball_holder=self.logic.state.players[volleyball.holder_id], evade_vectors_dict=evade_vectors_dict)
@@ -316,10 +391,10 @@ class DiamondAttack:
                 self.move_to_volleyball(volleyball, next_volleyball_holder_id, intercepting_position)
             else: # already hold of volleyball
                 volleyball_holder = self.logic.state.players[volleyball.holder_id]
-                self.player_positioning(volleyball_holder, evade_vectors_dict.get(volleyball_holder.id, Vector2(0, 0)), move_vector_dict.get(volleyball_holder.id, None)) # position volleyball holder to evade opponents while holding the ball
+                self.player_positioning(volleyball_holder, evade_vectors_chaser_dict.get(volleyball_holder.id, Vector2(0, 0)), move_vector__chaser_dict.get(volleyball_holder.id, None)) # position volleyball holder to evade opponents while holding the ball
                 tries_to_score = self.score_attempt(dt, volleyball, volleyball_holder)
                 if not tries_to_score:
-                    self.player_passing(volleyball=volleyball, volleyball_holder=volleyball_holder, evade_vectors_dict=evade_vectors_dict)
+                    self.player_passing(volleyball=volleyball, volleyball_holder=volleyball_holder, evade_vectors_dict=evade_vectors_chaser_dict)
         # elif volleyball.holder_id is not None:
         #     self.get_intercepting_scores_for_hoops(dt, volleyball, self.logic.state.players[volleyball.holder_id])
         # if (# volleyball in own half
@@ -333,5 +408,8 @@ class DiamondAttack:
                 if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
                     # not if knocked out, inbounding, or if keeper and volleyball is dead and in their possession (since in that case they should be trying to get the ball back to life instead of positioning for attack)
                     if not player.is_knocked_out and not player.inbounding and not (player.role == PlayerRole.KEEPER and volleyball.is_dead and volleyball.possession_team == player.team):
-                        self.player_positioning(player, evade_vectors_dict.get(player.id, Vector2(0, 0)), move_vector_dict.get(player.id, None))
+                        self.player_positioning(player, evade_vectors_chaser_dict.get(player.id, Vector2(0, 0)), move_vector__chaser_dict.get(player.id, None))
+                elif player.role == PlayerRole.BEATER and player.id not in assigned_beater_ids:
+                    self.beater_move_action(player, volleyball)
+                    self.beater_throw_action(player, volleyball)
 

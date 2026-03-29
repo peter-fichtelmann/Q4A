@@ -129,6 +129,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  hoop_defence_kwargs: Dict = None,
                  diamond_attack_kwargs: Dict = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
+                 beater_throw_threshold_loaded_beater: float = 4,
                  simulation_game_logic_log_level: int = None,
                  computer_player_log_level: int = logging.INFO
                  ):
@@ -178,7 +179,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             logger=self.logger
             )
         self.beater_throw_decider = BeaterThrowDecider(
-            throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder
+            throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
+            throw_threshold_loaded_beater=beater_throw_threshold_loaded_beater
         )
 
     def make_move(self, dt: float):
@@ -218,6 +220,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             interception_ratio_calculator_opponent=self.interception_ratio_calculator_team_1 if attacking_team == 0 else self.interception_ratio_calculator_team_0, # inverse because we need hoop blockage of opponent team
             attack_cpu_player_ids=[cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == attacking_team],
             attack_team=attacking_team,
+            beater_throw_decider=self.beater_throw_decider,
             **self.diamond_attack_kwargs,
             logger=self.logger
         )
@@ -227,6 +230,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             dt=dt,
             next_volleyball_holder_id=next_volleyball_holder_id,
             intercepting_position=intercepting_position,
+            assigned_beater_ids=assigned_beater_ids
         )
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
 

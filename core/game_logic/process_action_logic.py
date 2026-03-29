@@ -48,6 +48,11 @@ class ProcessActionLogic:
         if not ball:
             return False
         
+        if ball.ball_type == BallType.VOLLEYBALL:
+            if ball.is_dead:
+                # throwing dead volleyball is not allowed
+                return False
+        
         # Release the ball; copy player's position so the ball doesn't share the same Vector2
         ball.previous_thrower_id = player.id # so dodgeball not bouncing off from thrower immediately
         ball.holder_id = None

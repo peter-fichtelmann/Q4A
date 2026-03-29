@@ -45,7 +45,7 @@ class HoopDefence:
         self.center_hoop = self.defence_hoops[1] if len(self.defence_hoops) == 3 else self.defence_hoops[0]
         self.move_around_hoop_blockage = move_around_hoop_blockage
 
-    def __call__(self, dt: float, assigned_beater_ids: List[str]):
+    def __call__(self, dt: float, assigned_beater_ids: List[str] = []):
         volleyball = self.logic.state.volleyball
         
         volleyball_hoop_distances = {
@@ -141,9 +141,7 @@ class HoopDefence:
             volleyball_holder = self.logic.state.players[volleyball.holder_id]
             if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
                 throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, volleyball_holder)
-                self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
-
-                    
+                self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)               
 
     def chasers_action(self, sorted_hoop_distances, chaser_hoop_squared_distances, volleyball: VolleyBall, dt: float):
         # move chaser closest to hoop with closest distance volleyball first; then move next closest chaser to next closest hoop and so on, but only if they are not already directed towards a hoop by a closer chaser

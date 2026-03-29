@@ -83,6 +83,9 @@ class Config:
             'chaser_evade_beater_weight': 3.5,
             'chaser_evade_chaser_keeper_weight': 1,
             'chaser_evade_teamate_chaser_keeper_weight': 1.5,
+            'unloaded_beater_evade_loaded_opponent_beater_weight': -20, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
+            'loaded_beater_evade_loaded_opponent_beater_weight': -15,
+            'loaded_beater_evade_unloaded_opponent_beater_weight': 4,
             'positioning_boundary_buffer_distance': 3, # for DiamondAttack, distance from boundary at which to start evading boundary
             'passing_evade_vector_position_penalty_weight': 100,
             'passing_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a pass
@@ -98,6 +101,7 @@ class Config:
             'positioning_boundary_buffer_distance': 3, # for HoopDefence, distance from boundary at which to start evading boundary
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
+        'beater_throw_threshold_loaded_beater': 4, # distance in m for beater to throw at loaded opponent beater
         'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)
     }
 
