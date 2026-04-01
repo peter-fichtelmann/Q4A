@@ -664,6 +664,8 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 # send ordered id lists so clients can map binary updates to entities
                 "players_order": list(room.game_state.players.keys()),
                 "balls_order": list(room.game_state.balls.keys()),
+                # send the fixed game tick duration once so the client can extrapolate between updates
+                "tick_time_seconds": (1.0 / Config.FPS) * Config.GAME_TIME_TO_REAL_TIME_RATIO,
             "players": list(room.players.values()),
             # expose a small subset of server-side config so clients render to scale
             "config": {

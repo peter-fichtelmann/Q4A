@@ -2,6 +2,51 @@ import { Config } from './config.js';
 import { State } from './state.js';
 import { updateViewport } from './viewport.js';
 
+function cloneGameStateForRendering(gameState) {
+  if (!gameState) return null;
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(gameState);
+    } catch (err) {
+      // Fall back to JSON cloning for plain network state objects.
+    }
+  }
+  return JSON.parse(JSON.stringify(gameState));
+}
+
+function getPredictionDeltaSeconds() {
+  const tickSeconds = Number(State.network?.tickSeconds) || 0;
+  const lastUpdateAtMs = Number(State.network?.lastUpdateAtMs) || 0;
+  if (!tickSeconds || !lastUpdateAtMs) return 0;
+  const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  return Math.max(0, (nowMs - lastUpdateAtMs) / 1000);
+}
+
+function extrapolateEntities(entityMap, deltaSeconds) {
+  if (!entityMap) return;
+  for (const entity of Object.values(entityMap)) {
+    const position = entity.position || entity.pos;
+    const velocity = entity.velocity || entity.vel;
+    if (!position || !velocity) continue;
+    const vx = Number(velocity.x) || 0;
+    const vy = Number(velocity.y) || 0;
+    position.x = (Number(position.x) || 0) + vx * deltaSeconds;
+    position.y = (Number(position.y) || 0) + vy * deltaSeconds;
+  }
+}
+
+function buildRenderableState() {
+  const baseState = State.gameState;
+  if (!baseState) return null;
+  const renderState = cloneGameStateForRendering(baseState);
+  const deltaSeconds = getPredictionDeltaSeconds();
+  if (deltaSeconds > 0) {
+    extrapolateEntities(renderState.players, deltaSeconds);
+    extrapolateEntities(renderState.balls, deltaSeconds);
+  }
+  return renderState;
+}
+
 export function drawOffScreenBallIndicators(offScreenBalls, xScale) {
   const ctx = State.ctx;
   if (!State.viewport.enabled || !State.gameState || !State.localPlayerId) return;
@@ -36,11 +81,11 @@ export function drawOffScreenBallIndicators(offScreenBalls, xScale) {
 }
 
 export function renderGame() {
-  const ctx = State.ctx; const gs = State.gameState;
+  const ctx = State.ctx; const gs = buildRenderableState();
   if (!ctx) { console.log('No canvas context available'); return; }
   if (!gs) { if (State.debug.enabled) console.log('No game state available'); return; }
 
-  updateViewport();
+  updateViewport(gs);
 
   let xScale, yScale, offsetX = 0, offsetY = 0;
   if (State.viewport.enabled) {

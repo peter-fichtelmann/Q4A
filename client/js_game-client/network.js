@@ -4,6 +4,41 @@ import { getQueryParam } from './utils.js';
 import { resizeCanvasToFit } from './viewport.js';
 import { showPrompt } from './fullscreen.js';
 
+function getNowMs() {
+  return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+}
+
+function rememberServerUpdateTime() {
+  State.network.lastUpdateAtMs = getNowMs();
+}
+
+function mergeBallVelocityFallbacks(gameState, ballVelocities) {
+  if (!gameState || !gameState.balls || !ballVelocities) return;
+  for (const [ballId, velocity] of Object.entries(ballVelocities)) {
+    const ball = gameState.balls[ballId];
+    if (!ball) continue;
+    if (!ball.velocity || ball.velocity.x === undefined || ball.velocity.y === undefined) {
+      ball.velocity = {
+        x: Number(velocity?.x) || 0,
+        y: Number(velocity?.y) || 0,
+      };
+    }
+  }
+}
+
+function cacheBallVelocities(gameState) {
+  if (!gameState || !gameState.balls) return;
+  State.ballVelocities = State.ballVelocities || {};
+  for (const [ballId, ball] of Object.entries(gameState.balls)) {
+    if (ball && ball.velocity && ball.velocity.x !== undefined && ball.velocity.y !== undefined) {
+      State.ballVelocities[ballId] = {
+        x: Number(ball.velocity.x) || 0,
+        y: Number(ball.velocity.y) || 0,
+      };
+    }
+  }
+}
+
 export function connectGame() {
   State.roomId = getQueryParam('room');
   State.localPlayerId = getQueryParam('player');
@@ -41,6 +76,15 @@ export function handleMessage(message) {
     State.gameState = message.game_state;
     if (message.players_order) State.playersOrder = message.players_order;
     if (message.balls_order) State.ballsOrder = message.balls_order;
+    if (message.tick_time_seconds !== undefined) {
+      State.network.tickSeconds = Number(message.tick_time_seconds) || 0;
+    }
+    if (message.ball_velocities) {
+      State.ballVelocities = message.ball_velocities;
+      mergeBallVelocityFallbacks(State.gameState, State.ballVelocities);
+    } else {
+      cacheBallVelocities(State.gameState);
+    }
     if (message.config) {
       const cfg = message.config;
       if (cfg.pitch_length !== undefined) Config.PITCH_LENGTH = cfg.pitch_length;
@@ -52,6 +96,7 @@ export function handleMessage(message) {
       if (cfg.volleyball_radius !== undefined) Config.VOLLEYBALL_RADIUS = cfg.volleyball_radius;
       if (cfg.dodgeball_radius !== undefined) Config.DODGEBALL_RADIUS = cfg.dodgeball_radius;
     }
+    rememberServerUpdateTime();
     try { resizeCanvasToFit(); } catch (e) {}
     showPrompt();
   } else if (message.type === 'state_update') {
@@ -86,11 +131,17 @@ export function handleMessage(message) {
           State.gameState.balls[id] = existing;
         }
       }
+      if (incoming.ball_velocities) {
+        State.ballVelocities = { ...State.ballVelocities, ...incoming.ball_velocities };
+      }
+      mergeBallVelocityFallbacks(State.gameState, State.ballVelocities);
+      cacheBallVelocities(State.gameState);
       if (incoming.game_time !== undefined) State.gameState.game_time = incoming.game_time;
       if (incoming.score !== undefined) State.gameState.score = incoming.score;
       if (incoming.delay_bin !== undefined) State.gameState.delay_bin = incoming.delay_bin;
       if (incoming.possession_code !== undefined) State.gameState.possession_code = incoming.possession_code;
     }
+    rememberServerUpdateTime();
   }
 }
 

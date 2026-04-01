@@ -40,8 +40,8 @@ export function resizeCanvasToFit() {
   State.ctx = canvas.getContext('2d');
 }
 
-export function updateViewport() {
-  const gs = State.gameState;
+export function updateViewport(gameState = State.gameState) {
+  const gs = gameState;
   if (!State.viewport.enabled || !gs || !State.localPlayerId || !gs.players || !gs.players[State.localPlayerId]) return;
 
   const player = gs.players[State.localPlayerId];
