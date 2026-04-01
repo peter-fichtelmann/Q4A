@@ -1,7 +1,6 @@
 from typing import Dict, List, Optional
 import asyncio
 import random
-from turtle import position
 import uuid
 import json
 import secrets
