@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadball - Room Lobby</title>
+    <link rel="stylesheet" href="/client/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Room Lobby</h1>
+        <h3 class="subtitle">Configure teams and roles before starting</h3>
+
+        <div class="room-status">
+            <h3>Room ID</h3>
+            <p>
+                <strong id="roomId"></strong>
+                <button onclick="copyRoomId()" class="btn btn-small">Copy Room ID</button>
+            </p>
+            <p class="hint">Share this Room ID with players from the main lobby page.</p>
+        </div>
+
+        <div class="waiting-room">
+            <h2>Waiting for players...</h2>
+            <div id="playersList"></div>
+
+            <div class="selection">
+                <h3>Your selection</h3>
+                <label for="waitingPlayerName">Player Name</label>
+                <input type="text" id="waitingPlayerName" placeholder="Enter your name" maxlength="32">
+
+                <label for="waitingTeamSelect">Team</label>
+                <select id="waitingTeamSelect">
+                    <option value="0">Team 0</option>
+                    <option value="1">Team 1</option>
+                </select>
+
+                <label for="waitingRoleSelect">Role</label>
+                <select id="waitingRoleSelect">
+                    <option value="chaser">Chaser</option>
+                    <option value="keeper">Keeper</option>
+                    <option value="beater">Beater</option>
+                </select>
+
+                <button id="saveSelectionBtn" onclick="updatePlayerSelection()" class="btn btn-secondary">Save Selection</button>
+            </div>
+
+            <div class="actions">
+                <button id="startBtn" onclick="startGame()" class="btn btn-primary hidden">Start Game</button>
+                <button onclick="goBackToLobby()" class="btn btn-secondary">Back To Main Lobby</button>
+            </div>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script src="/client/room_client.js"></script>
+</body>
+</html>

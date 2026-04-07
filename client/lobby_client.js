@@ -23,92 +23,66 @@ function handleLobbyMessage(message) {
     
     if (message.type === 'room_created') {
         currentRoom = message.room_id;
+        currentPlayerId = message.player_id;
         isCreator = true;
         document.getElementById('roomId').textContent = message.room_id;
-        // passkey is no longer used
         document.getElementById('roomStatus').classList.remove('hidden');
-        document.getElementById('waitingRoom').classList.remove('hidden');
-        // store creator's player id and update players list if provided
-        if (message.player_id) currentPlayerId = message.player_id;
-        if (message.players) updatePlayersList(message.players);
         updateStatus(`Room created! Room ID: ${message.room_id}`);
+        redirectToRoomLobby(message.room_id, message.player_id, true);
     } else if (message.type === 'join_successful') {
         currentRoom = message.room_id;
         currentPlayerId = message.player_id;
-        document.getElementById('waitingRoom').classList.remove('hidden');
-        updatePlayersList(message.players);
         updateStatus('Joined room successfully!');
-    } else if (message.type === 'start_successful') {
-        // Server acknowledged game start and returned a player id for the creator
-        currentRoom = message.room_id || currentRoom;
-        if (message.player_id) currentPlayerId = message.player_id;
-        // Redirect to game page with room and player id
-        if (currentRoom && currentPlayerId) {
-            window.location.href = `/game?room=${currentRoom}&player=${currentPlayerId}`;
-        } else if (currentRoom) {
-            // fallback (shouldn't normally happen)
-            window.location.href = `/game?room=${currentRoom}`;
-        }
+        redirectToRoomLobby(message.room_id, message.player_id, false);
     } else if (message.type === 'join_failed') {
         updateStatus('Failed to join room: ' + message.error, 'error');
     } else if (message.type === 'rooms_list') {
         displayAvailableRooms(message.rooms);
-    } else if (message.type === 'player_updated' || message.type === 'players_updated') {
-        // Server sent updated players list after a save/update
-        if (message.players) updatePlayersList(message.players);
     }
 }
 
-function createRoom() {
-    const playerName = document.getElementById('playerName').value;
-    if (!playerName) {
-        updateStatus('Please enter your name', 'error');
+function redirectToRoomLobby(roomId, playerId, creator) {
+    if (!roomId || !playerId) {
+        updateStatus('Missing room or player id from server.', 'error');
         return;
     }
-    
+
+    const params = new URLSearchParams({
+        room_id: roomId,
+        player_id: playerId,
+        creator: creator ? '1' : '0'
+    });
+    window.location.href = `/room?${params.toString()}`;
+}
+
+function createRoom() {
     if (!lobbySocket) connectLobby();
     
     lobbySocket.send(JSON.stringify({
         type: 'create_room',
-        player_name: playerName
+        player_name: 'Player'
     }));
 }
 
 function showJoinRoom() {
-    // Show inline quick-join form below the buttons
-        // Ensure we have a lobby connection available (connect if not)
-        if (!lobbySocket) connectLobby();
+    // Show inline quick-join form below the buttons.
+    if (!lobbySocket) connectLobby();
 
-        const inline = document.getElementById('inlineJoinForm');
-        if (inline) {
-            inline.classList.remove('hidden');
-            populateJoinModalDefaults();
-            loadAvailableRooms();
-            // focus the room id input for quicker typing
-            const rid = document.getElementById('joinRoomIdInline');
-            if (rid) rid.focus();
-            return;
+    const inline = document.getElementById('inlineJoinForm');
+    if (inline) {
+        inline.classList.remove('hidden');
+        loadAvailableRooms();
+        const rid = document.getElementById('joinRoomIdInline');
+        if (rid) rid.focus();
+        return;
     }
 
     // Fallback to modal if inline form not present
     const modal = document.getElementById('joinRoomModal');
     if (modal) {
         modal.classList.remove('hidden');
-        populateJoinModalDefaults();
         loadAvailableRooms();
     }
-}
-
-// Populate join modal fields from the main player setup when opening
-function populateJoinModalDefaults() {
-    const mainName = document.getElementById('playerName').value;
-    // Fill inline inputs first (if present)
-    const inlineName = document.getElementById('joinPlayerNameInline');
-    if (inlineName && mainName) inlineName.value = mainName;
-
-    // Also fill modal input if it exists
-    const modalName = document.getElementById('joinPlayerName');
-    if (modalName && mainName) modalName.value = mainName;
 }
 
 function closeJoinRoom() {
@@ -125,6 +99,8 @@ function loadAvailableRooms() {
 
 function displayAvailableRooms(rooms) {
     const container = document.getElementById('availableRooms');
+    if (!container) return;
+
     container.innerHTML = '';
     
     if (rooms.length === 0) {
@@ -144,33 +120,34 @@ function displayAvailableRooms(rooms) {
 }
 
 function selectRoom(roomId) {
-    document.getElementById('joinRoomId').value = roomId;
+    const inlineId = document.getElementById('joinRoomIdInline');
+    const modalId = document.getElementById('joinRoomId');
+    if (inlineId) inlineId.value = roomId;
+    if (modalId) modalId.value = roomId;
 }
 
 function joinRoom() {
-    // Prefer inline inputs (shown after clicking Join). Fall back to modal inputs, then main player name.
+    // Prefer inline input (shown after clicking Join). Fall back to modal input.
     const roomIdEl = document.getElementById('joinRoomIdInline') || document.getElementById('joinRoomId');
-    const joinNameEl = document.getElementById('joinPlayerNameInline') || document.getElementById('joinPlayerName');
 
-        const roomId = roomIdEl ? roomIdEl.value.trim() : '';
-        const playerName = (joinNameEl && joinNameEl.value) ? joinNameEl.value : document.getElementById('playerName').value;
+    const roomId = roomIdEl ? roomIdEl.value.trim() : '';
 
-        console.log('Attempting to join room', { roomId, playerName });
+    console.log('Attempting to join room', { roomId });
 
-        if (!roomId) {
-            updateStatus('Please enter room ID', 'error');
-            return;
-        }
+    if (!roomId) {
+        updateStatus('Please enter room ID', 'error');
+        return;
+    }
     
     if (!lobbySocket) connectLobby();
     
     lobbySocket.send(JSON.stringify({
         type: 'join_room',
         room_id: roomId,
-        player_name: playerName
+        player_name: 'Player'
     }));
     
-    // Hide inline form if present, otherwise close modal
+    // Hide inline form if present, otherwise close modal.
     const inline = document.getElementById('inlineJoinForm');
     if (inline) inline.classList.add('hidden');
     else closeJoinRoom();
@@ -199,63 +176,6 @@ function copyRoomId() {
 function hideInlineJoin() {
     const inline = document.getElementById('inlineJoinForm');
     if (inline) inline.classList.add('hidden');
-}
-
-function updatePlayersList(players) {
-    const list = document.getElementById('playersList');
-    list.innerHTML = '';
-    
-    players.forEach(player => {
-        const div = document.createElement('div');
-        div.className = 'player-item';
-        div.textContent = `${player.name} - Team ${player.team} (${player.role})`;
-        list.appendChild(div);
-    });
-    
-    if (isCreator && players.length > 0) {
-        document.getElementById('startBtn').classList.remove('hidden');
-    }
-}
-
-function updatePlayerSelection() {
-    if (!currentRoom || !currentPlayerId) return;
-
-    const teamEl = document.getElementById('waitingTeamSelect');
-    const roleEl = document.getElementById('waitingRoleSelect');
-    const team = teamEl ? parseInt(teamEl.value) : 0;
-    const role = roleEl ? roleEl.value : 'chaser';
-
-    if (!lobbySocket) connectLobby();
-
-    lobbySocket.send(JSON.stringify({
-        type: 'update_player',
-        room_id: currentRoom,
-        player_id: currentPlayerId,
-        team: team,
-        role: role
-    }));
-
-    updateStatus('Saving selection...');
-}
-
-function startGame() {
-    if (!currentRoom) return;
-
-    if (!lobbySocket) connectLobby();
-
-    // Tell the server (room creator) to start the game. Server will reply with
-    // a `start_successful` message that includes a player_id for the creator.
-    lobbySocket.send(JSON.stringify({
-        type: 'start_game',
-        room_id: currentRoom
-    }));
-}
-
-function copyToClipboard() {
-    const passkey = document.getElementById('passkey').textContent;
-    navigator.clipboard.writeText(passkey).then(() => {
-        updateStatus('Passkey copied to clipboard!', 'success');
-    });
 }
 
 function updateStatus(message, type = 'info') {

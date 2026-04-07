@@ -55,6 +55,8 @@ class GameRoom:
         self.passkey = passkey
         self.creator_id = creator_id
         self.creator_name = creator_name
+        # Tracks which player entry belongs to the room creator.
+        self.creator_player_id: Optional[str] = None
         self.players: Dict[str, Dict] = {}
         self.game_started = False
         self.max_players = 12
@@ -230,6 +232,12 @@ async def root():
     """Serve lobby page"""
     return FileResponse("client/lobby.html")
 
+
+@app.get("/room")
+async def room_lobby_page():
+    """Serve dedicated room lobby page."""
+    return FileResponse("client/room.html")
+
 @app.get("/game")
 async def game():
     """Serve game page"""
@@ -344,6 +352,7 @@ async def websocket_lobby(websocket: WebSocket):
                     "team": 0,
                     "role": "chaser"
                 }
+                room.creator_player_id = creator_player_id
 
                 # Also create a Player entity in the room's game state so they'll render in-game
                 try:
@@ -391,6 +400,7 @@ async def websocket_lobby(websocket: WebSocket):
                 player_name = message.get("player_name", "Player")
                 team = message.get("team", 'A')
                 role = message.get("role", "chaser")
+                team_value = 0 if team in (0, '0', 'A', 'a') else 1
                 
                 if lobby_manager.join_room(room_id, passkey):
                     room = lobby_manager.get_room(room_id)
@@ -400,7 +410,7 @@ async def websocket_lobby(websocket: WebSocket):
                     room.players[player_id] = {
                         "id": player_id,
                         "name": player_name,
-                        "team": team,
+                        "team": team_value,
                         "role": role
                     }
                     # Track this websocket as a lobby connection for the room and map player->client
@@ -410,12 +420,12 @@ async def websocket_lobby(websocket: WebSocket):
                     try:
                         player_entity = Player(
                             id=player_id,
-                            team=(0 if team in (0, '0', 'A', 'a') else 1),
+                            team=team_value,
                             role=PlayerRole(role),
                             radius=Config.PLAYER_RADIUS,
                             position=Vector2(
-                                5 if team in (0, '0', 'A', 'a') else (Config.PITCH_LENGTH - 5),
-                                Config.PITCH_WIDTH / 2 + (len(room.game_state.get_players_by_team(0 if team in (0, '0', 'A', 'a') else 1)) * 1.5),
+                                5 if team_value == 0 else (Config.PITCH_LENGTH - 5),
+                                Config.PITCH_WIDTH / 2 + (len(room.game_state.get_players_by_team(team_value)) * 1.5),
                             ),
                             max_speed=Config.PLAYER_MAX_SPEED,
                             min_speed=Config.PLAYER_MIN_SPEED,
@@ -446,10 +456,36 @@ async def websocket_lobby(websocket: WebSocket):
                         "error": "Invalid room ID or passkey"
                     })
 
+            elif message_type == "attach_room_lobby":
+                # Reattach a websocket after navigating to /room page.
+                room_id = message.get("room_id")
+                player_id = message.get("player_id")
+                room = lobby_manager.get_room(room_id)
+
+                if not room:
+                    await websocket.send_json({"type": "attach_failed", "error": "Room not found"})
+                    continue
+
+                if player_id not in room.players:
+                    await websocket.send_json({"type": "attach_failed", "error": "Player not found in room"})
+                    continue
+
+                room.lobby_connections[client_id] = websocket
+                room.player_to_client[player_id] = client_id
+
+                await websocket.send_json({
+                    "type": "attach_successful",
+                    "room_id": room_id,
+                    "player_id": player_id,
+                    "is_creator": player_id == getattr(room, "creator_player_id", None),
+                    "players": list(room.players.values()),
+                })
+
             elif message_type == "update_player":
                 # Update a player's team/role inside a room
                 room_id = message.get("room_id")
                 player_id = message.get("player_id")
+                name = message.get("name")
                 team = message.get("team")
                 role = message.get("role")
 
@@ -462,6 +498,10 @@ async def websocket_lobby(websocket: WebSocket):
                         await websocket.send_json({"type": "update_failed", "error": "Player not found in room"})
                     else:
                         # Update fields in the room players dict
+                        if name is not None:
+                            player["name"] = str(name)
+                            if player_id == getattr(room, "creator_player_id", None):
+                                room.creator_name = str(name)
                         if team is not None:
                             player["team"] = team
                         if role is not None:
@@ -507,19 +547,23 @@ async def websocket_lobby(websocket: WebSocket):
             elif message_type == "start_game":
                 # Room creator requests to start the game
                 room_id = message.get("room_id")
+                requester_player_id = message.get("player_id")
                 room = lobby_manager.get_room(room_id)
                 if not room:
                     await websocket.send_json({"type": "start_failed", "error": "Room not found"})
-                elif client_id != room.creator_id:
+                elif requester_player_id != getattr(room, "creator_player_id", None):
                     await websocket.send_json({"type": "start_failed", "error": "Only the room creator can start the game"})
                 else:
                     # Ensure the creator has a player entry; create one if missing
                     creator_player_id = None
-                    for pid, pdata in room.players.items():
-                        # try to match by creator name as a heuristic
-                        if pdata.get("name") == room.creator_name:
-                            creator_player_id = pid
-                            break
+                    if getattr(room, "creator_player_id", None) in room.players:
+                        creator_player_id = room.creator_player_id
+                    else:
+                        for pid, pdata in room.players.items():
+                            # fallback heuristic for older rooms
+                            if pdata.get("name") == room.creator_name:
+                                creator_player_id = pid
+                                break
 
                     if not creator_player_id:
                         creator_player_id = str(uuid.uuid4())
@@ -529,6 +573,7 @@ async def websocket_lobby(websocket: WebSocket):
                             "team": 0,
                             "role": "chaser"
                         }
+                    room.creator_player_id = creator_player_id
 
                     # add computer players for all missing players
                     n_players_per_role_per_team = {
