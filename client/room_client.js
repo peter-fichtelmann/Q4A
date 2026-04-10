@@ -2,6 +2,8 @@ let lobbySocket = null;
 let currentRoom = null;
 let currentPlayerId = null;
 let isCreator = false;
+let roomPlayers = [];
+let roomSlots = {};
 
 function getRequiredParams() {
     const params = new URLSearchParams(window.location.search);
@@ -35,28 +37,20 @@ function connectLobby() {
 }
 
 function handleLobbyMessage(message) {
-    console.log('Room lobby message:', message);
-
     if (message.type === 'attach_successful') {
         currentRoom = message.room_id;
         currentPlayerId = message.player_id;
         isCreator = Boolean(message.is_creator);
         renderRoomHeader();
-        if (message.players) {
-            updatePlayersList(message.players);
-            syncOwnSelection(message.players);
-        }
+        applyRoomState(message.players || [], message.slots || {});
         toggleStartButton();
         updateStatus('Connected to room lobby.', 'success');
+    } else if (message.type === 'players_updated') {
+        applyRoomState(message.players || [], message.slots || {});
     } else if (message.type === 'attach_failed') {
         updateStatus(`Unable to attach to room: ${message.error}`, 'error');
-    } else if (message.type === 'players_updated') {
-        if (message.players) {
-            updatePlayersList(message.players);
-            syncOwnSelection(message.players);
-        }
     } else if (message.type === 'update_failed') {
-        updateStatus(message.error || 'Failed to update player selection.', 'error');
+        updateStatus(message.error || 'Failed to update room assignment.', 'error');
     } else if (message.type === 'start_failed') {
         updateStatus(message.error || 'Failed to start game.', 'error');
     } else if (message.type === 'start_successful') {
@@ -75,30 +69,133 @@ function renderRoomHeader() {
     if (roomIdEl) roomIdEl.textContent = currentRoom || '';
 }
 
-function updatePlayersList(players) {
-    const list = document.getElementById('playersList');
-    if (!list) return;
-
-    list.innerHTML = '';
-
-    players.forEach((player) => {
-        const div = document.createElement('div');
-        div.className = 'player-item';
-        div.textContent = `${player.name} - Team ${player.team} (${player.role})`;
-        list.appendChild(div);
-    });
+function applyRoomState(players, slots) {
+    roomPlayers = players;
+    roomSlots = slots;
+    renderBoard();
 }
 
-function syncOwnSelection(players) {
-    const me = players.find((p) => p.id === currentPlayerId);
-    if (!me) return;
+function renderBoard() {
+    const teamAEl = document.getElementById('teamASlots');
+    const teamBEl = document.getElementById('teamBSlots');
+    const spectatorEl = document.getElementById('spectatorDropzone');
+    if (!teamAEl || !teamBEl || !spectatorEl) return;
 
-    const nameEl = document.getElementById('waitingPlayerName');
-    const teamEl = document.getElementById('waitingTeamSelect');
-    const roleEl = document.getElementById('waitingRoleSelect');
-    if (nameEl) nameEl.value = String(me.name || '');
-    if (teamEl) teamEl.value = String(me.team);
-    if (roleEl) roleEl.value = String(me.role);
+    teamAEl.innerHTML = '';
+    teamBEl.innerHTML = '';
+    spectatorEl.innerHTML = '';
+
+    const playersById = {};
+    roomPlayers.forEach((p) => {
+        playersById[p.id] = p;
+    });
+
+    Object.keys(roomSlots)
+        .filter((slotId) => slotId.startsWith('team_a_'))
+        .sort()
+        .forEach((slotId) => teamAEl.appendChild(buildSlotElement(slotId, playersById)));
+
+    Object.keys(roomSlots)
+        .filter((slotId) => slotId.startsWith('team_b_'))
+        .sort()
+        .forEach((slotId) => teamBEl.appendChild(buildSlotElement(slotId, playersById)));
+
+    spectatorEl.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        spectatorEl.classList.add('slot-hover');
+    });
+    spectatorEl.addEventListener('dragleave', () => spectatorEl.classList.remove('slot-hover'));
+    spectatorEl.addEventListener('drop', (event) => {
+        event.preventDefault();
+        spectatorEl.classList.remove('slot-hover');
+        const draggedPlayerId = event.dataTransfer.getData('text/plain');
+        if (draggedPlayerId !== currentPlayerId) return;
+        setPlayerSlot(null);
+    });
+
+    const slottedPlayerIds = new Set(Object.values(roomSlots).filter((pid) => pid));
+    roomPlayers
+        .filter((p) => !slottedPlayerIds.has(p.id))
+        .forEach((p) => spectatorEl.appendChild(buildPlayerCard(p)));
+}
+
+function buildSlotElement(slotId, playersById) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'slot-box';
+    wrapper.dataset.slotId = slotId;
+
+    const label = document.createElement('div');
+    label.className = 'slot-label';
+    label.textContent = formatSlotLabel(slotId);
+    wrapper.appendChild(label);
+
+    const assignedPlayerId = roomSlots[slotId];
+    if (assignedPlayerId && playersById[assignedPlayerId]) {
+        wrapper.appendChild(buildPlayerCard(playersById[assignedPlayerId]));
+    } else {
+        const empty = document.createElement('div');
+        empty.className = 'slot-empty';
+        empty.textContent = 'Drop here';
+        wrapper.appendChild(empty);
+    }
+
+    wrapper.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        wrapper.classList.add('slot-hover');
+    });
+    wrapper.addEventListener('dragleave', () => wrapper.classList.remove('slot-hover'));
+    wrapper.addEventListener('drop', (event) => {
+        event.preventDefault();
+        wrapper.classList.remove('slot-hover');
+        const draggedPlayerId = event.dataTransfer.getData('text/plain');
+        if (draggedPlayerId !== currentPlayerId) return;
+        if (roomSlots[slotId] && roomSlots[slotId] !== draggedPlayerId) {
+            updateStatus('That slot is already occupied.', 'error');
+            return;
+        }
+        setPlayerSlot(slotId);
+    });
+
+    return wrapper;
+}
+
+function buildPlayerCard(player) {
+    const card = document.createElement('div');
+    card.className = 'player-card';
+    if (player.id === currentPlayerId) card.classList.add('me');
+    card.textContent = player.name;
+
+    const draggable = player.id === currentPlayerId;
+    card.draggable = draggable;
+
+    if (draggable) {
+        card.addEventListener('dragstart', (event) => {
+            event.dataTransfer.setData('text/plain', player.id);
+            card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    }
+
+    return card;
+}
+
+function formatSlotLabel(slotId) {
+    const parts = slotId.split('_');
+    if (parts.length !== 4) return slotId;
+    const role = parts[2];
+    const idx = parts[3];
+    return `${role.charAt(0).toUpperCase()}${role.slice(1)} ${idx}`;
+}
+
+function setPlayerSlot(targetSlot) {
+    if (!currentRoom || !currentPlayerId || !lobbySocket) return;
+
+    lobbySocket.send(JSON.stringify({
+        type: 'set_room_slot',
+        room_id: currentRoom,
+        player_id: currentPlayerId,
+        target_slot: targetSlot
+    }));
 }
 
 function toggleStartButton() {
@@ -110,33 +207,6 @@ function toggleStartButton() {
     } else {
         startBtn.classList.add('hidden');
     }
-}
-
-function updatePlayerSelection() {
-    if (!currentRoom || !currentPlayerId || !lobbySocket) return;
-
-    const nameEl = document.getElementById('waitingPlayerName');
-    const teamEl = document.getElementById('waitingTeamSelect');
-    const roleEl = document.getElementById('waitingRoleSelect');
-    const name = (nameEl && nameEl.value) ? nameEl.value.trim() : 'Player';
-    const team = teamEl ? parseInt(teamEl.value, 10) : 0;
-    const role = roleEl ? roleEl.value : 'chaser';
-
-    if (!name) {
-        updateStatus('Please enter a player name.', 'error');
-        return;
-    }
-
-    lobbySocket.send(JSON.stringify({
-        type: 'update_player',
-        room_id: currentRoom,
-        player_id: currentPlayerId,
-        name,
-        team,
-        role
-    }));
-
-    updateStatus('Saving selection...');
 }
 
 function startGame() {

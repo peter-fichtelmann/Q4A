@@ -254,3 +254,90 @@ input:focus, select:focus {
     text-align: center;
     margin-top: 10px;
 }
+
+.room-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-top: 18px;
+}
+
+.board-column {
+    background: #f6f8fc;
+    border: 1px solid #d8dde8;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.board-column h2 {
+    margin-top: 0;
+    font-size: 1.1rem;
+}
+
+.slot-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.slot-box {
+    min-height: 74px;
+    border: 2px dashed #b6bfd3;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 8px;
+}
+
+.slot-label {
+    font-size: 0.82rem;
+    color: #5a6582;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.slot-empty {
+    color: #99a3bf;
+    font-size: 0.9rem;
+}
+
+.spectator-dropzone {
+    min-height: 300px;
+    border: 2px dashed #b6bfd3;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+    align-content: start;
+}
+
+.player-card {
+    border: 1px solid #7f8db1;
+    background: #e9efff;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-weight: 600;
+    cursor: default;
+    user-select: none;
+}
+
+.player-card.me {
+    background: #d7ffe8;
+    border-color: #4b9f74;
+    cursor: grab;
+}
+
+.player-card.dragging {
+    opacity: 0.6;
+}
+
+.slot-hover {
+    border-color: #4f7dff !important;
+    background: #f0f5ff !important;
+}
+
+@media (max-width: 960px) {
+    .room-board {
+        grid-template-columns: 1fr;
+    }
+}

@@ -62,6 +62,9 @@ class GameRoom:
         self.max_players = 12
         self.created_at = datetime.now()
         self.cpu_player_ids: List[str] = []
+        self.player_counter: int = 0
+        # Slot layout for room lobby drag/drop. value is player_id or None.
+        self.slot_assignments: Dict[str, Optional[str]] = self._build_slot_assignments()
         
         # Game state for this room
         self.game_state = GameState()
@@ -106,6 +109,70 @@ class GameRoom:
         # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
         self.computer_player_class: ComputerPlayer = RuleBasedComputerPlayer
         self.computer_player: ComputerPlayer = None # initialized later
+
+    @staticmethod
+    def _slot_id(team_label: str, role: str, index: int) -> str:
+        return f"{team_label}_{role}_{index}"
+
+    def _build_slot_assignments(self) -> Dict[str, Optional[str]]:
+        slots: Dict[str, Optional[str]] = {}
+        counts = {
+            "chaser": (Config.N_CHASERS_TEAM_0, Config.N_CHASERS_TEAM_1),
+            "keeper": (Config.N_KEEPERS_TEAM_0, Config.N_KEEPERS_TEAM_1),
+            "beater": (Config.N_BEATERS_TEAM_0, Config.N_BEATERS_TEAM_1),
+        }
+        for role, (n_left, n_right) in counts.items():
+            for i in range(1, int(n_left) + 1):
+                slots[self._slot_id("team_a", role, i)] = None
+            for i in range(1, int(n_right) + 1):
+                slots[self._slot_id("team_b", role, i)] = None
+        return slots
+
+    def next_default_player_name(self) -> str:
+        self.player_counter += 1
+        return f"player {self.player_counter}"
+
+    def find_player_slot(self, player_id: str) -> Optional[str]:
+        for slot_id, assigned_player_id in self.slot_assignments.items():
+            if assigned_player_id == player_id:
+                return slot_id
+        return None
+
+    def set_player_slot(self, player_id: str, target_slot: Optional[str]) -> tuple[bool, str]:
+        if target_slot is not None and target_slot not in self.slot_assignments:
+            return False, "Invalid slot"
+
+        current_slot = self.find_player_slot(player_id)
+        if target_slot is not None:
+            occupying = self.slot_assignments.get(target_slot)
+            if occupying is not None and occupying != player_id:
+                return False, "Target slot is occupied"
+
+        if current_slot is not None:
+            self.slot_assignments[current_slot] = None
+
+        if target_slot is not None:
+            self.slot_assignments[target_slot] = player_id
+
+        player = self.players.get(player_id)
+        if not player:
+            return False, "Player not found"
+
+        if target_slot is None:
+            player["team"] = None
+            player["role"] = "spectator"
+            return True, "ok"
+
+        parts = target_slot.split("_")
+        # Expected format: team_a_chaser_1 or team_b_keeper_1
+        if len(parts) != 4:
+            return False, "Invalid slot format"
+
+        team = 0 if parts[1] == "a" else 1
+        role = parts[2]
+        player["team"] = team
+        player["role"] = role
+        return True, "ok"
 
     
     def _initialize_pitch(self):
@@ -341,39 +408,19 @@ async def websocket_lobby(websocket: WebSocket):
             message_type = message.get("type")
             
             if message_type == "create_room":
-                player_name = message.get("player_name", "Player")
-                room_id, passkey = lobby_manager.create_room(client_id, player_name)
+                room_id, passkey = lobby_manager.create_room(client_id, "player 1")
                 # Add the creator as a player in the room so they appear in the waiting list
                 room = lobby_manager.get_room(room_id)
                 creator_player_id = str(uuid.uuid4())
+                player_name = room.next_default_player_name()
                 room.players[creator_player_id] = {
                     "id": creator_player_id,
                     "name": player_name,
-                    "team": 0,
-                    "role": "chaser"
+                    "team": None,
+                    "role": "spectator"
                 }
+                room.creator_name = player_name
                 room.creator_player_id = creator_player_id
-
-                # Also create a Player entity in the room's game state so they'll render in-game
-                try:
-                    # place creator near left side in metres
-                    y_offset = len(room.game_state.get_players_by_team(0)) * 1.5
-                    player_entity = Player(
-                        id=creator_player_id,
-                        team=0,  # numerical team for game logic (0 = left/A)
-                        role=PlayerRole("chaser"),
-                        radius=Config.PLAYER_RADIUS,
-                        position=Vector2(27, Config.PITCH_WIDTH / 2 + y_offset),
-                        max_speed=Config.PLAYER_MAX_SPEED,
-                        min_speed=Config.PLAYER_MIN_SPEED,
-                        acceleration=Config.PLAYER_ACCELERATION,
-                        deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
-                        min_dir=Config.PLAYER_MIN_DIR,
-                        throw_velocity=Config.PLAYER_THROW_VELOCITY
-                    )
-                    room.game_state.add_player(player_entity)
-                except Exception:
-                    pass
 
                 # Track this websocket as a lobby connection for the room and map player->client
                 room.lobby_connections[client_id] = websocket
@@ -384,7 +431,8 @@ async def websocket_lobby(websocket: WebSocket):
                     "room_id": room_id,
                     "passkey": passkey,
                     "player_id": creator_player_id,
-                    "players": list(room.players.values())
+                    "players": list(room.players.values()),
+                    "slots": room.slot_assignments,
                 })
             
             elif message_type == "list_rooms":
@@ -397,58 +445,36 @@ async def websocket_lobby(websocket: WebSocket):
             elif message_type == "join_room":
                 room_id = message.get("room_id")
                 passkey = message.get("passkey")
-                player_name = message.get("player_name", "Player")
-                team = message.get("team", 'A')
-                role = message.get("role", "chaser")
-                team_value = 0 if team in (0, '0', 'A', 'a') else 1
                 
                 if lobby_manager.join_room(room_id, passkey):
                     room = lobby_manager.get_room(room_id)
+                    player_name = room.next_default_player_name()
                     
                     # Add player to room
                     player_id = str(uuid.uuid4())
                     room.players[player_id] = {
                         "id": player_id,
                         "name": player_name,
-                        "team": team_value,
-                        "role": role
+                        "team": None,
+                        "role": "spectator"
                     }
                     # Track this websocket as a lobby connection for the room and map player->client
                     room.lobby_connections[client_id] = websocket
                     room.player_to_client[player_id] = client_id
-                    # Also create a Player entity in the room's game state so they'll render in-game
-                    try:
-                        player_entity = Player(
-                            id=player_id,
-                            team=team_value,
-                            role=PlayerRole(role),
-                            radius=Config.PLAYER_RADIUS,
-                            position=Vector2(
-                                5 if team_value == 0 else (Config.PITCH_LENGTH - 5),
-                                Config.PITCH_WIDTH / 2 + (len(room.game_state.get_players_by_team(team_value)) * 1.5),
-                            ),
-                            max_speed=Config.PLAYER_MAX_SPEED,
-                            min_speed=Config.PLAYER_MIN_SPEED,
-                            acceleration=Config.PLAYER_ACCELERATION,
-                            deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
-                            min_dir=Config.PLAYER_MIN_DIR,
-                            throw_velocity=Config.PLAYER_THROW_VELOCITY
-                        )
-                        room.game_state.add_player(player_entity)
-                    except Exception:
-                        pass
                     
                     await websocket.send_json({
                         "type": "join_successful",
                         "room_id": room_id,
                         "player_id": player_id,
-                        "players": list(room.players.values())
+                        "players": list(room.players.values()),
+                        "slots": room.slot_assignments,
                     })
                     # Notify other lobby connections in the room about the new player
                     await broadcast_lobby(room, {
                         "type": "players_updated",
                         "room_id": room_id,
-                        "players": list(room.players.values())
+                        "players": list(room.players.values()),
+                        "slots": room.slot_assignments,
                     })
                 else:
                     await websocket.send_json({
@@ -479,6 +505,33 @@ async def websocket_lobby(websocket: WebSocket):
                     "player_id": player_id,
                     "is_creator": player_id == getattr(room, "creator_player_id", None),
                     "players": list(room.players.values()),
+                    "slots": room.slot_assignments,
+                })
+
+            elif message_type == "set_room_slot":
+                room_id = message.get("room_id")
+                player_id = message.get("player_id")
+                target_slot = message.get("target_slot")
+                room = lobby_manager.get_room(room_id)
+
+                if not room:
+                    await websocket.send_json({"type": "update_failed", "error": "Room not found"})
+                    continue
+
+                if player_id not in room.players:
+                    await websocket.send_json({"type": "update_failed", "error": "Player not found in room"})
+                    continue
+
+                success, reason = room.set_player_slot(player_id, target_slot)
+                if not success:
+                    await websocket.send_json({"type": "update_failed", "error": reason})
+                    continue
+
+                await broadcast_lobby(room, {
+                    "type": "players_updated",
+                    "room_id": room_id,
+                    "players": list(room.players.values()),
+                    "slots": room.slot_assignments,
                 })
 
             elif message_type == "update_player":
@@ -541,7 +594,8 @@ async def websocket_lobby(websocket: WebSocket):
                         await broadcast_lobby(room, {
                             "type": "players_updated",
                             "room_id": room_id,
-                            "players": list(room.players.values())
+                            "players": list(room.players.values()),
+                            "slots": room.slot_assignments,
                         })
 
             elif message_type == "start_game":
@@ -575,6 +629,43 @@ async def websocket_lobby(websocket: WebSocket):
                         }
                     room.creator_player_id = creator_player_id
 
+                    # add human player entities from current slot assignment
+                    human_players_by_team: Dict[int, List[str]] = {0: [], 1: []}
+                    for pid, pdata in room.players.items():
+                        team = pdata.get("team")
+                        role = pdata.get("role")
+                        if team in (0, 1) and role in ("chaser", "keeper", "beater"):
+                            human_players_by_team[int(team)].append(pid)
+
+                    for team, player_ids in human_players_by_team.items():
+                        for idx, pid in enumerate(player_ids):
+                            pdata = room.players.get(pid)
+                            if pdata is None:
+                                continue
+                            role = pdata.get("role", "chaser")
+                            if room.game_state.get_player(pid):
+                                continue
+                            try:
+                                player_entity = Player(
+                                    id=pid,
+                                    team=team,
+                                    role=PlayerRole(role),
+                                    radius=Config.PLAYER_RADIUS,
+                                    position=Vector2(
+                                        5 if team == 0 else (Config.PITCH_LENGTH - 5),
+                                        Config.PITCH_WIDTH / 2 + (idx * 1.5),
+                                    ),
+                                    max_speed=Config.PLAYER_MAX_SPEED,
+                                    min_speed=Config.PLAYER_MIN_SPEED,
+                                    acceleration=Config.PLAYER_ACCELERATION,
+                                    deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
+                                    min_dir=Config.PLAYER_MIN_DIR,
+                                    throw_velocity=Config.PLAYER_THROW_VELOCITY,
+                                )
+                                room.game_state.add_player(player_entity)
+                            except Exception:
+                                pass
+
                     # add computer players for all missing players
                     n_players_per_role_per_team = {
                         0: {
@@ -589,7 +680,10 @@ async def websocket_lobby(websocket: WebSocket):
                         }
                     }
                     for player_id, player_data in room.players.items():
-                        n_players_per_role_per_team[player_data["team"]][player_data["role"]] += 1
+                        team = player_data.get("team")
+                        role = player_data.get("role")
+                        if team in (0, 1) and role in n_players_per_role_per_team[int(team)]:
+                            n_players_per_role_per_team[int(team)][role] += 1
 
                     if n_players_per_role_per_team[0]["chaser"] < Config.N_CHASERS_TEAM_0:
                         for _ in range(Config.N_CHASERS_TEAM_0 - n_players_per_role_per_team[0]["chaser"]):

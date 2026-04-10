@@ -20,35 +20,26 @@
             <p class="hint">Share this Room ID with players from the main lobby page.</p>
         </div>
 
-        <div class="waiting-room">
-            <h2>Waiting for players...</h2>
-            <div id="playersList"></div>
+        <div class="room-board">
+            <section class="board-column">
+                <h2>Team A</h2>
+                <div id="teamASlots" class="slot-grid"></div>
+            </section>
 
-            <div class="selection">
-                <h3>Your selection</h3>
-                <label for="waitingPlayerName">Player Name</label>
-                <input type="text" id="waitingPlayerName" placeholder="Enter your name" maxlength="32">
+            <section class="board-column center-column">
+                <h2>Spectators</h2>
+                <div id="spectatorDropzone" class="spectator-dropzone"></div>
+            </section>
 
-                <label for="waitingTeamSelect">Team</label>
-                <select id="waitingTeamSelect">
-                    <option value="0">Team 0</option>
-                    <option value="1">Team 1</option>
-                </select>
+            <section class="board-column">
+                <h2>Team B</h2>
+                <div id="teamBSlots" class="slot-grid"></div>
+            </section>
+        </div>
 
-                <label for="waitingRoleSelect">Role</label>
-                <select id="waitingRoleSelect">
-                    <option value="chaser">Chaser</option>
-                    <option value="keeper">Keeper</option>
-                    <option value="beater">Beater</option>
-                </select>
-
-                <button id="saveSelectionBtn" onclick="updatePlayerSelection()" class="btn btn-secondary">Save Selection</button>
-            </div>
-
-            <div class="actions">
-                <button id="startBtn" onclick="startGame()" class="btn btn-primary hidden">Start Game</button>
-                <button onclick="goBackToLobby()" class="btn btn-secondary">Back To Main Lobby</button>
-            </div>
+        <div class="actions">
+            <button id="startBtn" onclick="startGame()" class="btn btn-primary hidden">Start Game</button>
+            <button onclick="goBackToLobby()" class="btn btn-secondary">Back To Main Lobby</button>
         </div>
 
         <div id="status" class="status"></div>
