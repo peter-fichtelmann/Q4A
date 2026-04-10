@@ -163,10 +163,43 @@ function buildPlayerCard(player) {
     const card = document.createElement('div');
     card.className = 'player-card';
     if (player.id === currentPlayerId) card.classList.add('me');
-    card.textContent = player.name;
 
     const draggable = player.id === currentPlayerId;
     card.draggable = draggable;
+
+    if (draggable) {
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'player-name-input';
+        nameInput.maxLength = 32;
+        nameInput.value = player.name || '';
+        nameInput.placeholder = 'Enter name';
+
+        const submitName = () => {
+            const newName = (nameInput.value || '').trim();
+            if (!newName) {
+                nameInput.value = player.name || '';
+                return;
+            }
+            if (newName === (player.name || '')) return;
+            updatePlayerName(newName);
+        };
+
+        nameInput.addEventListener('click', (event) => event.stopPropagation());
+        nameInput.addEventListener('mousedown', (event) => event.stopPropagation());
+        nameInput.addEventListener('keydown', (event) => {
+            event.stopPropagation();
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitName();
+                nameInput.blur();
+            }
+        });
+        nameInput.addEventListener('blur', submitName);
+        card.appendChild(nameInput);
+    } else {
+        card.textContent = player.name;
+    }
 
     if (draggable) {
         card.addEventListener('dragstart', (event) => {
@@ -177,6 +210,17 @@ function buildPlayerCard(player) {
     }
 
     return card;
+}
+
+function updatePlayerName(name) {
+    if (!currentRoom || !currentPlayerId || !lobbySocket) return;
+
+    lobbySocket.send(JSON.stringify({
+        type: 'update_player',
+        room_id: currentRoom,
+        player_id: currentPlayerId,
+        name
+    }));
 }
 
 function formatSlotLabel(slotId) {

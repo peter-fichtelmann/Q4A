@@ -331,6 +331,23 @@ input:focus, select:focus {
     opacity: 0.6;
 }
 
+.player-name-input {
+    width: 100%;
+    border: 1px solid #6a7899;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: #ffffff;
+    color: #203050;
+}
+
+.player-name-input:focus {
+    outline: none;
+    border-color: #3f6bff;
+    box-shadow: 0 0 0 2px rgba(63, 107, 255, 0.15);
+}
+
 .slot-hover {
     border-color: #4f7dff !important;
     background: #f0f5ff !important;
