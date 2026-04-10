@@ -120,15 +120,20 @@ export function renderGame() {
     ctx.beginPath(); ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y); ctx.stroke();
   } else { ctx.beginPath(); ctx.rect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT); ctx.stroke(); }
 
-  const colour_player_A = '#c878ffff';
-  const colour_player_B = '#ff9632ff';
-  const colour_keeper = '#7cfc00';
-  const colour_chaser = '#ffffff';
-  const colour_beater = '#000000';
-  const colour_seeker = '#ffff00';
-  const colour_quaffle = '#e6e6e6ff';
-  const colour_bludger = '#ff0064ff';
-  const colour_selected_player = '#ffff00';
+  const palette = (typeof window !== 'undefined' && window.CLIENT_COLORS) ? window.CLIENT_COLORS : {};
+  const roleColors = palette.roles || {};
+  const teamColors = palette.teams || {};
+  const ballColors = palette.balls || {};
+
+  const colour_player_A = teamColors.a || '#c878ff';
+  const colour_player_B = teamColors.b || '#ff9632';
+  const colour_keeper = roleColors.keeper || '#7cfc00';
+  const colour_chaser = roleColors.chaser || '#ffffff';
+  const colour_beater = roleColors.beater || '#000000';
+  const colour_seeker = roleColors.seeker || '#ffff00';
+  const colour_quaffle = ballColors.volleyball || '#e6e6e6';
+  const colour_bludger = ballColors.dodgeball || '#ff0064';
+  const colour_selected_player = palette.selectedPlayer || '#ffff00';
   const knocked_out_alpha = 0.5; const is_dead_alpha = 0.5;
 
   if (gs.hoops) {

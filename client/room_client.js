@@ -121,8 +121,14 @@ function renderBoard() {
 
 function buildSlotElement(slotId, playersById) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'slot-box';
+    wrapper.className = 'slot-box role-slot';
     wrapper.dataset.slotId = slotId;
+
+    const role = getRoleForSlot(slotId);
+    const roleColor = getRoleColor(role);
+    if (roleColor) {
+        wrapper.style.setProperty('--slot-role-color', roleColor);
+    }
 
     const label = document.createElement('div');
     label.className = 'slot-label';
@@ -229,6 +235,24 @@ function formatSlotLabel(slotId) {
     const role = parts[2];
     const idx = parts[3];
     return `${role.charAt(0).toUpperCase()}${role.slice(1)} ${idx}`;
+}
+
+function getRoleForSlot(slotId) {
+    const parts = slotId.split('_');
+    if (parts.length !== 4) return '';
+    return parts[2];
+}
+
+function getRoleColor(role) {
+    const palette = window.CLIENT_COLORS || {};
+    const roles = palette.roles || {};
+    const fallback = {
+        keeper: '#7cfc00',
+        chaser: '#ffffff',
+        beater: '#000000',
+        seeker: '#ffff00'
+    };
+    return roles[role] || fallback[role] || '#b6bfd3';
 }
 
 function setPlayerSlot(targetSlot) {

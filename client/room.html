@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/client/styles.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container room-container">
         <h1>Room Lobby</h1>
         <h3 class="subtitle">Configure teams and roles before starting</h3>
 
@@ -19,6 +19,8 @@
             </p>
             <p class="hint">Share this Room ID with players from the main lobby page.</p>
         </div>
+
+        <p class="room-hint">Drag and drop your player box to team and position of your dreams</p>
 
         <div class="room-board">
             <section class="board-column">
@@ -45,6 +47,7 @@
         <div id="status" class="status"></div>
     </div>
 
+    <script src="/client/client_palette.js"></script>
     <script src="/client/room_client.js"></script>
 </body>
 </html>

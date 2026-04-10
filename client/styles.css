@@ -27,8 +27,12 @@ body:has(.game-container) {
     border-radius: 10px;
     padding: 40px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-    max-width: 600px;
+    max-width: 750px;
     width: 100%;
+}
+
+.room-container {
+    max-width: 750px;
 }
 
 h1 {
@@ -258,13 +262,21 @@ input:focus, select:focus {
 .room-board {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 16px;
+    gap: 28px;
     margin-top: 18px;
 }
 
+.room-hint {
+    text-align: center;
+    font-style: italic;
+    font-weight: 400;
+    color: #4c5d87;
+    margin: 6px 0 14px;
+}
+
 .board-column {
-    background: #f6f8fc;
-    border: 1px solid #d8dde8;
+    background: #e8edf4;
+    border: 1px solid #cdd5e2;
     border-radius: 8px;
     padding: 12px;
 }
@@ -272,6 +284,7 @@ input:focus, select:focus {
 .board-column h2 {
     margin-top: 0;
     font-size: 1.1rem;
+    text-align: center;
 }
 
 .slot-grid {
@@ -283,16 +296,27 @@ input:focus, select:focus {
     min-height: 74px;
     border: 2px dashed #b6bfd3;
     border-radius: 8px;
-    background: #ffffff;
+    background: #f1f3f7;
     padding: 8px;
+}
+
+.slot-box.role-slot {
+    border-color: var(--slot-role-color, #b6bfd3);
+    background: var(--slot-role-color, #f1f3f7);
+    background: color-mix(in srgb, var(--slot-role-color, #b6bfd3) 15%, #f1f3f7 72%);
 }
 
 .slot-label {
     font-size: 0.82rem;
-    color: #5a6582;
+    color: #202020;
     margin-bottom: 6px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    display: inline-block;
+    /* background: #2e56a5; */
+    padding: 2px 6px;
+    border-radius: 4px;
+    /* border: 1px solid #d5dbe6; */
 }
 
 .slot-empty {
@@ -317,6 +341,7 @@ input:focus, select:focus {
     border-radius: 6px;
     padding: 8px 10px;
     font-weight: 600;
+    text-align: center;
     cursor: default;
     user-select: none;
 }
@@ -338,6 +363,7 @@ input:focus, select:focus {
     padding: 6px 8px;
     font-weight: 600;
     font-size: 0.95rem;
+    text-align: center;
     background: #ffffff;
     color: #203050;
 }
