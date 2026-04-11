@@ -24,6 +24,7 @@ from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, Ba
 from core.game_logic.game_logic import GameLogic
 from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer, RuleBasedComputerPlayer
 from config import Config
+from room_jsonl_logger import RoomJsonlLogger
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('quadball')
@@ -109,6 +110,7 @@ class GameRoom:
         # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
         self.computer_player_class: ComputerPlayer = RuleBasedComputerPlayer
         self.computer_player: ComputerPlayer = None # initialized later
+        self.room_jsonl_logger = RoomJsonlLogger(self)
 
     @staticmethod
     def _slot_id(team_label: str, role: str, index: int) -> str:
@@ -1214,6 +1216,17 @@ async def game_loop_manager():
                     room.computer_player.make_move(clock_tick_game * Config.COMPUTER_PLAYER_TICK_RATE)
                     room.cpu_move_tick_count += 1
                     cpu_player_times.append(time.monotonic() - cpu_player_start)
+                    try:
+                        if room.room_jsonl_logger is not None:
+                            room.room_jsonl_logger.log_cpu_move_snapshot(room)
+                    except Exception:
+                        logger.exception('Failed to log cpu_move snapshot for room=%s', room.room_id)
+
+                try:
+                    if room.room_jsonl_logger is not None:
+                        room.room_jsonl_logger.log_game_state_snapshot(room)
+                except Exception:
+                    logger.exception('Failed to log game_state snapshot for room=%s', room.room_id)
 
                 # Broadcast state
                 await broadcast_to_room(room, {
