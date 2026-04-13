@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import struct
+from dataclasses import fields, is_dataclass
 from collections import deque
 from datetime import datetime
 from enum import Enum
@@ -25,6 +26,15 @@ def _quantize_float16(value: float) -> float:
         return float(struct.unpack('<e', struct.pack('<e', float(value)))[0])
     except Exception:
         return 0.0
+
+
+def _quantize_int16(value: int) -> int:
+    """Clamp to signed int16 range."""
+    if value > 32767:
+        return 32767
+    if value < -32768:
+        return -32768
+    return int(value)
 
 def _serialize_for_jsonl(obj, _seen: Optional[set[int]] = None):
     """Serialize recursively while compacting all numeric values to 16-bit precision."""
@@ -82,6 +92,9 @@ class RoomJsonlLogger:
         self.enabled = bool(getattr(Config, 'JSONL_LOGGING_ENABLED', True))
         self.state_file = None
         self.cpu_file = None
+        self._header_written = False
+        self._schema_by_signature: dict[tuple, int] = {}
+        self._schemas: list[dict] = []
 
         if not self.enabled:
             return
@@ -98,27 +111,100 @@ class RoomJsonlLogger:
             self.state_file = state_path.open('a', encoding='utf-8', buffering=1024 * 1024)
             self.cpu_file = cpu_path.open('a', encoding='utf-8', buffering=1024 * 1024)
 
-            metadata = {
-                'event': 'room_metadata',
-                'room_id': room.room_id,
-                'created_at': room.created_at,
-                'creator_id': room.creator_id,
-                'creator_name': room.creator_name,
-                'passkey': room.passkey,
-                'max_players': room.max_players,
-                'cpu_player_class': getattr(room.computer_player_class, '__name__', str(room.computer_player_class)),
-                'config': {
-                    'fps': Config.FPS,
-                    'game_time_to_real_time_ratio': Config.GAME_TIME_TO_REAL_TIME_RATIO,
-                    'pitch_length': Config.PITCH_LENGTH,
-                    'pitch_width': Config.PITCH_WIDTH,
-                },
-            }
-            self._write_line(self.state_file, metadata)
         except Exception:
             logger.exception('Failed to initialize JSONL room logger for room=%s', room.room_id)
             self.enabled = False
             self.close()
+
+    def _register_schema(self, kind: str, name: str, keys: list[str]) -> int:
+        signature = (kind, name, tuple(keys))
+        existing = self._schema_by_signature.get(signature)
+        if existing is not None:
+            return existing
+
+        schema_id = len(self._schemas)
+        self._schema_by_signature[signature] = schema_id
+        self._schemas.append({
+            'id': schema_id,
+            'kind': kind,
+            'name': name,
+            'keys': list(keys),
+        })
+        return schema_id
+
+    def _schema_name_for_object(self, obj) -> str:
+        cls = obj.__class__
+        return f"{cls.__module__}.{cls.__qualname__}"
+
+    def _serialize_scalar(self, value):
+        if value is None or isinstance(value, (str, bool)):
+            return value
+        if isinstance(value, int):
+            return _quantize_int16(value)
+        if isinstance(value, float):
+            return _quantize_float16(value)
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, Enum):
+            return self._serialize_scalar(value.value)
+        return str(value)
+
+    def _schema_and_values_for_dict(self, value: dict, path: str):
+        keys = list(value.keys())
+        schema_id = self._register_schema('dict', path, [str(key) for key in keys])
+        return schema_id, [self._serialize_value(value[key], f"{path}.{index}") for index, key in enumerate(keys)]
+
+    def _schema_and_values_for_object(self, value, path: str):
+        if is_dataclass(value):
+            field_names = [field.name for field in fields(value)]
+        else:
+            field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
+        schema_id = self._register_schema('object', self._schema_name_for_object(value), field_names)
+        return schema_id, [self._serialize_value(getattr(value, key, None), f"{path}.{key}") for key in field_names]
+
+    def _serialize_value(self, value, path: str):
+        if value is None or isinstance(value, (str, bool, int, float, datetime, Enum)):
+            return self._serialize_scalar(value)
+        if isinstance(value, dict):
+            schema_id, entries = self._schema_and_values_for_dict(value, path)
+            return [schema_id, entries]
+        if isinstance(value, (list, tuple, set, deque)):
+            return [self._serialize_value(item, f"{path}.{index}") for index, item in enumerate(value)]
+        if is_dataclass(value) or hasattr(value, '__dict__'):
+            schema_id, entries = self._schema_and_values_for_object(value, path)
+            return [schema_id, entries]
+        return self._serialize_scalar(value)
+
+    def _ensure_header_written(self, room) -> None:
+        if self._header_written or not self.enabled:
+            return
+
+        # Build the first snapshot once so every schema can be captured before any data lines are written.
+        _ = self._serialize_value(room.game_state, 'game_state')
+
+        metadata = {
+            'event': 'room_metadata',
+            'room_id': room.room_id,
+            'created_at': room.created_at,
+            'creator_id': room.creator_id,
+            'creator_name': room.creator_name,
+            'passkey': room.passkey,
+            'max_players': room.max_players,
+            'cpu_player_class': getattr(room.computer_player_class, '__name__', str(room.computer_player_class)),
+            'config': {
+                'fps': Config.FPS,
+                'game_time_to_real_time_ratio': Config.GAME_TIME_TO_REAL_TIME_RATIO,
+                'pitch_length': Config.PITCH_LENGTH,
+                'pitch_width': Config.PITCH_WIDTH,
+            },
+            'schemas': self._schemas,
+            'state_record_keys': ['tick', 'game_state'],
+            'cpu_move_record_keys': ['cpu_move_tick', 'game_time', 'cpu_moves'],
+            'cpu_move_keys': ['player_id', 'direction_x', 'direction_y'],
+        }
+        self._write_line(self.state_file, metadata)
+        self._write_line(self.cpu_file, metadata)
+        self._header_written = True
 
     def _write_line(self, file_obj, payload: dict) -> None:
         if not self.enabled or file_obj is None:
@@ -136,36 +222,33 @@ class RoomJsonlLogger:
     def log_game_state_snapshot(self, room) -> None:
         if not self.enabled:
             return
-        payload = {
-            'event': 'game_state_tick',
-            'room_id': room.room_id,
-            'tick': room.game_tick_count,
-            'game_time': room.game_state.game_time,
-            'game_state': room.game_state,
-        }
+        self._ensure_header_written(room)
+        payload = [
+            _serialize_for_jsonl(room.game_tick_count),
+            self._serialize_value(room.game_state, 'game_state'),
+        ]
         self._write_line(self.state_file, payload)
 
     def log_cpu_move_snapshot(self, room) -> None:
         if not self.enabled:
             return
+        self._ensure_header_written(room)
         cpu_moves = []
         for cpu_player_id in room.cpu_player_ids:
             player = room.game_state.get_player(cpu_player_id)
             if player is None:
                 continue
-            cpu_moves.append({
-                'player_id': cpu_player_id,
-                'direction_x': getattr(getattr(player, 'direction', None), 'x', 0.0),
-                'direction_y': getattr(getattr(player, 'direction', None), 'y', 0.0),
-            })
+            cpu_moves.append([
+                cpu_player_id,
+                _serialize_for_jsonl(getattr(getattr(player, 'direction', None), 'x', 0.0)),
+                _serialize_for_jsonl(getattr(getattr(player, 'direction', None), 'y', 0.0)),
+            ])
 
-        payload = {
-            'event': 'cpu_move',
-            'room_id': room.room_id,
-            'cpu_move_tick': room.cpu_move_tick_count,
-            'game_time': room.game_state.game_time,
-            'cpu_moves': cpu_moves,
-        }
+        payload = [
+            _serialize_for_jsonl(room.cpu_move_tick_count),
+            _serialize_for_jsonl(room.game_state.game_time),
+            cpu_moves,
+        ]
         self._write_line(self.cpu_file, payload)
 
     def close(self) -> None:
