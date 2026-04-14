@@ -800,7 +800,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
         # Send initial game state
         await websocket.send_json({
             "type": "initial_state",
-                "game_state": room.game_state.serialize(),
+                "game_state": room.game_state.serialize_to_broadcast(),
                 # send ordered id lists so clients can map binary updates to entities
                 "players_order": list(room.game_state.players.keys()),
                 "balls_order": list(room.game_state.balls.keys()),
@@ -863,7 +863,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         # Broadcast updated state
                         await broadcast_to_room(room, {
                             "type": "state_update",
-                            "game_state": room.game_state.serialize()
+                            # "game_state": room.game_state.serialize_to_broadcast()
                         })
 
             # Binary frames: treat as player input packed as two float16 values (little-endian)
@@ -896,30 +896,26 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         # If anything odd happens, fall back to normal behavior.
         pass
     # increment per-room broadcast counter and occasionally log summary for debugging
-    try:
-        room._broadcast_count += 1
-    except Exception:
-        # if room doesn't have the attribute for any reason, silently continue
-        pass
+    room._broadcast_count += 1
 
-    # log a summary every N broadcasts to avoid spamming the logs
-    LOG_EVERY = 40
-    try:
-        if message.get('type') == 'state_update' and (getattr(room, '_broadcast_count', 0) % LOG_EVERY == 0):
-            gs = message.get('game_state', {}) or {}
-            players = gs.get('players', {})
-            sample_info = ''
-            if players:
-                # take first player sample
-                try:
-                    first = next(iter(players.values()))
-                    pos = first.get('position') or first.get('pos') or {}
-                    sample_info = f" sample_player_pos=({pos.get('x')},{pos.get('y')})"
-                except Exception:
-                    sample_info = ''
-            # logger.info(f"broadcast state_update room={room.room_id} clients={len(room.client_connections)} count={getattr(room, '_broadcast_count', 0)}{sample_info}")
-    except Exception:
-        logger.exception('Error while logging broadcast summary')
+    # # log a summary every N broadcasts to avoid spamming the logs
+    # LOG_EVERY = 40
+    # try:
+    #     if message.get('type') == 'state_update' and (getattr(room, '_broadcast_count', 0) % LOG_EVERY == 0):
+    #         gs = message.get('game_state', {}) or {}
+    #         players = gs.get('players', {})
+    #         sample_info = ''
+    #         if players:
+    #             # take first player sample
+    #             try:
+    #                 first = next(iter(players.values()))
+    #                 pos = first.get('position') or first.get('pos') or {}
+    #                 sample_info = f" sample_player_pos=({pos.get('x')},{pos.get('y')})"
+    #             except Exception:
+    #                 sample_info = ''
+    #         # logger.info(f"broadcast state_update room={room.room_id} clients={len(room.client_connections)} count={getattr(room, '_broadcast_count', 0)}{sample_info}")
+    # except Exception:
+    #     logger.exception('Error while logging broadcast summary')
 
     disconnected = set()
     # For frequent `state_update` messages we send a compact binary payload
@@ -1047,13 +1043,13 @@ async def broadcast_to_room(room: GameRoom, message: dict):
                 await websocket.send_bytes(payload_bytes)
                 # update counters per successful send
                 try:
-                                room.bytes_sent_total += len(payload_bytes)
-                                room.messages_sent_total += 1
-                                # record recent send for rolling-window stats
-                                try:
-                                    room.recent_sends.append((time.time(), len(payload_bytes)))
-                                except Exception:
-                                    pass
+                    room.bytes_sent_total += len(payload_bytes)
+                    room.messages_sent_total += 1
+                    # record recent send for rolling-window stats
+                    try:
+                        room.recent_sends.append((time.time(), len(payload_bytes)))
+                    except Exception:
+                        pass
                 except Exception:
                     pass
             except Exception:
@@ -1076,12 +1072,12 @@ async def broadcast_to_room(room: GameRoom, message: dict):
                 await websocket.send_json(message)
                 # increment counters using compact text bytes length
                 try:
-                                room.bytes_sent_total += len(text_bytes)
-                                room.messages_sent_total += 1
-                                try:
-                                    room.recent_sends.append((time.time(), len(text_bytes)))
-                                except Exception:
-                                    pass
+                    room.bytes_sent_total += len(text_bytes)
+                    room.messages_sent_total += 1
+                    try:
+                        room.recent_sends.append((time.time(), len(text_bytes)))
+                    except Exception:
+                        pass
                 except Exception:
                     pass
             except Exception:
@@ -1231,7 +1227,7 @@ async def game_loop_manager():
                 # Broadcast state
                 await broadcast_to_room(room, {
                     "type": "state_update",
-                    "game_state": room.game_state.serialize()
+                    # "game_state": room.game_state.serialize_to_broadcast()
                 })
         if tick_counter % 100 == 0:
             avg_logic_update_time = sum(logic_update_times) * 1000 / (100) if logic_update_times else 0

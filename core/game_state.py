@@ -167,7 +167,19 @@ class GameState:
         memo[id(self)] = copied
         return copied
     
-    def serialize(self) -> dict:
+    def serialize_dynamic_attributes(self) -> dict:
+        """Serialize only the dynamic attributes of the game state for efficient logging."""
+        return {
+            "players": {pid: p.serialize() for pid, p in self.players.items()},
+            "balls": {bid: b.serialize() for bid, b in self.balls.items()},
+            "score": self.score,
+            "game_time": self.game_time,
+            "seeker_on_pitch": self.seeker_on_pitch,
+            "set_score": self.set_score,
+            "game_phase": self.game_phase
+        }
+    
+    def serialize_to_broadcast(self) -> dict:
         """Convert entire game state to JSON-serializable dict."""
         return {
             "players": {pid: p.serialize() for pid, p in self.players.items()},
@@ -176,8 +188,8 @@ class GameState:
             "score": self.score,
             "game_time": self.game_time,
             "seeker_on_pitch": self.seeker_on_pitch,
-            "set_score": self.set_score,
-            "game_phase": self.game_phase
+            # "set_score": self.set_score,
+            # "game_phase": self.game_phase
         }
     
     @staticmethod
