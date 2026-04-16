@@ -212,17 +212,6 @@ class Ball:
         copied = self.copy()
         memo[id(self)] = copied
         return copied
-    
-    @staticmethod
-    def deserialize(data: dict) -> 'Ball':
-        """Reconstruct ball from serialized dict."""
-        return Ball(
-            id=data["id"],
-            ball_type=BallType(data["ball_type"]),
-            position=Vector2.from_dict(data["position"]),
-            velocity=Vector2.from_dict(data["velocity"]),
-            holder_id=data.get("holder_id")
-        )
 
 
 class VolleyBall(Ball):
@@ -370,12 +359,3 @@ class Hoop:
         memo[id(self)] = copied
         return copied
 
-    @staticmethod
-    def deserialize(data: dict) -> 'Hoop':
-        return Hoop(
-            id=data.get("id"),
-            team=data.get("team"),
-            position=Vector2.from_dict(data.get("position", {"x": 0, "y": 0})),
-            radius=data.get("radius", 0.0),
-            thickness=data.get("thickness", 0.1)
-        )
