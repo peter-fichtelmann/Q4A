@@ -214,6 +214,6 @@ class PenaltyLogic:
             self.logger.info("Back to hoops, volleyball, and double dodgeball turnover")
             self.state.third_dodgeball = None
             self.state.third_dodgeball_team = None
-            self.state.potential_third_dodgeball_interference_kwargs = None
+            self.state.potential_third_dodgeball_interference_kwargs = {'player_id': None, 'dodgeball_id': None} # reset third dodgeball interference kwargs
             for dodgeball in self.state.dodgeballs:
                 dodgeball.beat_attempt_time = 0.0 # reset beat attempt time

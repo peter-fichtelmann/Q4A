@@ -28,8 +28,6 @@ class GameState:
     squared_distances_player_player: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
     squared_distances_ball_player: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
     min_squared_distance_player_player_calculation: float = 4 # only calculate and store distances for player pairs that are within this squared distance to save on calculations and memory, since distant players won't interact with each other
-    # squared_distances_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
-    # squared_distances: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)          # Dictionary mapping entity_id -> list of (other_entity_id, squared_distance) tuples, sorted by distance
     game_time: float = 0.0                                    # Seconds elapsed
     delay_of_game_time_limit: float = 10.0                     # Time limit before delay of game penalty
     delay_of_game_velocity_x_threshold: float = 0.5              # Velocity threshold in x direction the volleyball must exceed to avoid delay of game
@@ -39,12 +37,10 @@ class GameState:
     no_delay_of_game_opponent_beater_squared_distance_threshold: float = 16
     third_dodgeball: str = None # third dodgeball id if third dodgeball
     third_dodgeball_team: str = None # team which is assigned the third dodgeball
-    potential_third_dodgeball_interference_kwargs: Dict[str, str] = None # third dodgeball id and player id if potential interferenece if not beat attempt
-
+    potential_third_dodgeball_interference_kwargs: Dict[str, str] = field(default_factory=lambda: {'player_id': None, 'dodgeball_id': None}) # third dodgeball id and player id if potential interferenece if not beat attempt
     beat_attempt_time_limit: float = 10.0
     seeker_on_pitch: bool = False                         # Seeker enters after 20 min
     set_score: Optional[int] = None                           # Snitch capture score
-    game_phase: str = "waiting"  # waiting, active, ended
     seeker_floor_seconds: int = 1200  # Time before seeker can enter
     
     def add_player(self, player: Player) -> None:
@@ -155,7 +151,6 @@ class GameState:
             beat_attempt_time_limit=self.beat_attempt_time_limit,
             seeker_on_pitch=self.seeker_on_pitch,
             set_score=self.set_score,
-            game_phase=self.game_phase,
             seeker_floor_seconds=self.seeker_floor_seconds,
         )
 
@@ -168,15 +163,33 @@ class GameState:
         return copied
     
     def serialize_dynamic_attributes(self) -> dict:
-        """Serialize only the dynamic attributes of the game state for efficient logging."""
+        """
+        Serialize only the dynamic attributes (modified by game_logic) of the game state.
+        In addition the squared distance dictionaries are not included. Their main purpose is to speed up calculations in game_logic,
+        but they do not contain any additional information.
+
+        This allows more efficient logging.
+        """
         return {
-            "players": {pid: p.serialize() for pid, p in self.players.items()},
-            "balls": {bid: b.serialize() for bid, b in self.balls.items()},
+            # "boundaries_x": self.boundaries_x,
+            # "boundaries_y": self.boundaries_y,
+            # "keeper_zone_x_0": self.keeper_zone_x_0,
+            # "keeper_zone_x_1": self.keeper_zone_x_1,
+            # "midline_x": self.midline_x,
+            # "team_0": self.team_0,
+            # "team_1": self.team_1,
+            "players": self.players,
+            "balls": self.balls,
+            "volleyball": self.volleyball,
+            "dodgeballs": self.dodgeballs,
             "score": self.score,
             "game_time": self.game_time,
+            "delay_of_game_warnings": self.delay_of_game_warnings,
+            "third_dodgeball": self.third_dodgeball,
+            "third_dodgeball_team": self.third_dodgeball_team,
+            "potential_third_dodgeball_interference_kwargs": self.potential_third_dodgeball_interference_kwargs,
             "seeker_on_pitch": self.seeker_on_pitch,
             "set_score": self.set_score,
-            "game_phase": self.game_phase
         }
     
     def serialize_to_broadcast(self) -> dict:
@@ -187,21 +200,7 @@ class GameState:
             "hoops": {hid: h.serialize() for hid, h in self.hoops.items()},
             "score": self.score,
             "game_time": self.game_time,
-            "seeker_on_pitch": self.seeker_on_pitch,
+            # "seeker_on_pitch": self.seeker_on_pitch,
             # "set_score": self.set_score,
             # "game_phase": self.game_phase
         }
-    
-    @staticmethod
-    def deserialize(data: dict) -> 'GameState':
-        """Reconstruct game state from serialized dict."""
-        state = GameState()
-        state.players = {pid: Player.deserialize(p) for pid, p in data.get("players", {}).items()}
-        state.balls = {bid: Ball.deserialize(b) for bid, b in data.get("balls", {}).items()}
-        state.hoops = {hid: Hoop.deserialize(h) for hid, h in data.get("hoops", {}).items()}
-        state.score = data.get("score", [0, 0])
-        state.game_time = data.get("game_time", 0.0)
-        state.seeker_on_pitch = data.get("seeker_on_pitch", False)
-        state.set_score = data.get("set_score")
-        state.game_phase = data.get("game_phase", "waiting")
-        return state

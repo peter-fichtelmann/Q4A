@@ -167,7 +167,7 @@ class DodgeballLogic:
             self.logger.info("Player %s was knocked out by dodgeball %s", player.id, dodgeball.id)
             for dodgeball in dodgeballs:
                 dodgeball.beat_attempt_time = 0.0 # reset beat attempt time
-            self.state.potential_third_dodgeball_interference_kwargs = None # reset third dodgeball interference kwargs
+            self.state.potential_third_dodgeball_interference_kwargs = {'player_id': None, 'dodgeball_id': None} # reset third dodgeball interference kwargs
             self.state.third_dodgeball = None
             self.state.third_dodgeball_team = None
             return True
@@ -261,7 +261,7 @@ class DodgeballLogic:
                 if dodgeball.beat_attempt_time > 0:
                     dodgeball.beat_attempt_time += dt
                     if dodgeball.beat_attempt_time > self.state.beat_attempt_time_limit:
-                        if self.state.potential_third_dodgeball_interference_kwargs is not None:
+                        if self.state.potential_third_dodgeball_interference_kwargs['player_id'] is not None:
                             # third dodgeball interference
                             player = self.state.players[self.state.potential_third_dodgeball_interference_kwargs['player_id']]
                             # reset beat attempt times
@@ -291,7 +291,7 @@ class DodgeballLogic:
                     # reset beat attempt times and potential interference
                     for dodgeball in dodgeballs:
                         dodgeball.beat_attempt_time = 0.0
-                    self.state.potential_third_dodgeball_interference_kwargs = None
+                    self.state.potential_third_dodgeball_interference_kwargs = {'player_id': None, 'dodgeball_id': None}
                     self.logger.info("No longer third dodgeball situation")
 
 

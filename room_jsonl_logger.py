@@ -8,7 +8,7 @@ from collections import deque
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 try:
     import orjson as _orjson  # optional fast, compact serializer
@@ -93,11 +93,7 @@ class RoomJsonlLogger:
         self.state_file = None
         self.cpu_file = None
         self._header_written = False
-        self._schema_by_signature: dict[tuple, int] = {}
-        self._schemas: list[dict] = []
-
-        if not self.enabled:
-            return
+        self._initial_state_snapshot_written = False
 
         try:
             created_stamp = room.created_at.strftime('%Y%m%dT%H%M%S')
@@ -116,25 +112,114 @@ class RoomJsonlLogger:
             self.enabled = False
             self.close()
 
-    def _register_schema(self, kind: str, name: str, keys: list[str]) -> int:
-        signature = (kind, name, tuple(keys))
-        existing = self._schema_by_signature.get(signature)
-        if existing is not None:
-            return existing
+        if not self.enabled:
+            return
 
-        schema_id = len(self._schemas)
-        self._schema_by_signature[signature] = schema_id
-        self._schemas.append({
-            'id': schema_id,
-            'kind': kind,
-            'name': name,
-            'keys': list(keys),
-        })
-        return schema_id
+    def _extract_structure(self, value, dynamic_only: bool = False, _type_registry: Optional[dict] = None) -> dict:
+        """Extract the nested structure and build a type registry for all encountered classes."""
+        if _type_registry is None:
+            _type_registry = {}
+        
+        if value is None or isinstance(value, (str, bool, int, float, datetime, Enum)):
+            return None
 
-    def _schema_name_for_object(self, obj) -> str:
-        cls = obj.__class__
-        return f"{cls.__module__}.{cls.__qualname__}"
+        # Use dynamic serialization to get the actual structure being logged.
+        if dynamic_only and hasattr(value, 'serialize_dynamic_attributes'):
+            value = value.serialize_dynamic_attributes()
+
+        if isinstance(value, dict):
+            keys = list(value.keys())
+            return {'type': 'dict', 'keys': keys, 'element_structures': [self._extract_structure(value[k], dynamic_only, _type_registry) for k in keys]}
+        if isinstance(value, (list, tuple, set, deque)):
+            # For sequences, just capture the structure of the first element.
+            if value:
+                return {'type': 'sequence', 'element_structure': self._extract_structure(list(value)[0], dynamic_only, _type_registry)}
+            return {'type': 'sequence'}
+        if is_dataclass(value) or hasattr(value, '__dict__'):
+            if is_dataclass(value):
+                field_names = [field.name for field in fields(value)]
+            else:
+                field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
+            class_name = f"{value.__class__.__module__}.{value.__class__.__qualname__}"
+            
+            # Register this type and its fields once.
+            if class_name not in _type_registry:
+                _type_registry[class_name] = {
+                    'fields': field_names,
+                    'field_structures': {k: self._extract_structure(getattr(value, k, None), dynamic_only, _type_registry) for k in field_names}
+                }
+            else:
+                # Ensure nested structures are also registered for already-seen types.
+                for k in field_names:
+                    self._extract_structure(getattr(value, k, None), dynamic_only, _type_registry)
+            
+            return {'type': 'object', 'class': class_name}
+        return None
+    
+    def _build_structure_with_registry(self, value, dynamic_only: bool = False) -> Tuple[dict, dict]:
+        """Build structure map and type registry, returning (structure, type_registry)."""
+        type_registry = {}
+        structure = self._extract_structure(value, dynamic_only, type_registry)
+        return structure, type_registry
+
+    def _collect_ordered_key_schema(self, value, path: str, dynamic_only: bool = False, _schema: Optional[list[dict]] = None, _seen: Optional[set[int]] = None) -> list[dict]:
+        """Collect ordered keys/fields using the same traversal and ordering as _serialize_value."""
+        if _schema is None:
+            _schema = []
+        if _seen is None:
+            _seen = set()
+
+        if value is None or isinstance(value, (str, bool, int, float, datetime, Enum)):
+            return _schema
+
+        if dynamic_only and hasattr(value, 'serialize_dynamic_attributes'):
+            value = value.serialize_dynamic_attributes()
+
+        obj_id = id(value)
+        if obj_id in _seen:
+            return _schema
+
+        if isinstance(value, dict):
+            keys = list(value.keys())
+            _schema.append({'path': path, 'kind': 'dict', 'keys': [str(key) for key in keys]})
+            _seen.add(obj_id)
+            try:
+                for index, key in enumerate(keys):
+                    self._collect_ordered_key_schema(value[key], f"{path}.{index}", dynamic_only=dynamic_only, _schema=_schema, _seen=_seen)
+            finally:
+                _seen.discard(obj_id)
+            return _schema
+
+        if isinstance(value, (list, tuple, set, deque)):
+            _schema.append({'path': path, 'kind': 'sequence'})
+            _seen.add(obj_id)
+            try:
+                for index, item in enumerate(value):
+                    self._collect_ordered_key_schema(item, f"{path}.{index}", dynamic_only=dynamic_only, _schema=_schema, _seen=_seen)
+            finally:
+                _seen.discard(obj_id)
+            return _schema
+
+        if is_dataclass(value) or hasattr(value, '__dict__'):
+            if is_dataclass(value):
+                field_names = [field.name for field in fields(value)]
+            else:
+                field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
+
+            _schema.append({
+                'path': path,
+                'kind': 'object',
+                'name': f"{value.__class__.__module__}.{value.__class__.__qualname__}",
+                'keys': field_names,
+            })
+            _seen.add(obj_id)
+            try:
+                for key in field_names:
+                    self._collect_ordered_key_schema(getattr(value, key, None), f"{path}.{key}", dynamic_only=dynamic_only, _schema=_schema, _seen=_seen)
+            finally:
+                _seen.discard(obj_id)
+
+        return _schema
 
     def _serialize_scalar(self, value):
         if value is None or isinstance(value, (str, bool)):
@@ -149,38 +234,38 @@ class RoomJsonlLogger:
             return self._serialize_scalar(value.value)
         return str(value)
 
-    def _schema_and_values_for_dict(self, value: dict, path: str):
-        keys = list(value.keys())
-        schema_id = self._register_schema('dict', path, [str(key) for key in keys])
-        return schema_id, [self._serialize_value(value[key], f"{path}.{index}") for index, key in enumerate(keys)]
-
-    def _schema_and_values_for_object(self, value, path: str):
-        if is_dataclass(value):
-            field_names = [field.name for field in fields(value)]
-        else:
-            field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
-        schema_id = self._register_schema('object', self._schema_name_for_object(value), field_names)
-        return schema_id, [self._serialize_value(getattr(value, key, None), f"{path}.{key}") for key in field_names]
-
-    def _serialize_value(self, value, path: str):
+    def _serialize_value(self, value, path: str, dynamic_only: bool = False):
         if value is None or isinstance(value, (str, bool, int, float, datetime, Enum)):
             return self._serialize_scalar(value)
+
+        # For incremental game logs, prefer explicit dynamic serialization when available.
+        if dynamic_only and hasattr(value, 'serialize_dynamic_attributes'):
+            value = value.serialize_dynamic_attributes()
+
         if isinstance(value, dict):
-            schema_id, entries = self._schema_and_values_for_dict(value, path)
-            return [schema_id, entries]
+            keys = list(value.keys())
+            return [self._serialize_value(value[key], f"{path}.{index}", dynamic_only=dynamic_only) for index, key in enumerate(keys)]
         if isinstance(value, (list, tuple, set, deque)):
-            return [self._serialize_value(item, f"{path}.{index}") for index, item in enumerate(value)]
+            return [self._serialize_value(item, f"{path}.{index}", dynamic_only=dynamic_only) for index, item in enumerate(value)]
         if is_dataclass(value) or hasattr(value, '__dict__'):
-            schema_id, entries = self._schema_and_values_for_object(value, path)
-            return [schema_id, entries]
+            if is_dataclass(value):
+                field_names = [field.name for field in fields(value)]
+            else:
+                field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
+            return [self._serialize_value(getattr(value, key, None), f"{path}.{key}", dynamic_only=dynamic_only) for key in field_names]
         return self._serialize_scalar(value)
 
     def _ensure_header_written(self, room) -> None:
         if self._header_written or not self.enabled:
             return
 
-        # Build the first snapshot once so every schema can be captured before any data lines are written.
-        _ = self._serialize_value(room.game_state, 'game_state')
+        # Build snapshots and extract structures with type registry before writing metadata.
+        _ = self._serialize_value(room.game_state, 'game_state', dynamic_only=False)
+        _ = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
+        full_structure, full_type_registry = self._build_structure_with_registry(room.game_state, dynamic_only=False)
+        dynamic_structure, dynamic_type_registry = self._build_structure_with_registry(room.game_state, dynamic_only=True)
+        full_ordered_key_schema = self._collect_ordered_key_schema(room.game_state, 'game_state', dynamic_only=False)
+        dynamic_ordered_key_schema = self._collect_ordered_key_schema(room.game_state, 'game_state', dynamic_only=True)
 
         metadata = {
             'event': 'room_metadata',
@@ -197,8 +282,13 @@ class RoomJsonlLogger:
                 'pitch_length': Config.PITCH_LENGTH,
                 'pitch_width': Config.PITCH_WIDTH,
             },
-            'schemas': self._schemas,
             'state_record_keys': ['tick', 'game_state'],
+            'game_state_structure': full_structure,
+            'game_state_types': full_type_registry,
+            'game_state_ordered_key_schema': full_ordered_key_schema,
+            'game_state_dynamic_structure': dynamic_structure,
+            'game_state_dynamic_types': dynamic_type_registry,
+            'game_state_dynamic_ordered_key_schema': dynamic_ordered_key_schema,
             'cpu_move_record_keys': ['cpu_move_tick', 'game_time', 'cpu_moves'],
             'cpu_move_keys': ['player_id', 'direction_x', 'direction_y'],
         }
@@ -223,9 +313,15 @@ class RoomJsonlLogger:
         if not self.enabled:
             return
         self._ensure_header_written(room)
+        if not self._initial_state_snapshot_written:
+            game_state_payload = self._serialize_value(room.game_state, 'game_state', dynamic_only=False)
+            self._initial_state_snapshot_written = True
+        else:
+            game_state_payload = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
+
         payload = [
             _serialize_for_jsonl(room.game_tick_count),
-            self._serialize_value(room.game_state, 'game_state'),
+            game_state_payload,
         ]
         self._write_line(self.state_file, payload)
 

@@ -100,6 +100,22 @@ class Player:
             "is_knocked_out": self.is_knocked_out,
             "has_ball": self.has_ball,
         }
+    
+    def serialize_dynamic_attributes(self) -> dict:
+        return {
+            "position": self.position.to_dict(),
+            "previous_position": self.previous_position.to_dict(),
+            "direction": self.direction.to_dict(),
+            "velocity": self.velocity.to_dict(),
+            "is_knocked_out": self.is_knocked_out,
+            "has_ball": self.has_ball,
+            "catch_cooldown": self.catch_cooldown,
+            "dodgeball_immunity": self.dodgeball_immunity,
+            "inbounding": self.inbounding,
+            "in_contact_player_ids": self.in_contact_player_ids,
+            "tackling_player_ids": self.tackling_player_ids,
+            "is_receiving_turnover_ball": self.is_receiving_turnover_ball,
+        }
 
     def copy(self) -> 'Player':
         return Player(
@@ -135,18 +151,6 @@ class Player:
         memo[id(self)] = copied
         return copied
     
-    @staticmethod
-    def deserialize(data: dict) -> 'Player':
-        """Reconstruct player from serialized dict."""
-        return Player(
-            id=data["id"],
-            team=data["team"],
-            role=PlayerRole(data["role"]),
-            position=Vector2.from_dict(data["position"]),
-            velocity=Vector2.from_dict(data["velocity"]),
-            is_knocked_out=data["is_knocked_out"],
-            has_ball=data["has_ball"],
-        )
 
 @dataclass
 class Ball:
@@ -172,6 +176,17 @@ class Ball:
             "position": self.position.to_dict(),
             "velocity": self.velocity.to_dict(),
             "holder_id": self.holder_id
+        }
+    
+    def serialize_dynamic_attributes(self) -> dict:
+        return {
+            "position": self.position.to_dict(),
+            "previous_position": self.previous_position.to_dict(),
+            "velocity": self.velocity.to_dict(),
+            "possession_team": self.possession_team,
+            "holder_id": self.holder_id,
+            "previous_thrower_id": self.previous_thrower_id,
+            "turnover_to_player": self.turnover_to_player,
         }
 
     def copy(self) -> 'Ball':
@@ -252,6 +267,21 @@ class VolleyBall(Ball):
             reflect_velocity_loss=self.reflect_velocity_loss,
             turnover_to_player=self.turnover_to_player,
         )
+    
+    def serialize_dynamic_attributes(self):
+        return {
+            "position": self.position.to_dict(),
+            "previous_position": self.previous_position.to_dict(),
+            "velocity": self.velocity.to_dict(),
+            "possession_team": self.possession_team,
+            "holder_id": self.holder_id,
+            "previous_thrower_id": self.previous_thrower_id,
+            "turnover_to_player": self.turnover_to_player,
+            "crossed_hoop": self.crossed_hoop,
+            "inbounder": self.inbounder,
+            "is_dead": self.is_dead,
+            "delay_of_game_timer": self.delay_of_game_timer,
+        }
 
 
 class DodgeBall(Ball):
@@ -290,6 +320,19 @@ class DodgeBall(Ball):
             reflect_velocity_loss=self.reflect_velocity_loss,
             turnover_to_player=self.turnover_to_player,
         )
+    
+    def serialize_dynamic_attributes(self):
+        return {
+            "position": self.position.to_dict(),
+            "previous_position": self.previous_position.to_dict(),
+            "velocity": self.velocity.to_dict(),
+            "possession_team": self.possession_team,
+            "holder_id": self.holder_id,
+            "previous_thrower_id": self.previous_thrower_id,
+            "turnover_to_player": self.turnover_to_player,
+            "beat_attempt_time": self.beat_attempt_time,
+        }
+
 
 @dataclass
 class Hoop:
