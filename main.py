@@ -859,12 +859,12 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 elif message_type == "throw":
                     success_throw = room.game_logic.process_action_logic.process_throw_action(player_id)
                     success_tackle = room.game_logic.process_action_logic.process_tackle_action(player_id)
-                    if success_throw or success_tackle:
-                        # Broadcast updated state
-                        await broadcast_to_room(room, {
-                            "type": "state_update",
-                            # "game_state": room.game_state.serialize_to_broadcast()
-                        })
+                    # if success_throw or success_tackle:
+                    #     # Broadcast updated state
+                    #     await broadcast_to_room(room, {
+                    #         "type": "state_update",
+                    #         # "game_state": room.game_state.serialize_to_broadcast()
+                    #     })
 
             # Binary frames: treat as player input packed as two float16 values (little-endian)
             elif raw.get('type') == 'websocket.receive' and 'bytes' in raw and raw['bytes'] is not None:
