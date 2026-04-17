@@ -19,6 +19,13 @@ from config import Config
 
 logger = logging.getLogger('quadball')
 
+_STATE_RECORD_KIND_FULL = 0
+_STATE_RECORD_KIND_KEYFRAME = 1
+_STATE_RECORD_KIND_DELTA = 2
+_DYNAMIC_KEYFRAME_INTERVAL_TICKS = 200
+_SPARSE_LIST_KEY = '_'
+_OMIT = object()
+
 
 def _quantize_float16(value: float) -> float:
     """Round to IEEE-754 binary16 and return as Python float."""
@@ -94,6 +101,8 @@ class RoomJsonlLogger:
         self.cpu_file = None
         self._header_written = False
         self._initial_state_snapshot_written = False
+        self._previous_dynamic_snapshot = None
+        self._last_dynamic_keyframe_tick = None
 
         try:
             created_stamp = room.created_at.strftime('%Y%m%dT%H%M%S')
@@ -114,6 +123,75 @@ class RoomJsonlLogger:
 
         if not self.enabled:
             return
+
+    @staticmethod
+    def _is_default_scalar(value) -> bool:
+        if value is None or value is False:
+            return True
+        if isinstance(value, (int, float)):
+            return value == 0
+        return False
+
+    @staticmethod
+    def _is_leaf_list(value) -> bool:
+        if not isinstance(value, list):
+            return False
+        for item in value:
+            if isinstance(item, list):
+                return False
+        return True
+
+    def _is_default_leaf_list(self, value: list) -> bool:
+        if len(value) == 0:
+            return True
+        return all(self._is_default_scalar(item) for item in value)
+
+    def _sparsify_snapshot(self, value, omit_defaults: bool):
+        if isinstance(value, list):
+            if self._is_leaf_list(value):
+                if omit_defaults and self._is_default_leaf_list(value):
+                    return _OMIT
+                return value
+
+            entries = []
+            for index, item in enumerate(value):
+                sparse_item = self._sparsify_snapshot(item, omit_defaults=omit_defaults)
+                if sparse_item is _OMIT:
+                    continue
+                entries.append([index, sparse_item])
+
+            if not entries:
+                return _OMIT if omit_defaults else {_SPARSE_LIST_KEY: []}
+            return {_SPARSE_LIST_KEY: entries}
+
+        if omit_defaults and self._is_default_scalar(value):
+            return _OMIT
+        return value
+
+    def _build_sparse_delta(self, previous, current):
+        if isinstance(current, list):
+            if self._is_leaf_list(current):
+                if previous == current:
+                    return _OMIT
+                return current
+
+            if not isinstance(previous, list) or len(previous) != len(current):
+                return self._sparsify_snapshot(current, omit_defaults=False)
+
+            entries = []
+            for index, current_item in enumerate(current):
+                delta_item = self._build_sparse_delta(previous[index], current_item)
+                if delta_item is _OMIT:
+                    continue
+                entries.append([index, delta_item])
+
+            if not entries:
+                return _OMIT
+            return {_SPARSE_LIST_KEY: entries}
+
+        if previous == current:
+            return _OMIT
+        return current
 
     def _extract_structure(self, value, dynamic_only: bool = False, _type_registry: Optional[dict] = None) -> dict:
         """Extract the nested structure and build a type registry for all encountered classes."""
@@ -282,7 +360,14 @@ class RoomJsonlLogger:
                 'pitch_length': Config.PITCH_LENGTH,
                 'pitch_width': Config.PITCH_WIDTH,
             },
-            'state_record_keys': ['tick', 'game_state'],
+            'state_record_keys': ['tick', 'kind', 'game_state'],
+            'state_record_kind_map': {
+                'full': _STATE_RECORD_KIND_FULL,
+                'dynamic_keyframe': _STATE_RECORD_KIND_KEYFRAME,
+                'dynamic_delta': _STATE_RECORD_KIND_DELTA,
+            },
+            'dynamic_keyframe_interval_ticks': _DYNAMIC_KEYFRAME_INTERVAL_TICKS,
+            'dynamic_sparse_list_key': _SPARSE_LIST_KEY,
             'game_state_structure': full_structure,
             'game_state_types': full_type_registry,
             'game_state_ordered_key_schema': full_ordered_key_schema,
@@ -316,13 +401,45 @@ class RoomJsonlLogger:
         if not self._initial_state_snapshot_written:
             game_state_payload = self._serialize_value(room.game_state, 'game_state', dynamic_only=False)
             self._initial_state_snapshot_written = True
+            dynamic_snapshot = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
+            self._previous_dynamic_snapshot = dynamic_snapshot
+            self._last_dynamic_keyframe_tick = _serialize_for_jsonl(room.game_tick_count)
+            payload = [
+                _serialize_for_jsonl(room.game_tick_count),
+                _STATE_RECORD_KIND_FULL,
+                game_state_payload,
+            ]
         else:
-            game_state_payload = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
+            tick = _serialize_for_jsonl(room.game_tick_count)
+            dynamic_snapshot = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
 
-        payload = [
-            _serialize_for_jsonl(room.game_tick_count),
-            game_state_payload,
-        ]
+            should_emit_keyframe = (
+                self._last_dynamic_keyframe_tick is None
+                or tick - self._last_dynamic_keyframe_tick >= _DYNAMIC_KEYFRAME_INTERVAL_TICKS
+            )
+
+            if should_emit_keyframe:
+                sparse_payload = self._sparsify_snapshot(dynamic_snapshot, omit_defaults=True)
+                if sparse_payload is _OMIT:
+                    sparse_payload = {_SPARSE_LIST_KEY: []}
+                payload = [
+                    tick,
+                    _STATE_RECORD_KIND_KEYFRAME,
+                    sparse_payload,
+                ]
+                self._last_dynamic_keyframe_tick = tick
+            else:
+                delta_payload = self._build_sparse_delta(self._previous_dynamic_snapshot, dynamic_snapshot)
+                if delta_payload is _OMIT:
+                    delta_payload = {_SPARSE_LIST_KEY: []}
+                payload = [
+                    tick,
+                    _STATE_RECORD_KIND_DELTA,
+                    delta_payload,
+                ]
+
+            self._previous_dynamic_snapshot = dynamic_snapshot
+
         self._write_line(self.state_file, payload)
 
     def log_cpu_move_snapshot(self, room) -> None:
