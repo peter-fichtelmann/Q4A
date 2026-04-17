@@ -922,10 +922,7 @@ class RoomJsonlStateReader:
                 state.dodgeballs = []
                 if isinstance(value, list):
                     for dodgeball_payload in value:
-                        try:
-                            dodgeball = _decode_ball_full_payload(dodgeball_payload)
-                        except Exception:
-                            continue
+                        dodgeball = _decode_ball_full_payload(dodgeball_payload)
                         if isinstance(dodgeball, DodgeBall):
                             state.dodgeballs.append(dodgeball)
                 continue
@@ -934,10 +931,7 @@ class RoomJsonlStateReader:
                 state.hoops = {}
                 if isinstance(value, list):
                     for hoop_payload in value:
-                        try:
-                            hoop = _decode_hoop_full_payload(hoop_payload)
-                        except Exception:
-                            continue
+                        hoop = _decode_hoop_full_payload(hoop_payload)
                         state.hoops[hoop.id] = hoop
                 continue
 
@@ -1026,19 +1020,22 @@ class RoomJsonlStateReader:
                 if index >= len(warnings_payload):
                     break
                 state.delay_of_game_warnings[warning_key] = warnings_payload[index]
-        if third_dodgeball_payload is not None:
-            state.third_dodgeball = third_dodgeball_payload
-        if third_dodgeball_team_payload is not None:
-            state.third_dodgeball_team = third_dodgeball_team_payload
+        # Nullable fields must accept explicit None from snapshots so resets are preserved.
+        state.third_dodgeball = third_dodgeball_payload
+        state.third_dodgeball_team = third_dodgeball_team_payload
         if isinstance(interference_payload, list):
             state.potential_third_dodgeball_interference_kwargs = {
                 'player_id': interference_payload[0] if len(interference_payload) > 0 else None,
                 'dodgeball_id': interference_payload[1] if len(interference_payload) > 1 else None,
             }
+        elif interference_payload is None:
+            state.potential_third_dodgeball_interference_kwargs = {
+                'player_id': None,
+                'dodgeball_id': None,
+            }
         if seeker_on_pitch_payload is not None:
             state.seeker_on_pitch = bool(seeker_on_pitch_payload)
-        if set_score_payload is not None:
-            state.set_score = set_score_payload
+        state.set_score = set_score_payload
 
     def _find_replay_start_tick(self, tick: int) -> Optional[int]:
         """Find the best replay start record at or before target tick.
