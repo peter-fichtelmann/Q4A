@@ -47,6 +47,15 @@ class UtilityLogic:
         balls = list(self.state.balls.values())
         n_balls = len(balls)
 
+        # reset squared_distances_dicts to prevent stale data
+        for player in players:
+            self.state.squared_distances_player_player_dicts[player.id] = {}
+        for ball in balls:
+            self.state.squared_distances_ball_ball_dicts[ball.id] = {}
+            self.state.squared_distances_ball_player_dicts[ball.id] = {}
+        self.state.squared_distances_player_player = {}
+        self.state.squared_distances_ball_player = {}
+
         for i in range(n_players - 1):
             player_1 = players[i]
             if player_1.is_knocked_out:
