@@ -562,7 +562,8 @@ async def websocket_lobby(websocket: WebSocket):
                         if role is not None:
                             player["role"] = role
 
-                        # Also update or create the player entity in the game state so rendering works
+                        # Keep game-state entity in sync only when a valid team/role is provided.
+                        # This avoids creating default team-0/chaser entities from name-only updates.
                         try:
                             p_ent = room.game_state.get_player(player_id)
                             if p_ent:
@@ -572,23 +573,31 @@ async def websocket_lobby(websocket: WebSocket):
                                     p_ent.role = PlayerRole(role)
                                 room.game_state.update_player(p_ent)
                             else:
-                                new_ent = Player(
-                                    id=player_id,
-                                    team=int(team) if team is not None else 0,
-                                    role=PlayerRole(role) if role is not None else PlayerRole("chaser"),
-                                    radius=Config.PLAYER_RADIUS,
-                                    position=Vector2(
-                                        200 if (team is None or int(team) == 0) else 1100,
-                                        360 + (len(room.game_state.get_players_by_team(int(team) if team is not None else 0)) * 60)
-                                    ),
-                                    max_speed=Config.PLAYER_MAX_SPEED,
-                                    min_speed=Config.PLAYER_MIN_SPEED,
-                                    acceleration=Config.PLAYER_ACCELERATION,
-                                    deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
-                                    min_dir=Config.PLAYER_MIN_DIR,
-                                    throw_velocity=Config.PLAYER_THROW_VELOCITY
-                                )
-                                room.game_state.add_player(new_ent)
+                                parsed_team: Optional[int] = None
+                                try:
+                                    if team is not None:
+                                        parsed_team = int(team)
+                                except Exception:
+                                    parsed_team = None
+
+                                if parsed_team in (0, 1) and role in ("chaser", "keeper", "beater"):
+                                    new_ent = Player(
+                                        id=player_id,
+                                        team=parsed_team,
+                                        role=PlayerRole(role),
+                                        radius=Config.PLAYER_RADIUS,
+                                        position=Vector2(
+                                            200 if parsed_team == 0 else 1100,
+                                            360 + (len(room.game_state.get_players_by_team(parsed_team)) * 60)
+                                        ),
+                                        max_speed=Config.PLAYER_MAX_SPEED,
+                                        min_speed=Config.PLAYER_MIN_SPEED,
+                                        acceleration=Config.PLAYER_ACCELERATION,
+                                        deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
+                                        min_dir=Config.PLAYER_MIN_DIR,
+                                        throw_velocity=Config.PLAYER_THROW_VELOCITY
+                                    )
+                                    room.game_state.add_player(new_ent)
                         except Exception:
                             pass
 
@@ -635,6 +644,10 @@ async def websocket_lobby(websocket: WebSocket):
                     human_players_by_team: Dict[int, List[str]] = {0: [], 1: []}
                     for pid, pdata in room.players.items():
                         team = pdata.get("team")
+                        try:
+                            team = int(team)
+                        except Exception:
+                            team = None
                         role = pdata.get("role")
                         if team in (0, 1) and role in ("chaser", "keeper", "beater"):
                             human_players_by_team[int(team)].append(pid)
@@ -645,26 +658,30 @@ async def websocket_lobby(websocket: WebSocket):
                             if pdata is None:
                                 continue
                             role = pdata.get("role", "chaser")
-                            if room.game_state.get_player(pid):
-                                continue
                             try:
-                                player_entity = Player(
-                                    id=pid,
-                                    team=team,
-                                    role=PlayerRole(role),
-                                    radius=Config.PLAYER_RADIUS,
-                                    position=Vector2(
-                                        5 if team == 0 else (Config.PITCH_LENGTH - 5),
-                                        Config.PITCH_WIDTH / 2 + (idx * 1.5),
-                                    ),
-                                    max_speed=Config.PLAYER_MAX_SPEED,
-                                    min_speed=Config.PLAYER_MIN_SPEED,
-                                    acceleration=Config.PLAYER_ACCELERATION,
-                                    deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
-                                    min_dir=Config.PLAYER_MIN_DIR,
-                                    throw_velocity=Config.PLAYER_THROW_VELOCITY,
-                                )
-                                room.game_state.add_player(player_entity)
+                                existing_player = room.game_state.get_player(pid)
+                                if existing_player is not None:
+                                    existing_player.team = team
+                                    existing_player.role = PlayerRole(role)
+                                    room.game_state.update_player(existing_player)
+                                else:
+                                    player_entity = Player(
+                                        id=pid,
+                                        team=team,
+                                        role=PlayerRole(role),
+                                        radius=Config.PLAYER_RADIUS,
+                                        position=Vector2(
+                                            5 if team == 0 else (Config.PITCH_LENGTH - 5),
+                                            Config.PITCH_WIDTH / 2 + (idx * 1.5),
+                                        ),
+                                        max_speed=Config.PLAYER_MAX_SPEED,
+                                        min_speed=Config.PLAYER_MIN_SPEED,
+                                        acceleration=Config.PLAYER_ACCELERATION,
+                                        deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
+                                        min_dir=Config.PLAYER_MIN_DIR,
+                                        throw_velocity=Config.PLAYER_THROW_VELOCITY,
+                                    )
+                                    room.game_state.add_player(player_entity)
                             except Exception:
                                 pass
 
@@ -683,6 +700,10 @@ async def websocket_lobby(websocket: WebSocket):
                     }
                     for player_id, player_data in room.players.items():
                         team = player_data.get("team")
+                        try:
+                            team = int(team)
+                        except Exception:
+                            team = None
                         role = player_data.get("role")
                         if team in (0, 1) and role in n_players_per_role_per_team[int(team)]:
                             n_players_per_role_per_team[int(team)][role] += 1
