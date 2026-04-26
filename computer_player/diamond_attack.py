@@ -12,6 +12,21 @@ from core.game_logic.utility_logic import UtilityLogic
 
 
 class DiamondAttack:
+    """
+    Implements the diamond attack.
+
+    Players are motivated to form a square around the opponents hoops,
+    where two players are on the sides, one in front and one behind the hoops.diamo
+
+    This is achieved via a move vector towards the hoops and evade vectors to evade:
+        - opponent loaded beaters
+        - opponent chasers/keeper
+        - own chasers/keeper (to keep distance and form square)
+
+    If they are under pressure, they pass.
+
+    If there is a scoring opportunity, they score.
+    """
 
     def __init__(self,
                 logic: GameLogic,
