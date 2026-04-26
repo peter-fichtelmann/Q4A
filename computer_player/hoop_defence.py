@@ -1,6 +1,5 @@
 from typing import List
-from core.game_logic.game_logic import GameLogic
-from core.entities import Hoop, Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
+from core.entities import Hoop, Player, VolleyBall, Vector2, PlayerRole
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.computer_player_utility import MoveUtility, BeaterThrowDecider, ThrowDirector
 import random
