@@ -3,7 +3,9 @@ import logging
 import math
 from typing import Dict, Optional, List
 
-from computer_player.computer_player_utility import BeaterThrowDecider, InterceptionRatioCalculator, MoveAroundHoopBlockage, MoveUtility, ThrowDirector
+from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
+from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
+from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, MoveUtility, ThrowDirector
 from core.entities import Player, PlayerRole, Vector2, VolleyBall
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
@@ -14,7 +16,7 @@ class DiamondAttack:
     def __init__(self,
                 logic: GameLogic,
                 move_around_hoop_blockage: MoveAroundHoopBlockage, # of own team
-                interception_ratio_calculator_opponent: InterceptionRatioCalculator,
+                interception_calculator_opponent: InterceptionCalculator,
                 attack_cpu_player_ids: List[str],
                 attack_team: int,
                 beater_throw_decider: BeaterThrowDecider,
@@ -37,7 +39,7 @@ class DiamondAttack:
                 ):
         self.logic = logic
         self.move_around_hoop_blockage = move_around_hoop_blockage
-        self.interception_ratio_calculator_opponent = interception_ratio_calculator_opponent
+        self.interception_calculator_opponent = interception_calculator_opponent
         self.attack_cpu_player_ids = attack_cpu_player_ids
         self.attack_team = attack_team
         self.beater_throw_decider = beater_throw_decider
@@ -108,7 +110,7 @@ class DiamondAttack:
             copy_volleyball.velocity.x = volleyball_holder.throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector
             copy_volleyball.velocity.y = volleyball_holder.throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
 
-            # intercepting_score, scores_info = self.interception_ratio_calculator_opponent(
+            # intercepting_score, scores_info = self.interception_calculator_opponent(
         #      dt=dt,
         #      moving_entity=copy_volleyball,
         #      intercepting_player_ids=self.defending_chaser_keeper_ids,
@@ -118,12 +120,12 @@ class DiamondAttack:
         #      max_distance_per_step=self.score_interception_max_distance_per_step,
         #      max_dt_per_step=self.score_interception_max_dt_per_step
         # )
-            beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_ratio_calculator_opponent.beam_cosine_angle(
+            beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator_opponent.beam_cosine_angle(
                 moving_entity=copy_volleyball,
                 intercepting_player_ids=self.defending_chaser_keeper_ids,
                 target_position=hoop.position,
                 moving_entity_target_vector=volleyball_hoop_vector)
-            intercepting_score = self.interception_ratio_calculator_opponent.interception_score_from_beam_cosine_angle(
+            intercepting_score = self.interception_calculator_opponent.interception_score_from_beam_cosine_angle(
                 beam_cosine_angle=beam_cosine_angle,
                 beam_angle_player_id=beam_cosine_angle_player_id,
                 mag_moving_entity_velocity=volleyball_holder.throw_velocity,
@@ -279,13 +281,13 @@ class DiamondAttack:
                 return
             best_player = self.logic.state.players[best_player_id]
             throw_direction = ThrowDirector.get_throw_direction_moving_receiver(volleyball_holder, best_player)
-            beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_ratio_calculator_opponent.beam_cosine_angle(
+            beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator_opponent.beam_cosine_angle(
                 moving_entity=volleyball,
                 intercepting_player_ids=self.defending_chaser_keeper_ids,
                 target_position=best_player.position, # approximate with current position instead of predicted position
                 moving_entity_target_vector=throw_direction
             )
-            interception_score = self.interception_ratio_calculator_opponent.interception_score_from_beam_cosine_angle(
+            interception_score = self.interception_calculator_opponent.interception_score_from_beam_cosine_angle(
                 beam_cosine_angle=beam_cosine_angle,
                 beam_angle_player_id=beam_cosine_angle_player_id,
                 mag_moving_entity_velocity=volleyball_holder.throw_velocity,

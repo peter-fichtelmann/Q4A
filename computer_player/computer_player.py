@@ -4,10 +4,12 @@ import logging
 from time import perf_counter_ns
 from typing import Dict, List, Tuple
 from core.game_logic.game_logic import GameLogic
-from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
+from core.entities import Vector2, PlayerRole, BallType
 from computer_player.hoop_defence import HoopDefence
 from computer_player.diamond_attack import DiamondAttack
-from computer_player.computer_player_utility import InterceptionRatioCalculator, MoveAroundHoopBlockage, BeaterThrowDecider, ThrowDirector
+from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
+from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
+from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, ThrowDirector
 import random
 
 from core.game_logic.utility_logic import UtilityLogic
@@ -166,17 +168,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             volleyball_radius=volleyball_radius,
             logger=self.logger
             )
-        self.interception_ratio_calculator_team_0 = InterceptionRatioCalculator(
+        self.interception_calculator = InterceptionCalculator(
             logic=self.logic,
-            move_around_hoop_blockage=self.move_around_hoop_blockage_team_0,
-            log_level=simulation_game_logic_log_level,
-            logger=self.logger
-            )
-        self.interception_ratio_calculator_team_1 = InterceptionRatioCalculator(
-            logic=self.logic,
-            move_around_hoop_blockage=self.move_around_hoop_blockage_team_1,
-            log_level=simulation_game_logic_log_level,
-            logger=self.logger
             )
         self.beater_throw_decider = BeaterThrowDecider(
             throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
@@ -217,7 +210,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             DiamondAttack,
             logic=self.logic,
             move_around_hoop_blockage=self.move_around_hoop_blockage_team_0 if attacking_team == 0 else self.move_around_hoop_blockage_team_1,
-            interception_ratio_calculator_opponent=self.interception_ratio_calculator_team_1 if attacking_team == 0 else self.interception_ratio_calculator_team_0, # inverse because we need hoop blockage of opponent team
+            interception_calculator_opponent=self.interception_calculator,
             attack_cpu_player_ids=[cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == attacking_team],
             attack_team=attacking_team,
             beater_throw_decider=self.beater_throw_decider,
@@ -286,7 +279,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     if dodgeball.possession_team is None:
                         # If there is a dead dodgeball which is not the third dodgeball, assign beater players to get the dodgeball
                         # does not matter which interception ratio calculator as beaters are not blocked by hoops
-                        min_interception_time, _, interception_info_dict = self.interception_ratio_calculator_team_0.line_interception(
+                        min_interception_time, _, interception_info_dict = self.interception_calculator.line_interception(
                             moving_entity=dodgeball,
                             intercepting_player_ids=[beater.id for beater in self.beaters],
                         )
@@ -296,7 +289,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         min_interception_time_dodgeball_dict[dodgeball.id] = min_interception_time
 
 
-                        # _, step_ratio_dict = self.interception_ratio_calculator_team_0(
+                        # _, step_ratio_dict = self.interception_calculator_team_0(
                         #     dt=dt,
                         #     moving_entity=dodgeball,
                         #     intercepting_player_ids=[beater.id for beater in self.beaters if not beater.is_knocked_out],
@@ -408,7 +401,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
     #                         )
     #             else: # perform another interception ratio calculation
     #                 unassigned_beater_ids = [beater.id for beater in self.beaters if beater.id not in assigned_beater_ids]
-    #                 _, step_ratio_dict = self.interception_ratio_calculator_team_0(
+    #                 _, step_ratio_dict = self.interception_calculator_team_0(
     #                     dt=dt,
     #                     moving_entity=dodgeball,
     #                     intercepting_player_ids=unassigned_beater_ids,
@@ -471,7 +464,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     break
             return volleyball.possession_team, volleyball_holder_id, None
         else:
-            lowest_interception_time, assigned_player_id, _ = self.interception_ratio_calculator_team_0.line_interception(
+            lowest_interception_time, assigned_player_id, _ = self.interception_calculator.line_interception(
                 moving_entity=volleyball,
                 intercepting_player_ids=[player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]],
             )
@@ -487,7 +480,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             # potential_intercepting_players_0 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 0]
             # potential_intercepting_players_1 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 1]
             # # need to consider two cases due to different move_hoop_blockage
-            # _, step_ratio_dict_team_0 = self.interception_ratio_calculator_team_0(
+            # _, step_ratio_dict_team_0 = self.interception_calculator_team_0(
             #     dt=dt,
             #     moving_entity=volleyball,
             #     intercepting_player_ids=potential_intercepting_players_0,
@@ -498,7 +491,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             #     max_dt_per_step=self.determine_attacking_team_max_dt_per_step
 
             # )
-            # _, step_ratio_dict_team_1 = self.interception_ratio_calculator_team_1(
+            # _, step_ratio_dict_team_1 = self.interception_calculator_team_1(
             #     dt=dt,
             #     moving_entity=volleyball,
             #     intercepting_player_ids=potential_intercepting_players_1,
