@@ -9,6 +9,14 @@ import math
 from core.game_logic.utility_logic import UtilityLogic
 
 class HoopDefence:
+    """
+    Implements Hoop Defence where all chasers stand in front the hoops.
+    The side changes when the volleyball moves over the hoop baseline.
+
+    The keeper is moving towards the volleyball, but stays within the keeper zone.
+
+    Beaters are sticking to the hoops and throw the volleyball if the volleyball holder is close enough.
+    """
     def __init__(self,
                  logic,
                  defence_cpu_player_ids: List[str],
