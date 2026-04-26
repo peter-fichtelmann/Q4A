@@ -22,7 +22,7 @@ class Config:
     HOOP_THICKNESS = 0.1
     VOLLEYBALL_RADIUS = 0.67 / 2 / 3.14 # 65 centimeters to 67 centimeters in circumference (approximately 0.106 m)
     DODGEBALL_RADIUS = 0.70 / 2 / 3.14 # 68 centimeters and 70 centimeters in circumference (approximately 0.111 m)
-    PLAYER_RADIUS = 0.35
+    PLAYER_RADIUS = 0.4
 
     PLAYER_MAX_SPEED_REAL = 3.5 # m/s per real second
     PLAYER_MIN_SPEED_REAL = 1 # m/s per real second
