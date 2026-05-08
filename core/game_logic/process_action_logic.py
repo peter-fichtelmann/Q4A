@@ -81,7 +81,21 @@ class ProcessActionLogic:
     
     def process_tackle_action(self, player_id: str) -> bool:
         """
-        Process a tackle action
+        Attempt a tackle against an opposing in-contact ball carrier.
+
+        A tackle is registered when:
+        - The acting player exists and is not currently carrying a ball
+        - At least one contacted player is on the opposing team
+        - The opposing contacted player is currently carrying a ball
+
+        On success both players receive each other in their tackling lists so
+        `_enforce_tackle` can freeze movement for the frame.
+
+        Args:
+            player_id: The ID of the tackling player.
+
+        Returns:
+            True if a valid tackle target was found, otherwise False.
         """
         player = self.state.get_player(player_id)
         # for other_id, distance in self.state.squared_distances.get(player.id, [])

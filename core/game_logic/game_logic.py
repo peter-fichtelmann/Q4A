@@ -143,11 +143,24 @@ class GameLogic:
         self.boundary_logic._enforce_pitch_boundaries() # at least after free ways and position updates
 
     def copy(self, log_level = None) -> 'GameLogic':
+        """Return a new GameLogic instance with a copied GameState.
+
+        Args:
+            log_level: Optional log level override for the copied instance.
+
+        Returns:
+            A new GameLogic object operating on a deep-copied state.
+        """
         if log_level is None:
             log_level = self.logger.level
         return GameLogic(self.state.copy(), log_level=log_level)
     
     def set_log_level(self, log_level: int):
+        """Set logger level and ensure a non-propagating stream handler exists.
+
+        Args:
+            log_level: Standard logging level value.
+        """
         # Configure logger level
         self.logger.setLevel(log_level)
         if not self.logger.handlers:
@@ -157,6 +170,11 @@ class GameLogic:
         self.logger.propagate = False
 
     def set_logger_level(self, log_level: int):
+        """Backward-compatible alias for set_log_level().
+
+        Args:
+            log_level: Standard logging level value.
+        """
         # Backward-compatible alias
         self.set_log_level(log_level)
 
@@ -185,17 +203,25 @@ class GameLogic:
         ]
 
     def enable_step_profiling(self, reset_stats: bool = True) -> None:
+        """Wrap update sub-steps with timing probes.
+
+        Args:
+            reset_stats: Whether to clear existing profile counters first.
+        """
         if reset_stats:
             self._step_profiler.reset()
         self._step_profiler.attach(self._build_step_profile_targets())
 
     def disable_step_profiling(self) -> None:
+        """Remove profiling wrappers from all instrumented update steps."""
         self._step_profiler.detach()
 
     def get_step_profile_report(self) -> list[dict[str, float | int | str]]:
+        """Return profiling rows sorted by descending total runtime."""
         return self._step_profiler.report()
 
     def reset_step_profile(self) -> None:
+        """Clear accumulated step-profile statistics."""
         self._step_profiler.reset()
     
 
@@ -218,14 +244,21 @@ class _GameLogicStepProfiler:
     """Optional runtime profiler for selected GameLogic sub-steps."""
 
     def __init__(self):
+        """Initialize profiler state and original-method storage."""
         self.enabled: bool = False
         self.stats: dict[str, _StepProfileStats] = {}
         self._originals: dict[tuple[int, str], tuple[object, object]] = {}
 
     def reset(self) -> None:
+        """Clear all recorded timing statistics."""
         self.stats.clear()
 
     def attach(self, targets: list[tuple[str, object, str]]) -> None:
+        """Attach timing wrappers to target methods.
+
+        Args:
+            targets: Tuples of (label, object, method_name) to instrument.
+        """
         if self.enabled:
             return
 
@@ -251,6 +284,7 @@ class _GameLogicStepProfiler:
         self.enabled = True
 
     def detach(self) -> None:
+        """Restore original methods and disable profiling."""
         if not self.enabled and not self._originals:
             return
 
@@ -260,6 +294,7 @@ class _GameLogicStepProfiler:
         self.enabled = False
 
     def report(self) -> list[dict[str, float | int | str]]:
+        """Build aggregate profiling rows for each instrumented step."""
         rows = []
         for step_name, stats in self.stats.items():
             avg_ms = (stats.total_ns / stats.calls / 1e6) if stats.calls else 0.0

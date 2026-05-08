@@ -28,6 +28,16 @@ class BasicLogic:
         self.logger = logger or BASE_LOGGER
 
     def update_player_velocity(self, player: Player, dt: float):
+        """Integrate one player's velocity from input direction and movement parameters.
+
+        The method normalizes oversized direction vectors, applies acceleration and
+        deceleration, caps top speed, and snaps near-stationary movement to zero.
+        It also clears knockout state once a knocked-out player reaches the team hoop.
+
+        Args:
+            player: The player whose velocity is updated.
+            dt: Delta game time since last frame in seconds.
+        """
         # norm player.direction
         mag_dir = UtilityLogic._magnitude(player.direction)
         # on stick reset check before direction norm
@@ -116,9 +126,10 @@ class BasicLogic:
 
     def check_keeper_special_powers(self):
         """
-        Check if beaters are immune to beats due to dead volleyball or if they are in their own keeper zone.
-        
-        Check for protected keeper
+        Update keeper dodgeball immunity from keeper-zone and dead-volleyball rules.
+
+        A keeper is immune while inside their own keeper zone, and the keeper of
+        the possession team is also immune while the volleyball is dead.
         """
         # TODO Add protected keeper
         keeper_0 = self.state.keeper_team_0
