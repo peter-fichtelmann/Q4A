@@ -6,6 +6,8 @@ from core.entities import Player, Vector2, Hoop
 
 
 class MoveAroundHoopBlockage:
+    """Compute movement vectors that avoid hoop-blockage collision regions."""
+
     def __init__(self,
                  defence_hoops: List[Hoop],
                  move_buffer_factor: float = 1.2,
@@ -13,6 +15,7 @@ class MoveAroundHoopBlockage:
                  volleyball_radius: float = 0.0, # for hoop blockage_x
                  logger: Optional[logging.Logger] = None
                  ):
+        """Store hoop geometry and tuning parameters for blockage avoidance."""
         self.defence_hoops = defence_hoops
         self.move_buffer_factor = move_buffer_factor    
         self.tol = tol
@@ -29,9 +32,9 @@ class MoveAroundHoopBlockage:
                  ) -> Vector2:
         """Compute a movement vector that steers a defender around hoop blockage.
 
-        The method traces the straight segment from ``player.position`` to ``target``
+        The method traces the straight segment from ``player.position`` to ``target_position``
         and checks whether it intersects hoop blockage boundaries. If a blocking
-        intercepting is detected, it redirects movement toward a buffered hoop corner;
+        intersection is detected, it redirects movement toward a buffered hoop corner;
         otherwise it returns direct movement toward the target (or ``lookahead_to_target``
         when provided).
 
@@ -39,8 +42,8 @@ class MoveAroundHoopBlockage:
 
         Args:
             player: Defender whose movement is being computed.
-            target: Desired point to move toward for this frame.
-            target_hoop: Primary hoop used for x-side intercepting checks and side
+            target_position: Desired point to move toward for this frame.
+            target_hoop: Primary hoop used for x-side intersection checks and side
                 determination.
             add_hoop_blockage_x: Horizontal half-width of hoop blockage for collision
                 avoidance (for example, player radius plus ball radius).
@@ -51,7 +54,7 @@ class MoveAroundHoopBlockage:
 
         Returns:
             Vector2: The direction vector the caller should use for movement this
-            frame. A zero vector is returned when ``target`` equals
+            frame. A zero vector is returned when ``target_position`` equals
             ``player.position``.
         """
         direction_to_target = Vector2(

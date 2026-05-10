@@ -10,7 +10,7 @@ from core.game_logic.utility_logic import UtilityLogic
 class HoopDefence:
     """
     Implements Hoop Defence where all chasers stand in front the hoops.
-    The side changes when the volleyball moves over the hoop baseline.
+    The position (in front or behind hoops) changes when the volleyball moves over the hoop baseline.
 
     The keeper is moving towards the volleyball, but stays within the keeper zone.
 
@@ -30,6 +30,7 @@ class HoopDefence:
                  beater_throw_decider: BeaterThrowDecider,
                  positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
                  ):    
+        """Initialize defence-team role groups and steering configuration."""
         self.logic = logic
         self.defence_players = [player for player in self.logic.state.players.values() if player.team == defence_team]
         self.defence_beaters = [player for player in self.defence_players if player.role == PlayerRole.BEATER]
@@ -54,6 +55,7 @@ class HoopDefence:
         self.move_around_hoop_blockage = move_around_hoop_blockage
 
     def __call__(self, dt: float, assigned_beater_ids: List[str] = []):
+        """Run one defence update tick for keeper, chasers, and unassigned beaters."""
         volleyball = self.logic.state.volleyball
         
         volleyball_hoop_distances = {
@@ -143,6 +145,7 @@ class HoopDefence:
         beater.direction = move_vector
     
     def beater_throw_action(self, beater: Player, volleyball: VolleyBall):
+        """Throw at the volleyball holder when distance-based criteria are satisfied."""
         if not beater.has_ball:
             return
         if volleyball.holder_id is not None:
@@ -152,6 +155,7 @@ class HoopDefence:
                 self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)               
 
     def chasers_action(self, sorted_hoop_distances, chaser_hoop_squared_distances, volleyball: VolleyBall, dt: float):
+        """Assign and steer chasers to defend hoop lanes based on proximity order."""
         # move chaser closest to hoop with closest distance volleyball first; then move next closest chaser to next closest hoop and so on, but only if they are not already directed towards a hoop by a closer chaser
         directed_chasers = []
         for hoop_id, _ in sorted_hoop_distances:
@@ -298,6 +302,7 @@ class HoopDefence:
 
 
     def _is_volleyball_in_keeper_zone(self, volleyball: VolleyBall) -> bool:
+        """Return whether the ball is currently inside this team's keeper zone."""
         if volleyball is not None:
             if self.defence_team == self.logic.state.team_0:
                 return volleyball.position.x < self.keeper_zone_x
@@ -305,6 +310,7 @@ class HoopDefence:
                 return volleyball.position.x > self.keeper_zone_x
 
     def keeper_action(self, player: Player, volleyball: VolleyBall, closest_hoop: Hoop):
+        """Move keeper to ball in-zone, otherwise to projected hoop-line crossing."""
         # TODO: keeper anticipates next volleyball position by velocitiy
         # if volleyball is in keeper zone, move towards the volleyball, else move towards the crossing point of volleyball-closest hoop and keeper zone line
         if self._is_volleyball_in_keeper_zone(volleyball):

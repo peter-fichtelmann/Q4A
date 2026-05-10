@@ -4,9 +4,11 @@ from core.game_logic.utility_logic import UtilityLogic
 
 
 class MoveUtility:
+    """Helper functions for movement and boundary-safe steering."""
+
     @staticmethod
     def evade(player_position: Vector2, entity_to_evade_position: Vector2, weight: float = 1.0) -> Vector2:
-        """Evade player, e.g. chaser or loaded beater. Return evade vector"""
+        """Return an inverse-distance weighted vector away from another entity."""
         player_to_entity_vector = Vector2(
             entity_to_evade_position.x - player_position.x,
             entity_to_evade_position.y - player_position.y
@@ -30,7 +32,7 @@ class MoveUtility:
             boundary_y_max: float,
             buffer: float
             ):
-        """Avoid movement that would move player outside of boundaries. Return adjusted move vector."""
+        """Clamp move direction so buffered field boundaries are not crossed."""
         if player_position.x < boundary_x_min + buffer:
             move_vector.x = max(0, move_vector.x) # only allow movement to the right
         elif player_position.x > boundary_x_max - buffer:
@@ -44,10 +46,10 @@ class MoveUtility:
 
 class BeaterThrowDecider:
     """
-    Makes decisions if beaters should throw their dodogeball.
+    Decide whether beaters should throw their dodgeball.
     
     Idea 1: just hard distance threshold
-    Idea 2: hard threshold and probabilty per second of 1/(distance + value) where value is aggressiveness
+    Idea 2: hard threshold and probability per second of 1/(distance + value) where value is aggressiveness
     
     """
     def __init__(
@@ -55,10 +57,12 @@ class BeaterThrowDecider:
             throw_threshold_volleyball_holder: float,
             throw_threshold_loaded_beater: float
             ):
+        """Store squared distance thresholds used by beater throw checks."""
         self.squared_throw_threshold_volleyball_holder = throw_threshold_volleyball_holder**2
         self.squared_throw_threshold_loaded_beater = throw_threshold_loaded_beater**2
 
     def should_throw_at_volleyball_holder(self, beater: Player, volleyball_holder: Player) -> bool:
+        """Return True when holder is throwable and inside holder range threshold."""
         if volleyball_holder.dodgeball_immunity:
             return False
         squared_distance = UtilityLogic._squared_distance(beater.position, volleyball_holder.position)
@@ -67,6 +71,7 @@ class BeaterThrowDecider:
         return False
     
     def should_throw_at_loaded_beater(self, beater: Player, loaded_beater: Player) -> bool:
+        """Return True when a loaded opposing beater is within throw range."""
         squared_distance = UtilityLogic._squared_distance(beater.position, loaded_beater.position)
         if squared_distance <= self.squared_throw_threshold_loaded_beater:
             return True
@@ -77,6 +82,7 @@ class ThrowDirector:
     """Calculates the throw vector to a moving receiver e.g. for passes and beats"""
     @staticmethod
     def get_throw_direction_static_receiver(player: Player, receiver: Player):
+        """Return direct throw vector from thrower to a static receiver position."""
         return  Vector2(
             receiver.position.x - player.position.x,
             receiver.position.y - player.position.y

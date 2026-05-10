@@ -15,13 +15,13 @@ class InterceptionCalculatorLegacy:
 
     For each step, the best direction of each player is calculated.
     Then player and moving entity movement are simulated by a copied game logic.
-    Followed by a chack if the movin entity is intercepted.
+    Followed by a check if the moving entity is intercepted.
     
     For each possible min step before interception all steps in between have to be simulated.
     The costs grow quadratically with (n+1)n/2 steps.
     This is not reasonable for larger distance calculations.
 
-    Consequently, the new InterceptionCalculators are less accurate but faster estimations.
+    Consequently, the new interception calculators are less accurate but faster estimates.
     """
 
     def __init__(self,
@@ -31,6 +31,7 @@ class InterceptionCalculatorLegacy:
                     log_level: int = None,
                     logger: Optional[logging.Logger] = None
                     ):
+        """Initialize simulation-based interception estimator configuration."""
         self.logic = logic
         self.move_around_hoop_blockage = move_around_hoop_blockage
         self.tol_reaching_target = tol_reaching_target
@@ -38,14 +39,17 @@ class InterceptionCalculatorLegacy:
         self.logger = logger
 
     def update_moving_free_ball_position(self, copy_moving_entity: object, dt: float):
+        """Advance a copied free ball state by one step."""
         copy_moving_entity.velocity.x, copy_moving_entity.velocity.y = self.logic.basic_logic.get_free_ball_velocity(copy_moving_entity, dt)
         copy_moving_entity.position.x, copy_moving_entity.position.y = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
 
     def update_moving_player_position(self, copy_moving_entity: Player, dt: float):
+        """Advance a copied player state by one step."""
         self.logic.basic_logic.update_player_velocity(copy_moving_entity, dt)
         copy_moving_entity.position.x, copy_moving_entity.position.y = self.logic.basic_logic.get_update_position(copy_moving_entity, dt)
     
     def get_dt_stepsize(self, copy_moving_entity: object, max_distance_per_step: Optional[float], max_dt_per_step: Optional[int]) -> float:
+        """Derive a simulation dt based on movement speed and step caps."""
         dt = max_distance_per_step / (UtilityLogic._magnitude(copy_moving_entity.velocity) + 1e-6) if max_distance_per_step is not None else 0.1
         if max_dt_per_step is not None and dt > max_dt_per_step:
             dt = max_dt_per_step
@@ -62,9 +66,11 @@ class InterceptionCalculatorLegacy:
                     max_dt_per_step: Optional[int] = None
                     ) -> Tuple[float, Dict[str, Tuple[int, float, Vector2]]]:
         """
-        Check the line from moving_entity to target_position for intercepting with players in intercepting_player_ids.
-        Return a intercepting score between 0 and 1, where 0 means intercepting at the beginning of the line and 1 means no intercepting and reaching the target.
-        In addition, return a dictionary of the best step ratio of intercepting players with the step number and the corresponding step ratio and interception position.
+                Simulate game steps to estimate interception along a trajectory.
+
+                Returns an interception score in [0, 1], where 0 means immediate
+                interception and 1 means no interception before target/end point,
+                together with best per-player interception details.
         """
         if isinstance(moving_entity, Player):
             update_moving_entity_position = self.update_moving_player_position

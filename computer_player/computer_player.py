@@ -17,11 +17,14 @@ from core.game_logic.utility_logic import UtilityLogic
 
 @dataclass
 class _StepProfileStats:
+    """Aggregated timing stats for one profiled step name."""
+
     calls: int = 0
     total_ns: int = 0
     max_ns: int = 0
 
     def add(self, elapsed_ns: int) -> None:
+        """Record one call duration in nanoseconds."""
         self.calls += 1
         self.total_ns += elapsed_ns
         if elapsed_ns > self.max_ns:
@@ -32,13 +35,16 @@ class _ComputerPlayerStepProfiler:
     """Low-overhead optional profiler for computer-player steps."""
 
     def __init__(self):
+        """Initialize profiler state with profiling disabled."""
         self.enabled: bool = False
         self.stats: dict[str, _StepProfileStats] = {}
 
     def reset(self) -> None:
+        """Clear all collected timing statistics."""
         self.stats.clear()
 
     def time_call(self, step_name: str, fn, *args, **kwargs):
+        """Time a callable when enabled, otherwise run it directly."""
         if not self.enabled:
             return fn(*args, **kwargs)
 
@@ -50,6 +56,7 @@ class _ComputerPlayerStepProfiler:
             stats.add(perf_counter_ns() - start_ns)
 
     def report(self) -> list[dict[str, float | int | str]]:
+        """Return sorted timing rows with call counts and timing summaries."""
         rows = []
         for step_name, stats in self.stats.items():
             avg_ms = (stats.total_ns / stats.calls / 1e6) if stats.calls else 0.0
@@ -65,10 +72,13 @@ class _ComputerPlayerStepProfiler:
 
 class ComputerPlayer(ABC):
     """
-    Abstract base class for a computer player in a game. 
-    It defines the interface for changing the direction and actions of the computer-controlled players.
+    Base class for CPU-controlled team behavior.
+
+    Subclasses implement `make_move` and set per-player directions/actions for one
+    simulation step.
     """
     def __init__(self, game_logic: GameLogic, cpu_player_ids: List[str], computer_player_log_level: int = logging.INFO):
+        """Bind game logic and resolve the controlled player objects."""
         self.logic = game_logic
         self.cpu_player_ids = cpu_player_ids
         self.cpu_players = [self.logic.state.players[player_id] for player_id in cpu_player_ids]
@@ -77,37 +87,47 @@ class ComputerPlayer(ABC):
         self._step_profiler = _ComputerPlayerStepProfiler()
 
     def enable_step_profiling(self, reset_stats: bool = True) -> None:
+        """Enable internal step profiling, optionally clearing prior stats."""
         if reset_stats:
             self._step_profiler.reset()
         self._step_profiler.enabled = True
 
     def disable_step_profiling(self) -> None:
+        """Disable internal step profiling."""
         self._step_profiler.enabled = False
 
     def get_step_profile_report(self) -> list[dict[str, float | int | str]]:
+        """Return profiling rows ordered by total time descending."""
         return self._step_profiler.report()
 
     def reset_step_profile(self) -> None:
+        """Clear collected profiling data."""
         self._step_profiler.reset()
 
     def _profile_call(self, step_name: str, fn, *args, **kwargs):
+        """Execute a callable through the step profiler wrapper."""
         return self._step_profiler.time_call(step_name, fn, *args, **kwargs)
 
     @abstractmethod
     def make_move(self, dt: float):
+        """Compute CPU actions for one game tick of length `dt`."""
         pass
 
 
 class RandomComputerPlayer(ComputerPlayer):
+    """Simple CPU that jitters movement and throws with fixed probability."""
+
     def __init__(self,
                  game_logic: GameLogic,
                  cpu_player_ids: List[str],
                  throwing_probability: float = 0.1,
                  computer_player_log_level: int = logging.INFO):
+        """Create a random baseline controller for the given CPU players."""
         super().__init__(game_logic, cpu_player_ids, computer_player_log_level=computer_player_log_level)
         self.throwing_probability = throwing_probability
 
     def make_move(self, dt: float):
+        """Apply random movement, occasional throws, and default tackle attempts."""
         # add random number between -1 and 1 to the x and y direction of each CPU player
         # print(f'[CPU Player] Making move for {len(self.cpu_players)} CPU players')
         for player in self.cpu_players:
@@ -121,6 +141,8 @@ class RandomComputerPlayer(ComputerPlayer):
 
             
 class RuleBasedComputerPlayer(ComputerPlayer):
+    """Coordinated CPU strategy based on defined rules, that combines attack, defence, and beater logic."""
+
     def __init__(self,
                  game_logic: GameLogic,
                  cpu_player_ids: List[str],
@@ -135,6 +157,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  simulation_game_logic_log_level: int = None,
                  computer_player_log_level: int = logging.INFO
                  ):
+        """Initialize reusable tactical helpers and team-specific configuration."""
         super().__init__(game_logic, cpu_player_ids, computer_player_log_level=computer_player_log_level)
         self.move_buffer_factor = move_buffer_factor
         self.determine_attacking_team_max_dt_steps = determine_attacking_team_max_dt_steps
@@ -177,6 +200,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         )
 
     def make_move(self, dt: float):
+        """Run one full rule-based decision cycle for all controlled players."""
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
         attacking_team, next_volleyball_holder_id, intercepting_position = self._profile_call(
             'rule_based._determine_attacking_team',
@@ -417,6 +441,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
     #     return step_ratio_dicts_2, assigned_beater_ids, unassigned_dodgeball_ids
 
     def _distance_based_beater_assignment(self, unassigned_dodgeball_ids: List[str], assigned_beater_ids: List[str]):
+        """Assign remaining free dodgeballs to the nearest available beaters."""
         # calculate distances to unassigned beaters for unassigned dodgeballs and assign closest beater to each unassigned dodgeball
         squared_distances_dict = {}
         for dodgeball_id in unassigned_dodgeball_ids:
@@ -445,7 +470,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         return assigned_beater_ids
 
     def _determine_attacking_team(self, dt: float) -> Tuple[int, str, Vector2]:
-        """Return the attacking team and player id of the chaser/keeper assigned to the volleyball"""
+        """Infer attacking team, expected next holder id, and optional intercept point."""
         volleyball  = self.logic.state.volleyball
         if volleyball.turnover_to_player is not None:
             player = self.logic.state.players[volleyball.turnover_to_player]

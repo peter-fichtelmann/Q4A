@@ -13,10 +13,10 @@ from core.game_logic.utility_logic import UtilityLogic
 
 class DiamondAttack:
     """
-    Implements the diamond attack.
+    Implements the diamond attack formation.
 
-    Players are motivated to form a square around the opponents hoops,
-    where two players are on the sides, one in front and one behind the hoops.diamo
+    Players are motivated to form a square around opponent hoops,
+    with two players on the sides, one in front, and one behind.
 
     This is achieved via a move vector towards the hoops and evade vectors to evade:
         - opponent loaded beaters
@@ -52,6 +52,7 @@ class DiamondAttack:
                 passing_squared_max_distance: float = 400,
                 logger: Optional[logging.Logger] = None
                 ):
+        """Configure attack-team positioning, passing, and scoring heuristics."""
         self.logic = logic
         self.move_around_hoop_blockage = move_around_hoop_blockage
         self.interception_calculator_opponent = interception_calculator_opponent
@@ -98,6 +99,7 @@ class DiamondAttack:
                            next_volleyball_holder_id: str,
                            intercepting_position: Optional[Vector2] = None
                            ):
+            """Direct the predicted next holder toward the ball or intercept point."""
             next_holder = self.logic.state.players[next_volleyball_holder_id]
             if intercepting_position is not None:
                 next_holder.direction = Vector2(
@@ -111,6 +113,7 @@ class DiamondAttack:
                 )
 
     def get_intercepting_scores_for_hoops(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player):
+        """Compute interception-risk scores for shots toward each attack hoop."""
         intercepting_scores_dict = {}
         for hoop in self.attack_hoops:
             volleyball_hoop_vector = Vector2(
@@ -152,6 +155,7 @@ class DiamondAttack:
         return intercepting_scores_dict
 
     def score_attempt(self, dt: float, volleyball: VolleyBall, volleyball_holder: Player) -> bool:
+        """Attempt a shot when interception risk for a hoop is below threshold."""
         intercepting_scores_dict = self.get_intercepting_scores_for_hoops(dt, volleyball, volleyball_holder)
         # if no intercepting_scores, then probably to far away to score
         if len(intercepting_scores_dict) == 0:
@@ -171,6 +175,7 @@ class DiamondAttack:
         return False
     
     def player_positioning(self, player: Player, total_evade_vector: Vector2, move_vector: Optional[Vector2] = None):
+        """Blend formation movement with evade vectors and boundary protection."""
         if move_vector is None:
             move_vector = Vector2(
                 1 - 2 * self.attack_team, # 1 for team 0 attacking, -1 for team 1 attacking
@@ -201,7 +206,11 @@ class DiamondAttack:
         player.direction = Vector2(move_vector.x, move_vector.y)
 
     def move_chaser_keeper_hoops(self, players: List[Player]) -> Dict[str, Vector2]:
-        """Assign defending chasers/keepers to attack hoops based on total proximity, so that we can consider them when evading and in interception score calculation. Solving an Assignment Problem but since there are so few players and hoops we can just do it with a brute force approach"""
+        """
+        Assign defending chasers/keepers to attack hoops based on total proximity,
+        so that we can consider them when evading and in interception score calculation.
+        Solving an Assignment Problem but since there are so few players and hoops we can just do it with a brute force approach.
+        """
         # self.logger.debug("Moving chaser/keeper hoops, N players: %s", len(players))
         move_vectors_dict = {}
         player_positions = [player.position for player in players]
@@ -235,6 +244,7 @@ class DiamondAttack:
         return move_vectors_dict
     
     def evade_vectors_chaser_keeper_calculation(self) -> Dict[str, Vector2]:
+        """Aggregate evade vectors for attacking chasers/keeper versus nearby players."""
         evade_vectors_dict = {}
         for player_id in self.attacking_chaser_keeper_ids:
             player = self.logic.state.players[player_id]
@@ -314,6 +324,7 @@ class DiamondAttack:
                 return
 
     def solve_assignment_problem(self, player_positions: List[Vector2], target_positions: List[Vector2]):
+        """Return minimum-cost assignment permutation using squared-distance cost."""
         if len(player_positions) == 0 or len(target_positions) == 0:
             return [], float('inf')
         best_cost = float('inf')
@@ -369,6 +380,7 @@ class DiamondAttack:
 
 
     def beater_throw_action(self, beater: Player, volleyball: VolleyBall):
+        """Throw at a loaded opposing beater when the throw policy allows it."""
         if not beater.has_ball:
             return
         for opponent_beater_id in self.defending_beater_ids:
@@ -389,6 +401,7 @@ class DiamondAttack:
                 intercepting_position: Optional[Vector2] = None,
                 assigned_beater_ids: List[str] = []
                 ):
+        """Execute one diamond-attack tick for all attack-team CPU players."""
         volleyball = self.logic.state.volleyball
         attacking_chaser_keeper = [self.logic.state.players[player_id] for player_id in self.attacking_chaser_keeper_ids]
         not_knocked_out_chaser_keeper = [

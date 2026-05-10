@@ -9,9 +9,10 @@ class InterceptionCalculator:
     """
     This class implements methods to calculate if players can intercept a moving entity.
 
-    It is the succesor of the legacy method where the interception was calculated quite exact by expensive step simulations.
+    It is the successor of the legacy method where interception was estimated
+    more exactly via expensive step simulations.
 
-    This class provides methods which are less accurate but much faster.
+    This class provides methods that are less accurate but much faster.
 
     There are 2 approaches:
     1) beam angle estimation:
@@ -27,6 +28,7 @@ class InterceptionCalculator:
         It resulted in a long term, but is still quite fast to solve.
     """
     def __init__(self, logic: GameLogic):
+        """Keep a reference to game state for player kinematics and lookups."""
         self.logic = logic
     
     def beam_cosine_angle(self,
@@ -50,7 +52,8 @@ class InterceptionCalculator:
 
         Does not take velocities into account at the moment.
 
-        Returns player with smallest beam angle (highest dot product) and dict of player ids: dot products
+        Returns the best cosine score, the corresponding player id, and a
+        dictionary mapping player ids to cosine scores.
         """
         if target_position is None and is_in_front_target:
             raise ValueError("target_position must be provided if is_in_front_target is True")
@@ -117,7 +120,7 @@ class InterceptionCalculator:
 
         Large cosine means small angle.
 
-        The larger the score, the less likey the interception.
+        The larger the score, the less likely the interception.
 
         """
         if beam_cosine_angle == 0:
@@ -138,8 +141,10 @@ class InterceptionCalculator:
                           ) -> Tuple[float, str, Vector2, Dict[str, float|Vector2]]:
         """
         Check the line from moving_entity to target_position for intercepting with players in intercepting_player_ids.
-        Calculate the interception time. 
-        Return the player with the lowest interception time.
+        Estimate interception time for each candidate player.
+
+        Returns the lowest interception time, the selected player id, and a
+        dictionary of per-player interception times.
         """
         lowest_interception_dt = float('inf')
         lowest_interception_dt_player_id = None
@@ -201,7 +206,8 @@ class InterceptionCalculator:
         """
         Similiar to get_throw_direction_moving_receiver but instead of throwin ball, throwing yourself with max_speed
 
-        Assume constant ball velocity. Assume player starts with max speed.
+        Assumes the moving entity has constant velocity and the intercepting
+        player can instantly move at max speed.
 
         Used first solution via sympy solve:
 
