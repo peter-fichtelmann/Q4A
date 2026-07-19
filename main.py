@@ -25,6 +25,7 @@ from core.game_logic.game_logic import GameLogic
 from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer, RuleBasedComputerPlayer
 from config import Config
 from room_jsonl_logger import RoomJsonlLogger
+from tutorial import setup_tutorial_room, mark_tutorial_room_abandoned, sweep_abandoned_tutorial_rooms
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('quadball')
@@ -110,6 +111,9 @@ class GameRoom:
         # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
         self.computer_player_class: ComputerPlayer = RuleBasedComputerPlayer
         self.computer_player: ComputerPlayer = None # initialized later
+        # Tutorial rooms use a scripted computer player driven by a TutorialDirector
+        self.is_tutorial: bool = False
+        self.tutorial_director = None
         self.room_jsonl_logger = RoomJsonlLogger(self)
 
     @staticmethod
@@ -283,6 +287,8 @@ class LobbyManager:
         """List all non-started rooms"""
         available = []
         for room_id, room in self.rooms.items():
+            if getattr(room, 'is_tutorial', False):
+                continue
             if not room.game_started and len(room.players) < room.max_players:
                 available.append({
                     "room_id": room_id,
@@ -409,10 +415,12 @@ async def websocket_lobby(websocket: WebSocket):
 
             message_type = message.get("type")
             
-            if message_type == "create_room":
+            if message_type in ("create_room", "create_tutorial_room"):
                 room_id, passkey = lobby_manager.create_room(client_id, "player 1")
                 # Add the creator as a player in the room so they appear in the waiting list
                 room = lobby_manager.get_room(room_id)
+                if message_type == "create_tutorial_room":
+                    setup_tutorial_room(room)
                 creator_player_id = str(uuid.uuid4())
                 player_name = room.next_default_player_name()
                 room.players[creator_player_id] = {
@@ -435,6 +443,7 @@ async def websocket_lobby(websocket: WebSocket):
                     "player_id": creator_player_id,
                     "players": list(room.players.values()),
                     "slots": room.slot_assignments,
+                    "tutorial": room.is_tutorial,
                 })
             
             elif message_type == "list_rooms":
@@ -769,7 +778,10 @@ async def websocket_lobby(websocket: WebSocket):
                         })
     
     except WebSocketDisconnect:
-        # Clean up lobby connection mappings for this websocket/client
+        pass
+    finally:
+        # Clean up lobby connection mappings for this websocket/client.
+        # Runs on graceful close too (the receive loop breaks instead of raising).
         try:
             for r in list(lobby_manager.rooms.values()):
                 if hasattr(r, 'lobby_connections') and client_id in r.lobby_connections:
@@ -785,6 +797,8 @@ async def websocket_lobby(websocket: WebSocket):
                         del r.player_to_client[pid]
                     except KeyError:
                         pass
+
+                mark_tutorial_room_abandoned(r)
         except Exception:
             pass
 
@@ -880,6 +894,17 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 elif message_type == "throw":
                     success_throw = room.game_logic.process_action_logic.process_throw_action(player_id)
                     success_tackle = room.game_logic.process_action_logic.process_tackle_action(player_id)
+
+                elif message_type == "tutorial_step":
+                    # Only tutorial rooms accept scenario requests
+                    if getattr(room, 'is_tutorial', False) and room.tutorial_director is not None:
+                        try:
+                            events = room.tutorial_director.start_scenario(str(message.get("step")))
+                        except Exception:
+                            logger.exception("Tutorial scenario setup failed for room=%s", room_id)
+                            events = []
+                        for event in events:
+                            await broadcast_to_room(room, event)
                     # if success_throw or success_tackle:
                     #     # Broadcast updated state
                     #     await broadcast_to_room(room, {
@@ -903,8 +928,11 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                     logger.exception("Failed to parse binary player input for room=%s player=%s", room_id, player_id)
 
     except WebSocketDisconnect:
+        pass
+    finally:
         if client_id in room.client_connections:
             del room.client_connections[client_id]
+        mark_tutorial_room_abandoned(room)
 
 async def broadcast_to_room(room: GameRoom, message: dict):
     """Broadcast message to all clients in a room"""
@@ -1185,6 +1213,11 @@ async def game_loop_manager():
             # no rooms, sleep longer
             await asyncio.sleep(1.0)
             continue
+        # Remove tutorial rooms whose (single) human has been gone past the grace period.
+        try:
+            sweep_abandoned_tutorial_rooms(lobby_manager)
+        except Exception:
+            logger.exception('Tutorial room sweep failed')
         for room_id, room in list(lobby_manager.rooms.items()):
             if room.game_started:
                 if Config.GAME_LOGIC_STEP_PROFILING_ENABLED and not room.step_profile_finished:
@@ -1204,6 +1237,15 @@ async def game_loop_manager():
                             room.game_logic.disable_step_profiling()
                             room.step_profile_finished = True
                             _log_step_profile_report(room)
+
+                # Tutorial director check runs BEFORE the logic update so short-lived
+                # flags (e.g. tackling_player_ids) set by player actions are still visible.
+                if getattr(room, 'tutorial_director', None) is not None:
+                    try:
+                        for tutorial_event in room.tutorial_director.tick():
+                            await broadcast_to_room(room, tutorial_event)
+                    except Exception:
+                        logger.exception('Tutorial director tick failed for room=%s', room.room_id)
 
                 # Update game logic
                 game_logic_start = time.monotonic()

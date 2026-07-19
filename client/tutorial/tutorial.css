@@ -1,0 +1,270 @@
+/* Q4A tutorial overlay: speech bubbles, highlights, hero cards, lobby entry. */
+
+#tutorialLayer {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    pointer-events: none;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* ---- speech bubble ---- */
+
+.tut-bubble {
+    position: fixed;
+    max-width: 320px;
+    min-width: 200px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #1c2333;
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(10, 15, 35, 0.35);
+    padding: 10px 12px;
+    pointer-events: auto;
+    display: flex;
+    gap: 10px;
+    line-height: 1.35;
+}
+
+.tut-bubble .tut-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.tut-quip {
+    font-style: italic;
+    font-size: 0.82rem;
+    color: #5a4a8a;
+    margin-bottom: 3px;
+}
+
+.tut-text {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.tut-hint {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #8a5a00;
+}
+
+.tut-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.tut-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #667eea;
+    color: #ffffff;
+}
+
+.tut-btn:hover {
+    background: #5468d4;
+}
+
+.tut-btn.tut-btn-secondary {
+    background: #e4e7f4;
+    color: #3a4468;
+}
+
+.tut-btn.tut-btn-secondary:hover {
+    background: #d2d7ec;
+}
+
+.tut-footer {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.72rem;
+    color: #6a7390;
+}
+
+.tut-progress {
+    white-space: nowrap;
+}
+
+.tut-skip {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.72rem;
+    color: #6a7390;
+    text-decoration: underline;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.tut-skip:hover {
+    color: #333c5c;
+}
+
+.tut-exit {
+    margin-left: auto;
+    background: none;
+    border: none;
+    padding: 0 2px;
+    font-size: 0.95rem;
+    color: #6a7390;
+    cursor: pointer;
+}
+
+.tut-exit:hover {
+    color: #c04040;
+}
+
+/* bubble arrow: a rotated square poking out of the bubble edge */
+.tut-arrow {
+    position: fixed;
+    width: 14px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    transform: rotate(45deg);
+    pointer-events: none;
+    box-shadow: 0 6px 24px rgba(10, 15, 35, 0.15);
+}
+
+/* ---- Donatella avatar / hero ---- */
+
+.tut-avatar {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid #b9a2e8;
+    background: linear-gradient(135deg, #d8b45a, #9a6b30);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+
+.tut-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.tut-hero {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(430px, calc(100vw - 40px));
+    background: rgba(255, 255, 255, 0.96);
+    color: #1c2333;
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(10, 15, 35, 0.45);
+    padding: 22px;
+    pointer-events: auto;
+    text-align: center;
+}
+
+.tut-hero-image {
+    width: 150px;
+    height: 150px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid #b9a2e8;
+    background: linear-gradient(135deg, #d8b45a, #9a6b30);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff8ea;
+    font-weight: 700;
+}
+
+.tut-hero-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.tut-hero-image .tut-placeholder-emoji {
+    font-size: 52px;
+    line-height: 1;
+}
+
+.tut-hero-image .tut-placeholder-caption {
+    font-size: 0.8rem;
+    margin-top: 6px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.tut-hero .tut-quip {
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+}
+
+.tut-hero .tut-text {
+    font-size: 1.05rem;
+}
+
+.tut-hero .tut-actions {
+    justify-content: center;
+    margin-top: 14px;
+}
+
+.tut-hero .tut-footer {
+    justify-content: center;
+}
+
+/* ---- highlight ring (element / world anchor) ---- */
+
+.tut-ring {
+    position: fixed;
+    border-radius: 10px;
+    pointer-events: none;
+    box-shadow: 0 0 0 3px rgba(255, 214, 0, 0.9), 0 0 18px 6px rgba(255, 214, 0, 0.45);
+    animation: tut-ring-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tut-ring-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(255, 214, 0, 0.9), 0 0 18px 6px rgba(255, 214, 0, 0.45); }
+    50% { box-shadow: 0 0 0 5px rgba(255, 214, 0, 0.75), 0 0 26px 10px rgba(255, 214, 0, 0.3); }
+}
+
+/* ---- lobby entry button ---- */
+
+.tutorial-entry {
+    margin: 24px 0 0;
+    text-align: center;
+}
+
+.tutorial-entry .tut-lobby-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 26px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    color: #ffffff;
+    background: linear-gradient(135deg, #9a6b30, #764ba2);
+    box-shadow: 0 4px 14px rgba(60, 30, 90, 0.35);
+    transition: transform 0.15s ease;
+}
+
+.tutorial-entry .tut-lobby-btn:hover {
+    transform: translateY(-2px);
+}
+
+.tutorial-entry .tut-lobby-hint {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: #666;
+}

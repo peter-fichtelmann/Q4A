@@ -367,6 +367,15 @@ input:focus, select:focus {
     opacity: 0.6;
 }
 
+.player-card.drag-ghost {
+    position: fixed;
+    z-index: 1500;
+    margin: 0;
+    pointer-events: none;
+    opacity: 0.85;
+    box-shadow: 0 8px 20px rgba(20, 30, 60, 0.35);
+}
+
 .player-name-input {
     width: 100%;
     border: 1px solid #6a7899;

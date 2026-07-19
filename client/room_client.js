@@ -73,6 +73,9 @@ function applyRoomState(players, slots) {
     roomPlayers = players;
     roomSlots = slots;
     renderBoard();
+    document.dispatchEvent(new CustomEvent('q4a:room_state', {
+        detail: { players, slots, playerId: currentPlayerId }
+    }));
 }
 
 function renderBoard() {
@@ -99,19 +102,6 @@ function renderBoard() {
         .filter((slotId) => slotId.startsWith('team_b_'))
         .sort()
         .forEach((slotId) => teamBEl.appendChild(buildSlotElement(slotId, playersById)));
-
-    spectatorEl.addEventListener('dragover', (event) => {
-        event.preventDefault();
-        spectatorEl.classList.add('slot-hover');
-    });
-    spectatorEl.addEventListener('dragleave', () => spectatorEl.classList.remove('slot-hover'));
-    spectatorEl.addEventListener('drop', (event) => {
-        event.preventDefault();
-        spectatorEl.classList.remove('slot-hover');
-        const draggedPlayerId = event.dataTransfer.getData('text/plain');
-        if (draggedPlayerId !== currentPlayerId) return;
-        setPlayerSlot(null);
-    });
 
     const slottedPlayerIds = new Set(Object.values(roomSlots).filter((pid) => pid));
     roomPlayers
@@ -145,23 +135,6 @@ function buildSlotElement(slotId, playersById) {
         wrapper.appendChild(empty);
     }
 
-    wrapper.addEventListener('dragover', (event) => {
-        event.preventDefault();
-        wrapper.classList.add('slot-hover');
-    });
-    wrapper.addEventListener('dragleave', () => wrapper.classList.remove('slot-hover'));
-    wrapper.addEventListener('drop', (event) => {
-        event.preventDefault();
-        wrapper.classList.remove('slot-hover');
-        const draggedPlayerId = event.dataTransfer.getData('text/plain');
-        if (draggedPlayerId !== currentPlayerId) return;
-        if (roomSlots[slotId] && roomSlots[slotId] !== draggedPlayerId) {
-            updateStatus('That slot is already occupied.', 'error');
-            return;
-        }
-        setPlayerSlot(slotId);
-    });
-
     return wrapper;
 }
 
@@ -171,7 +144,6 @@ function buildPlayerCard(player) {
     if (player.id === currentPlayerId) card.classList.add('me');
 
     const draggable = player.id === currentPlayerId;
-    card.draggable = draggable;
 
     if (draggable) {
         const nameInput = document.createElement('input');
@@ -208,14 +180,115 @@ function buildPlayerCard(player) {
     }
 
     if (draggable) {
-        card.addEventListener('dragstart', (event) => {
-            event.dataTransfer.setData('text/plain', player.id);
-            card.classList.add('dragging');
-        });
-        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('pointerdown', (event) => beginCardDrag(event, card));
     }
 
     return card;
+}
+
+// --- Pointer-based drag and drop (works with both mouse and touch) ---
+
+const DRAG_THRESHOLD_PX = 6;
+let dragState = null;
+
+function beginCardDrag(event, card) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (event.target.closest('.player-name-input')) return;
+    if (dragState) return;
+    event.preventDefault();
+
+    const rect = card.getBoundingClientRect();
+    dragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        width: rect.width,
+        card,
+        ghost: null,
+        active: false,
+        dropTarget: null
+    };
+    window.addEventListener('pointermove', onCardDragMove);
+    window.addEventListener('pointerup', onCardDragEnd);
+    window.addEventListener('pointercancel', onCardDragCancel);
+}
+
+function onCardDragMove(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    if (!dragState.active) {
+        const dist = Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY);
+        if (dist < DRAG_THRESHOLD_PX) return;
+        activateCardDrag();
+    }
+    positionDragGhost(event.clientX, event.clientY);
+    updateDropTarget(findDropTargetAt(event.clientX, event.clientY));
+}
+
+function activateCardDrag() {
+    const ghost = dragState.card.cloneNode(true);
+    ghost.classList.add('drag-ghost');
+    ghost.classList.remove('dragging');
+    ghost.style.width = `${dragState.width}px`;
+    document.body.appendChild(ghost);
+    dragState.ghost = ghost;
+    dragState.active = true;
+    dragState.card.classList.add('dragging');
+}
+
+function positionDragGhost(clientX, clientY) {
+    if (!dragState.ghost) return;
+    dragState.ghost.style.left = `${clientX - dragState.offsetX}px`;
+    dragState.ghost.style.top = `${clientY - dragState.offsetY}px`;
+}
+
+function findDropTargetAt(clientX, clientY) {
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el) return null;
+    return el.closest('.slot-box[data-slot-id]') || el.closest('#spectatorDropzone');
+}
+
+function updateDropTarget(target) {
+    if (dragState.dropTarget === target) return;
+    if (dragState.dropTarget) dragState.dropTarget.classList.remove('slot-hover');
+    dragState.dropTarget = target;
+    if (target) target.classList.add('slot-hover');
+}
+
+function onCardDragEnd(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const wasActive = dragState.active;
+    const target = wasActive ? findDropTargetAt(event.clientX, event.clientY) : null;
+    cleanupCardDrag();
+    if (!target) return;
+
+    if (target.id === 'spectatorDropzone') {
+        setPlayerSlot(null);
+        return;
+    }
+    const slotId = target.dataset.slotId;
+    if (roomSlots[slotId] === currentPlayerId) return;
+    if (roomSlots[slotId]) {
+        updateStatus('That slot is already occupied.', 'error');
+        return;
+    }
+    setPlayerSlot(slotId);
+}
+
+function onCardDragCancel(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    cleanupCardDrag();
+}
+
+function cleanupCardDrag() {
+    window.removeEventListener('pointermove', onCardDragMove);
+    window.removeEventListener('pointerup', onCardDragEnd);
+    window.removeEventListener('pointercancel', onCardDragCancel);
+    if (dragState.ghost) dragState.ghost.remove();
+    if (dragState.dropTarget) dragState.dropTarget.classList.remove('slot-hover');
+    dragState.card.classList.remove('dragging');
+    dragState = null;
 }
 
 function updatePlayerName(name) {
