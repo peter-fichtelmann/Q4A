@@ -496,7 +496,7 @@ const sections = [
                     retry: { hint: 'You picked it up — leave it and let them foul.' },
                 },
                 success: {
-                    text: ['3rd DodgeballInterference! Back to hoops for them,', 'and ball turnovers to us.'],
+                    text: ['3rd DodgeballInterference! Back to hoops', 'for them, and ball turnovers to us.'],
                     quip: QUIPS.meow,
                 },
             },
