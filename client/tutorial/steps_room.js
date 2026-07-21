@@ -119,7 +119,13 @@ const sections = [
                 },
                 check: (ctx) => {
                     const player = myPlayer();
-                    return Boolean(player && ctx.initialName !== null && player.name !== ctx.initialName);
+                    if (!player) return false;
+                    // Pass when the name changed this visit, OR the trainee already
+                    // has a custom (non-default "player N") name — the case when
+                    // they walked back here from a later section.
+                    const changed = ctx.initialName !== null && player.name !== ctx.initialName;
+                    const custom = player.name && !/^player \d+$/i.test(player.name.trim());
+                    return Boolean(changed || custom);
                 },
                 hint: { afterMs: 12000, text: 'Click the name field inside your card.' },
                 success: {

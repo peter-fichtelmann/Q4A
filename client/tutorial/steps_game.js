@@ -2,7 +2,7 @@
 // Talks to the server's TutorialDirector via {type:'tutorial_step'} messages
 // and listens for tutorial_event messages (success / progress / role_change).
 
-import { runSections, clearState } from './engine.js';
+import { runSections, clearState, saveState } from './engine.js';
 import { clearAll } from './bubble_engine.js';
 import { QUIPS } from './donatella.js';
 import * as A from './anchors.js';
@@ -30,6 +30,22 @@ const context = {
     onTutorialEvent(handler) {
         eventListeners.add(handler);
         return () => eventListeners.delete(handler);
+    },
+    // ‹ / ‹‹ from the first section of this page walk back onto the room page.
+    // The tutorial room keeps running; pressing Start there returns here (the
+    // server treats an already-started room's Start as an idempotent no-op).
+    crossPageBack(sectionId, position) {
+        const params = new URLSearchParams(window.location.search);
+        const room = params.get('room');
+        const player = params.get('player');
+        saveState({ active: true, section: sectionId, step: position });
+        const query = new URLSearchParams({
+            room_id: room || '',
+            player_id: player || '',
+            creator: '1',
+            tutorial: '1',
+        });
+        window.location.href = `/room?${query.toString()}`;
     },
 };
 
@@ -174,7 +190,10 @@ const sections = [
                 scenario: 'idle_all',
                 anchor: () => traineeRect(1.2),
                 quip: QUIPS.surroundings,
-                text: ['See the yellow ring? That is you.', 'The white headband marks you as a chaser.'],
+                text: [
+                    'See the yellow ring? That is you.', 
+                    // 'The white headband marks you as a chaser.'
+                ],
                 interaction: 'next',
             },
             // {
@@ -219,7 +238,7 @@ const sections = [
                 interaction: 'server',
                 hint: { afterMs: 15000, text: 'Head right at a hoop — something will stop you.' },
                 success: {
-                    text: ['Bounced off an invisible wall! Chasers may', 'never block the space before their own hoops.'],
+                    text: ['Bounced off an invisible wall! Chasers may', 'never block their own hoops from both sides.'],
                 },
             },
             {
@@ -319,20 +338,20 @@ const sections = [
                 anchor: () => lineupPlayerRect('chaser'),
                 extraHighlight: () => [lineupPlayerRect('keeper'), lineupPlayerRect('beater')].filter(Boolean),
                 quip: QUIPS.stepByStep,
-                text: ['Now you see the small rectangular headbands.', 'Each position a different color'],
+                text: ['Now you see the small rectangular headbands.', 'Each position a one color.'],
                 interaction: 'next',
             },
             {
                 id: 'lineup_chasers',
                 anchor: () => volleyballRect(),
-                text: ['White band: chasers — they score goals.', '3 chasers per team, 1 pale volleyball for all'],
+                text: ['White band: chasers — they score goals.', '3 chasers per team, 1 pale volleyball for all.'],
                 interaction: 'next',
             },
             {
                 id: 'lineup_beaters',
                 anchor: () => dodgeballRects()[0] || null,
                 extraHighlight: () => dodgeballRects().slice(1),
-                text: ['Black band: beaters — they throw dodgeballs.', '2 beaters per team, 3 red dodgeballs in total'],
+                text: ['Black band: beaters — they throw dodgeballs.', '2 beaters per team, 3 red dodgeballs in total.'],
                 interaction: 'next',
             },
             {
@@ -383,7 +402,7 @@ const sections = [
                 scenario: 'lineup',
                 anchor: () => lineupPlayerRect('keeper'),
                 quip: QUIPS.stepByStep,
-                text: ['Green headband: the keeper.', 'Guards the hoops and handles dead balls.'],
+                text: ['Green headband: the keeper.', 'A chaser with superpowers.'],
                 interaction: 'next',
             },
             {
@@ -434,9 +453,8 @@ const sections = [
                 id: 'delay_of_game',
                 scenario: 'delay_demo',
                 anchor: () => midlineRect(),
-                extraHighlight: () => volleyballRect(),
                 quip: QUIPS.surroundings,
-                text: ['The midline splits the pitch — and you hold', 'the ball in our half. Stand still and watch…'],
+                text: ['The midline splits the pitch. Stand still and watch…'],
                 interaction: 'server',
                 progressUpdates: {
                     delay_ticking: {
@@ -460,7 +478,7 @@ const sections = [
                 interaction: 'server',
                 hint: { afterMs: 15000, text: 'Face the closest red line and throw.' },
                 success: {
-                    text: ['Out! They inbound it with a free path.', 'Only volleyballs are inbounded, never dodgeballs.'],
+                    text: ['Out! They inbound and you cannot come to close.', 'Only volleyballs are inbounded, never dodgeballs.'],
                 },
             },
             {
@@ -473,12 +491,12 @@ const sections = [
                 onEnter: (ctx) => { ctx.thirdDodgeballId = null; },
                 progressUpdates: {
                     ball_dumped: {
-                        text: ['Dumped at their own hoops — that is no beat', 'attempt. Only a real beat earns the third ball.'],
+                        text: ['That was no beat.', 'Only a real beat earns the third ball.'],
                     },
                     retry: { hint: 'You picked it up — leave it and let them foul.' },
                 },
                 success: {
-                    text: ['Interference! Back to hoops for them,', 'and every ball turns over to us.'],
+                    text: ['3rd DodgeballInterference! Back to hoops for them,', 'and ball turnovers to us.'],
                     quip: QUIPS.meow,
                 },
             },
@@ -527,8 +545,11 @@ whenReady(() => {
     const state = A.state();
     context.isTouch = state.isTouchDevice;
     state.gameSocket.addEventListener('message', handleSocketMessage);
-    runSections(sections, context).then(() => {
-        clearState();
-        clearAll();
+    runSections(sections, context).then((result) => {
+        // Do not wipe saved progress when we are navigating back to the room page.
+        if (result !== 'navigating') {
+            clearState();
+            clearAll();
+        }
     });
 });

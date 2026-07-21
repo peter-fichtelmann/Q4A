@@ -627,6 +627,22 @@ async def websocket_lobby(websocket: WebSocket):
                     await websocket.send_json({"type": "start_failed", "error": "Room not found"})
                 elif requester_player_id != getattr(room, "creator_player_id", None):
                     await websocket.send_json({"type": "start_failed", "error": "Only the room creator can start the game"})
+                elif getattr(room, "game_started", False):
+                    # Idempotent re-start: the game is already running (e.g. the tutorial
+                    # navigated back to the room page and pressed Start again). Do NOT
+                    # re-initialize entities/logic — just hand the client back to the game.
+                    for cid, ws in list(room.lobby_connections.items()):
+                        pids = [pid for pid, mapped_cid in room.player_to_client.items() if mapped_cid == cid]
+                        pid = pids[0] if pids else None
+                        try:
+                            await ws.send_json({
+                                "type": "start_successful",
+                                "room_id": room_id,
+                                "player_id": pid,
+                                "players": list(room.players.values()),
+                            })
+                        except Exception:
+                            pass
                 else:
                     # Ensure the creator has a player entry; create one if missing
                     creator_player_id = None

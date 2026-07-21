@@ -223,20 +223,40 @@ function runStep(step, context, progress) {
 /**
  * Run a list of sections on the current page.
  * sections: [{id, steps, onSkip?}]
- * Returns 'finished' | 'exit'.
+ * context.crossPageBack?: (sectionId, position) => void  — navigate to a section
+ *   hosted on another page (position: 0 for its first step, 'last' for its last).
+ * Returns 'finished' | 'exit' | 'navigating'.
  */
 export async function runSections(sections, context) {
     const saved = loadState() || {};
+    // Where this page's sections sit in the whole-tutorial order, so we know
+    // whether an earlier section lives on a *different* page.
+    const firstGlobalIndex = SECTION_ORDER.indexOf(sections[0].id);
+    const canCrossBack = firstGlobalIndex > 0 && typeof context.crossPageBack === 'function';
+
     let sectionIndex = 0;
     let startStep = 0;
     if (saved.section) {
         const found = sections.findIndex((section) => section.id === saved.section);
         if (found >= 0) {
             sectionIndex = found;
-            startStep = saved.step || 0;
+            // 'last' resumes at the final step of that section (used when a ‹ from
+            // the next page walks back into this section's end).
+            startStep = (saved.step === 'last')
+                ? Math.max(0, sections[found].steps.length - 1)
+                : (saved.step || 0);
         } else if (SECTION_ORDER.indexOf(saved.section) > SECTION_ORDER.indexOf(sections[sections.length - 1].id)) {
             return 'finished'; // saved progress is beyond this page's sections
         }
+    }
+
+    // Jump to the previous section, crossing to the previous page when this is
+    // the first section on the current page. Returns true if navigation started.
+    function goToPreviousSection(atLastStep) {
+        if (sectionIndex > 0) return false; // handled in-page by the caller
+        if (!canCrossBack) return false;
+        context.crossPageBack(SECTION_ORDER[firstGlobalIndex - 1], atLastStep ? 'last' : 0);
+        return true;
     }
 
     let stepIndex = startStep;
@@ -254,8 +274,9 @@ export async function runSections(sections, context) {
             continue;
         }
         if (stepIndex < 0) {
-            // Walk back into the previous section on this page, or stay put.
+            // Walk back into the previous section on this page, or off the page.
             if (sectionIndex === 0) {
+                if (goToPreviousSection(true)) return 'navigating';
                 stepIndex = 0;
                 direction = 1;
                 continue;
@@ -265,10 +286,11 @@ export async function runSections(sections, context) {
             continue;
         }
 
-        // Only the very first step of the page has nothing to go back to.
-        context.hasPrevStep = !(sectionIndex === 0 && stepIndex === 0);
-        // ‹‹ needs an earlier section that lives on this page.
-        context.hasPrevSection = sectionIndex > 0;
+        // ‹ is available unless we are at the very first step of the whole
+        // tutorial; ‹‹ unless we are already in its first section. Both may
+        // cross to an earlier page when this page hosts a later section.
+        context.hasPrevStep = !(sectionIndex === 0 && stepIndex === 0) || canCrossBack;
+        context.hasPrevSection = sectionIndex > 0 || canCrossBack;
 
         const step = section.steps[stepIndex];
         saveState({ active: true, section: section.id, step: stepIndex });
@@ -281,15 +303,22 @@ export async function runSections(sections, context) {
             return 'exit';
         }
         if (result === 'prev') {
-            direction = -1;
-            stepIndex -= 1;
+            if (sectionIndex === 0 && stepIndex === 0) {
+                if (goToPreviousSection(true)) return 'navigating';
+            } else {
+                direction = -1;
+                stepIndex -= 1;
+            }
             continue;
         }
         if (result === 'prev-section') {
-            // Restart the previous section from its first step.
-            sectionIndex -= 1;
-            stepIndex = 0;
-            direction = 1;
+            if (sectionIndex === 0) {
+                if (goToPreviousSection(false)) return 'navigating';
+            } else {
+                sectionIndex -= 1;
+                stepIndex = 0;
+                direction = 1;
+            }
             continue;
         }
         if (result === 'done-silent') {

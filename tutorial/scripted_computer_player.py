@@ -120,7 +120,7 @@ class ScriptedComputerPlayer(ComputerPlayer):
         """One CPU strolls back and forth along waypoints (used as tackle/beat target)."""
         walker_id = self.mode_kwargs.get('walker_id')
         waypoints = self.mode_kwargs.get('waypoints', [])
-        speed = self.mode_kwargs.get('speed', 0.3)  # slow stroll so the trainee can catch/hit them
+        speed = self.mode_kwargs.get('speed', 0.25)  # slow stroll so the trainee can catch/hit them
         self._stop_all_except({walker_id})
         walker = self._get_player(walker_id)
         if walker is None or not waypoints or walker.is_knocked_out:
@@ -134,7 +134,7 @@ class ScriptedComputerPlayer(ComputerPlayer):
         """One enemy beater hunts the trainee with a dodgeball until the trainee is beaten."""
         beater_id = self.mode_kwargs.get('beater_id')
         trainee_id = self.mode_kwargs.get('trainee_id')
-        throw_range = self.mode_kwargs.get('throw_range', 6.0)
+        throw_range = self.mode_kwargs.get('throw_range', 3.0)
         self._stop_all_except({beater_id})
         beater = self._get_player(beater_id)
         trainee = self._get_player(trainee_id)
@@ -262,7 +262,7 @@ class ScriptedComputerPlayer(ComputerPlayer):
         until that attempt failed.
         """
         cheater_id = self.mode_kwargs.get('cheater_id')
-        delay = self.mode_kwargs.get('delay', 2.0 * Config.GAME_TIME_TO_REAL_TIME_RATIO)
+        delay = self.mode_kwargs.get('delay', 4.0 * Config.GAME_TIME_TO_REAL_TIME_RATIO)
         self._stop_all_except({cheater_id})
         cheater = self._get_player(cheater_id)
         if cheater is None or cheater.is_knocked_out:

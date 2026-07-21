@@ -308,7 +308,7 @@ class TutorialDirector:
         # chaser's x to exactly hoop.x +/- margin while they push against it.
         margin = trainee.radius + volleyball.radius
         for hoop in self._own_hoops(trainee.team):
-            if (abs(trainee.position.x - hoop.position.x) <= margin + 0.05
+            if (abs(trainee.position.x - hoop.position.x) <= margin + 0.1
                     and abs(trainee.position.y - hoop.position.y) < hoop.radius + trainee.radius):
                 return self._success()
         return []
@@ -460,7 +460,7 @@ class TutorialDirector:
             if self.state.dodgeballs:
                 self._give_ball(beater, self.state.dodgeballs[0])
             # Hold fire until the trainee closes 1 m nearer than the default range.
-            self._set_ai('throw_at_trainee', beater_id=beater.id, trainee_id=trainee.id, throw_range=5.0)
+            self._set_ai('throw_at_trainee', beater_id=beater.id, trainee_id=trainee.id, throw_range=3.0)
         return events
 
     def _check_get_beaten(self):
@@ -488,12 +488,12 @@ class TutorialDirector:
         pitch_width = self.state.boundaries_y[1]
         # Deep inside the own keeper zone, with the beaters posted just outside it.
         if trainee.team == self.state.team_0:
-            zone_x, outside_x = self.state.keeper_zone_x_0, self.state.keeper_zone_x_0 + 5
+            zone_x, outside_x = self.state.keeper_zone_x_0, self.state.keeper_zone_x_0 + 2.5
         else:
-            zone_x, outside_x = self.state.keeper_zone_x_1, self.state.keeper_zone_x_1 - 5
+            zone_x, outside_x = self.state.keeper_zone_x_1, self.state.keeper_zone_x_1 - 2.5
         self._teleport(trainee, (zone_x + self.state.hoops[f'hoop_{trainee.team}_center'].position.x) / 2, pitch_width / 2)
         for index, beater in enumerate(beaters):
-            self._teleport(beater, outside_x, pitch_width / 2 + (4 if index else -4))
+            self._teleport(beater, outside_x, pitch_width / 2 + (2 if index else -2))
             if index < len(self.state.dodgeballs):
                 self._give_ball(beater, self.state.dodgeballs[index])
         self._set_ai('barrage_trainee', beater_ids=[b.id for b in beaters], trainee_id=trainee.id)
@@ -599,18 +599,18 @@ class TutorialDirector:
         self._park_others(active)
         # The trainee watches from a distance: the free dodgeball is legally
         # theirs, and collecting it would end the situation before the foul.
-        self._teleport(trainee, 24, 16.5)
+        self._teleport(trainee, 4, 16.5)
         if cheater is not None:
-            self._teleport(cheater, 34, 16.5)
+            self._teleport(cheater, 34, 4)
             if len(self.state.dodgeballs) > 0:
                 self._give_ball(cheater, self.state.dodgeballs[0])
             self._baseline['cheater_id'] = cheater.id
         if partner is not None:
-            self._teleport(partner, 38, 21)
+            self._teleport(partner, 42, 20)
             if len(self.state.dodgeballs) > 1:
                 self._give_ball(partner, self.state.dodgeballs[1])
         if len(self.state.dodgeballs) > 2:
-            self._free_ball(self.state.dodgeballs[2], 34, 12)
+            self._free_ball(self.state.dodgeballs[2], 35, 25)
         if cheater is not None:
             self._set_ai('third_dodgeball_cheat', cheater_id=cheater.id)
         else:
