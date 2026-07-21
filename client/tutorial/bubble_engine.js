@@ -1,11 +1,23 @@
 // Speech-bubble engine: positioned bubbles with pointing arrows, highlight
-// rings, and centered hero cards. Bubble positions are recomputed every
-// animation frame so they can track moving anchors (canvas entities).
+// rings, and centered hero cards.
+//
+// A bubble is placed once and then STAYS PUT: it settles for a short window
+// (long enough for the server to teleport entities into their scenario spots),
+// picks the best free position, and freezes there. It deliberately does not
+// follow moving players/balls — only the highlight ring tracks them. Placement
+// is redone on resize/fullscreen changes, where old coordinates are meaningless.
 
 import { avatarEl, heroImageEl } from './donatella.js';
 
-const MARGIN = 8;       // min distance to viewport edges
-const GAP = 16;         // distance between anchor and bubble (leaves room for arrow)
+const MARGIN = 8;           // min distance to viewport edges
+const GAP_LARGE = 16;       // distance between anchor and bubble (leaves room for arrow)
+const GAP_SMALL = 10;
+const SETTLE_MS = 700;      // keep re-placing this long before freezing
+
+// Kept in sync with the small-screen media query in tutorial.css.
+export function isSmallScreen() {
+    return window.innerWidth <= 700 || window.innerHeight <= 520;
+}
 
 let layer = null;
 
@@ -32,6 +44,13 @@ function overlapArea(a, b) {
     return (w > 0 && h > 0) ? w * h : 0;
 }
 
+function centerInside(rect, container) {
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    return cx >= container.left && cx <= container.left + container.width &&
+        cy >= container.top && cy <= container.top + container.height;
+}
+
 /**
  * Show a speech bubble.
  *
@@ -43,7 +62,8 @@ function overlapArea(a, b) {
  *   progress: optional string ("Section 2/4 · Step 1/5")
  *   onSkipStep / onSkipSection / onExit: optional callbacks (footer links)
  *   getAnchorRect: () => rect|null  (viewport coords; null → centered bubble)
- *   getObstacles: optional () => rect[]  (placement avoids covering these)
+ *   getObstacles: optional () => rect[]  (placement prefers not to cover these)
+ *   getCriticalRects: optional () => rect[]  (placement must not cover these, e.g. the player)
  *
  * Returns handle {el, setHint(text), setText(lines, quip), close()}.
  */
@@ -128,83 +148,200 @@ export function showBubble(options) {
     layer.appendChild(bubble);
 
     let closed = false;
+    let rafId = null;
+    let settleDeadline = null;   // set once the anchor first resolves
+    let placement = null;        // frozen geometry: {side, left, top, width, height, ax, ay}
 
-    function place() {
-        if (closed) return;
+    function positionArrow(side, left, top, bw, bh, ax, ay) {
+        arrow.style.display = '';
+        const arrowHalf = (arrow.offsetWidth || 14) / 2;
+        let arrowLeft, arrowTop;
+        if (side === 'top' || side === 'bottom') {
+            arrowLeft = Math.max(left + 10, Math.min(left + bw - 10 - 2 * arrowHalf, ax - arrowHalf));
+            arrowTop = side === 'top' ? top + bh - arrowHalf : top - arrowHalf;
+        } else {
+            arrowTop = Math.max(top + 10, Math.min(top + bh - 10 - 2 * arrowHalf, ay - arrowHalf));
+            arrowLeft = side === 'right' ? left - arrowHalf : left + bw - arrowHalf;
+        }
+        arrow.style.left = `${arrowLeft}px`;
+        arrow.style.top = `${arrowTop}px`;
+    }
+
+    /**
+     * Re-fit a frozen bubble after its content (and therefore height) changed,
+     * without re-running placement — it must stay where it was put. Bubbles
+     * sitting above their anchor keep their bottom edge so they never grow
+     * downward over it.
+     */
+    function refit() {
+        if (closed || !placement) return;
+        const bw = bubble.offsetWidth;
+        const bh = bubble.offsetHeight;
+        if (!bw || !bh) return;
+        let left = placement.left;
+        let top = placement.top;
+        if (placement.side === 'center') {
+            left = (window.innerWidth - bw) / 2;
+            top = (window.innerHeight - bh) / 2;
+        } else if (placement.side === 'top') {
+            top -= (bh - placement.height);              // keep the bottom edge off the anchor
+        } else if (placement.side === 'left' || placement.side === 'right') {
+            top -= (bh - placement.height) / 2;          // stay vertically centered on the anchor
+        }
+        left = Math.max(MARGIN, Math.min(window.innerWidth - bw - MARGIN, left));
+        top = Math.max(MARGIN, Math.min(window.innerHeight - bh - MARGIN, top));
+        bubble.style.left = `${left}px`;
+        bubble.style.top = `${top}px`;
+        placement = { ...placement, left, top, width: bw, height: bh };
+        if (options.getAnchorRect) {
+            positionArrow(placement.side, left, top, bw, bh, placement.ax, placement.ay);
+        }
+    }
+
+    function applyPlacement() {
         const anchor = options.getAnchorRect ? options.getAnchorRect() : null;
         const bw = bubble.offsetWidth;
         const bh = bubble.offsetHeight;
         const vw = window.innerWidth;
         const vh = window.innerHeight;
+        if (!bw || !bh) return false; // not laid out yet
 
-        if (!anchor) {
+        if (!options.getAnchorRect) {
             arrow.style.display = 'none';
-            bubble.style.left = `${Math.max(MARGIN, (vw - bw) / 2)}px`;
-            bubble.style.top = `${Math.max(MARGIN, (vh - bh) / 2)}px`;
-            requestAnimationFrame(place);
-            return;
+            const left = Math.max(MARGIN, (vw - bw) / 2);
+            const top = Math.max(MARGIN, (vh - bh) / 2);
+            bubble.style.left = `${left}px`;
+            bubble.style.top = `${top}px`;
+            placement = { side: 'center', left, top, width: bw, height: bh, ax: 0, ay: 0 };
+            return true;
         }
+        if (!anchor) return false; // anchor not available yet — keep waiting
 
+        const gap = isSmallScreen() ? GAP_SMALL : GAP_LARGE;
         const ax = anchor.left + anchor.width / 2;
         const ay = anchor.top + anchor.height / 2;
+        const right = anchor.left + anchor.width;
+        const bottom = anchor.top + anchor.height;
 
+        // Sides first (arrow points cleanly), then diagonals as fallbacks so a
+        // crowded pitch still offers somewhere that covers nothing important.
         const candidates = [
-            { side: 'top', left: ax - bw / 2, top: anchor.top - GAP - bh, bonus: 3 },
-            { side: 'bottom', left: ax - bw / 2, top: anchor.top + anchor.height + GAP, bonus: 2 },
-            { side: 'right', left: anchor.left + anchor.width + GAP, top: ay - bh / 2, bonus: 1 },
-            { side: 'left', left: anchor.left - GAP - bw, top: ay - bh / 2, bonus: 1 },
+            { side: 'top', left: ax - bw / 2, top: anchor.top - gap - bh, bonus: 3 },
+            { side: 'bottom', left: ax - bw / 2, top: bottom + gap, bonus: 2 },
+            { side: 'right', left: right + gap, top: ay - bh / 2, bonus: 1 },
+            { side: 'left', left: anchor.left - gap - bw, top: ay - bh / 2, bonus: 1 },
+            { side: 'top', left: anchor.left - gap - bw, top: anchor.top - gap - bh, bonus: 0 },
+            { side: 'top', left: right + gap, top: anchor.top - gap - bh, bonus: 0 },
+            { side: 'bottom', left: anchor.left - gap - bw, top: bottom + gap, bonus: 0 },
+            { side: 'bottom', left: right + gap, top: bottom + gap, bonus: 0 },
         ];
 
+        // Last resort: park in a viewport corner. Negative bonus means these are
+        // only chosen when every spot near the anchor would cover something.
+        for (const corner of [
+            { left: MARGIN, top: MARGIN },
+            { left: vw - bw - MARGIN, top: MARGIN },
+            { left: MARGIN, top: vh - bh - MARGIN },
+            { left: vw - bw - MARGIN, top: vh - bh - MARGIN },
+        ]) {
+            candidates.push({
+                side: (corner.top + bh / 2 < ay) ? 'top' : 'bottom',
+                left: corner.left,
+                top: corner.top,
+                bonus: -1,
+            });
+        }
+
         const obstacles = options.getObstacles ? options.getObstacles() : [];
+        // When the bubble points AT the player, the anchor gap already keeps it
+        // clear — otherwise the constraint would fight the anchor and saturate.
+        const critical = (options.getCriticalRects ? options.getCriticalRects() : [])
+            .filter((rect) => !centerInside(rect, anchor));
+        const bubbleArea = Math.max(1, bw * bh);
+
         let best = null;
         for (const candidate of candidates) {
             const clampedLeft = Math.max(MARGIN, Math.min(vw - bw - MARGIN, candidate.left));
             const clampedTop = Math.max(MARGIN, Math.min(vh - bh - MARGIN, candidate.top));
             const clampPenalty = Math.abs(clampedLeft - candidate.left) + Math.abs(clampedTop - candidate.top);
             const rect = { left: clampedLeft, top: clampedTop, width: bw, height: bh };
-            let obstaclePenalty = 0;
-            for (const obstacle of obstacles) {
-                obstaclePenalty += overlapArea(rect, obstacle);
+
+            // Never sit on the player or the highlighted element.
+            let hardPenalty = rectsOverlap(rect, anchor) ? 5000 : 0;
+            for (const criticalRect of critical) {
+                if (rectsOverlap(rect, criticalRect)) hardPenalty += 5000;
             }
-            const anchorPenalty = rectsOverlap(rect, anchor) ? 5000 : 0;
-            const score = candidate.bonus - clampPenalty * 2 - obstaclePenalty * 0.05 - anchorPenalty;
+            // Prefer covering as little else (other players, balls, scorebug) as possible.
+            let softPenalty = 0;
+            for (const obstacle of obstacles) {
+                softPenalty += (overlapArea(rect, obstacle) / bubbleArea) * 400;
+            }
+
+            const score = candidate.bonus - clampPenalty * 2 - softPenalty - hardPenalty;
             if (!best || score > best.score) {
-                best = { ...candidate, left: clampedLeft, top: clampedTop, score };
+                best = { side: candidate.side, left: clampedLeft, top: clampedTop, score };
             }
         }
 
         bubble.style.left = `${best.left}px`;
         bubble.style.top = `${best.top}px`;
-
+        placement = { side: best.side, left: best.left, top: best.top, width: bw, height: bh, ax, ay };
         // Arrow sits on the bubble edge facing the anchor, aimed at the anchor center.
-        arrow.style.display = '';
-        const arrowHalf = 7;
-        let arrowLeft, arrowTop;
-        if (best.side === 'top' || best.side === 'bottom') {
-            arrowLeft = Math.max(best.left + 10, Math.min(best.left + bw - 10 - 2 * arrowHalf, ax - arrowHalf));
-            arrowTop = best.side === 'top' ? best.top + bh - arrowHalf : best.top - arrowHalf;
-        } else {
-            arrowTop = Math.max(best.top + 10, Math.min(best.top + bh - 10 - 2 * arrowHalf, ay - arrowHalf));
-            arrowLeft = best.side === 'right' ? best.left - arrowHalf : best.left + bw - arrowHalf;
-        }
-        arrow.style.left = `${arrowLeft}px`;
-        arrow.style.top = `${arrowTop}px`;
-
-        requestAnimationFrame(place);
+        positionArrow(best.side, best.left, best.top, bw, bh, ax, ay);
+        return true;
     }
-    requestAnimationFrame(place);
+
+    function schedule() {
+        if (rafId === null && !closed) rafId = requestAnimationFrame(step);
+    }
+
+    function step() {
+        rafId = null;
+        if (closed) return;
+        const ok = applyPlacement();
+        if (!ok) {
+            schedule(); // anchor/layout not ready yet
+            return;
+        }
+        // Entities may still be settling into their scenario positions; keep
+        // re-placing briefly, then freeze so the bubble stops moving.
+        if (settleDeadline === null) settleDeadline = performance.now() + SETTLE_MS;
+        if (performance.now() < settleDeadline) schedule();
+    }
+    schedule();
+
+    // Old coordinates are meaningless after these — re-place (and re-settle).
+    function replace() {
+        settleDeadline = null;
+        placement = null;
+        schedule();
+    }
+    window.addEventListener('resize', replace);
+    window.addEventListener('orientationchange', replace);
+    document.addEventListener('fullscreenchange', replace);
 
     return {
         el: bubble,
         setHint(text) {
+            const changed = hintEl.textContent !== (text || '');
             hintEl.textContent = text || '';
             hintEl.style.display = text ? '' : 'none';
+            if (changed) refit(); // height changed; keep it in place and on screen
         },
         setText(lines, quip) {
             applyText(lines, quip);
+            refit();
+        },
+        // Deliberate re-placement, e.g. when a step switches to a different anchor.
+        reposition() {
+            replace();
         },
         close() {
             closed = true;
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            window.removeEventListener('resize', replace);
+            window.removeEventListener('orientationchange', replace);
+            document.removeEventListener('fullscreenchange', replace);
             bubble.remove();
             arrow.remove();
         },

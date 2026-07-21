@@ -268,3 +268,67 @@
     font-size: 0.85rem;
     color: #666;
 }
+
+/* ---- small screens: compact bubbles and smaller text ----
+   Breakpoint kept in sync with isSmallScreen() in bubble_engine.js. */
+
+@media (max-width: 700px), (max-height: 520px) {
+    .tut-bubble {
+        max-width: 220px;
+        min-width: 140px;
+        padding: 7px 9px;
+        gap: 7px;
+        border-radius: 9px;
+        line-height: 1.3;
+    }
+
+    .tut-quip { font-size: 0.7rem; margin-bottom: 2px; }
+    .tut-text { font-size: 0.8rem; }
+    .tut-hint { font-size: 0.72rem; margin-top: 4px; }
+
+    .tut-avatar {
+        width: 28px;
+        height: 28px;
+        border-width: 1px;
+        font-size: 15px;
+    }
+
+    .tut-actions { margin-top: 6px; gap: 6px; }
+
+    .tut-btn {
+        padding: 4px 11px;
+        font-size: 0.78rem;
+        border-radius: 5px;
+    }
+
+    .tut-footer { margin-top: 6px; gap: 7px; font-size: 0.62rem; }
+    .tut-skip { font-size: 0.62rem; }
+    .tut-exit { font-size: 0.85rem; }
+
+    .tut-arrow { width: 10px; height: 10px; }
+
+    .tut-hero {
+        width: min(320px, calc(100vw - 24px));
+        padding: 14px;
+        border-radius: 11px;
+    }
+
+    .tut-hero-image {
+        width: 92px;
+        height: 92px;
+        margin-bottom: 8px;
+        border-width: 2px;
+    }
+
+    .tut-hero-image .tut-placeholder-emoji { font-size: 32px; }
+    .tut-hero-image .tut-placeholder-caption { font-size: 0.68rem; margin-top: 3px; }
+    .tut-hero .tut-quip { font-size: 0.8rem; }
+    .tut-hero .tut-text { font-size: 0.88rem; }
+    .tut-hero .tut-actions { margin-top: 10px; }
+
+    /* thinner highlight ring (redefining the keyframes wins over the base rule) */
+    @keyframes tut-ring-pulse {
+        0%, 100% { box-shadow: 0 0 0 2px rgba(255, 214, 0, 0.9), 0 0 12px 4px rgba(255, 214, 0, 0.45); }
+        50% { box-shadow: 0 0 0 3px rgba(255, 214, 0, 0.75), 0 0 18px 7px rgba(255, 214, 0, 0.3); }
+    }
+}

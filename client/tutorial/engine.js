@@ -101,6 +101,7 @@ function runStep(step, context, progress) {
                     quip: resolve(step.success.quip, context),
                     getAnchorRect: currentAnchor ? () => currentAnchor(context) : null,
                     getObstacles: context.getObstacles,
+                    getCriticalRects: context.getCriticalRects,
                     buttons: [{
                         label: 'Continue ›',
                         onClick: () => { successBubble.close(); resolveStep('done'); },
@@ -116,6 +117,7 @@ function runStep(step, context, progress) {
             quip: resolve(step.quip, context),
             progress,
             getObstacles: context.getObstacles,
+            getCriticalRects: context.getCriticalRects,
             onSkipStep: () => {
                 if (step.onSkip) step.onSkip(context);
                 finish('skip-step');
@@ -183,8 +185,11 @@ function runStep(step, context, progress) {
                             bubble.setHint(resolve(update.hint, context));
                         }
                         if (update.anchor) {
+                            // A different element is being pointed at now, so the
+                            // bubble is allowed to move once and settle again.
                             currentAnchor = update.anchor;
                             attachAnchor();
+                            if (bubble.reposition) bubble.reposition();
                         }
                     }
                 }

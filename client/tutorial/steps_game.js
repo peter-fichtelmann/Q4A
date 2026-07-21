@@ -16,6 +16,11 @@ const context = {
     moveAccum: 0,
     lastPos: null,
     getObstacles: () => A.obstacleRects(),
+    // The trainee's own player must never end up under a speech bubble.
+    getCriticalRects: () => {
+        const rect = A.playerRect(A.traineeId(), 2.0);
+        return rect ? [rect] : [];
+    },
     sendScenario(name) {
         const state = A.state();
         if (state && state.gameSocket && state.gameSocket.readyState === WebSocket.OPEN) {
