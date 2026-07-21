@@ -354,7 +354,10 @@ const sections = [
                     },
                 },
                 success: {
-                    text: ['That is hustle! Keep the game flowing', 'or the referee takes the ball away.'],
+                    text: (ctx) => (ctx.outcome === 'turnover'
+                        ? ['Too slow — the referee handed the ball', 'to the other team. That is a delay turnover!']
+                        : ['That is hustle! Keep the game flowing', 'or the referee takes the ball away.']),
+                    quip: (ctx) => (ctx.outcome === 'turnover' ? QUIPS.moving : undefined),
                 },
             },
             {

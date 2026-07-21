@@ -69,6 +69,7 @@ function runStep(step, context, progress) {
             resolveStep('done-silent');
             return;
         }
+        context.outcome = 'default';
         if (step.onEnter) step.onEnter(context);
         if (step.scenario && context.sendScenario) context.sendScenario(step.scenario);
 
@@ -169,6 +170,8 @@ function runStep(step, context, progress) {
                 if (finished) return;
                 if (event.step !== step.scenario) return;
                 if (event.event === 'success') {
+                    // Lets a step's success message vary by how it was completed.
+                    context.outcome = event.outcome || 'default';
                     finish('done');
                 } else if (event.event === 'progress' && step.progressUpdates) {
                     const update = step.progressUpdates[event.detail];

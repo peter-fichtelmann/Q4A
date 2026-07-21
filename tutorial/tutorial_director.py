@@ -264,11 +264,12 @@ class TutorialDirector:
             logger.exception("Tutorial scenario check failed: %s", self.scenario)
             return []
 
-    def _success(self) -> List[dict]:
+    def _success(self, outcome: str = 'default') -> List[dict]:
+        """Complete the active scenario. `outcome` lets the client pick an alternative message."""
         step = self.scenario
         self.scenario = None
         self._set_ai('idle')
-        return [{"type": "tutorial_event", "event": "success", "step": step}]
+        return [{"type": "tutorial_event", "event": "success", "step": step, "outcome": outcome}]
 
     def _progress(self, detail: str) -> dict:
         return {"type": "tutorial_event", "event": "progress", "step": self.scenario, "detail": detail}
@@ -467,6 +468,11 @@ class TutorialDirector:
         volleyball = self.state.volleyball
         if trainee is None or volleyball is None:
             return []
+        # The trainee may dawdle long enough to actually concede the penalty:
+        # the volleyball is then turned over to an opponent and cannot be
+        # recovered, so end the step with the turnover message instead.
+        if self._delay_turnover_conceded(trainee, volleyball):
+            return self._success(outcome='turnover')
         if self._phase == 0:
             limit = self.state.delay_of_game_time_limit or 15
             if volleyball.delay_of_game_timer > limit * 0.25:
@@ -475,6 +481,18 @@ class TutorialDirector:
         elif trainee.position.x > self.state.midline_x:
             return self._success()
         return []
+
+    def _delay_turnover_conceded(self, trainee: Player, volleyball: VolleyBall) -> bool:
+        """True once a delay-of-game penalty has handed the volleyball to the opponents."""
+        warnings = self.state.delay_of_game_warnings.get(trainee.team, 0)
+        if warnings <= self.state.max_delay_of_game_warnings:
+            return False  # no penalty issued yet, only warnings
+        if volleyball.turnover_to_player is not None:
+            receiver = self.state.get_player(volleyball.turnover_to_player)
+            return receiver is not None and receiver.team != trainee.team
+        # The designated opponent may already have collected the ball.
+        holder = self.state.get_player(volleyball.holder_id) if volleyball.holder_id else None
+        return holder is not None and holder.team != trainee.team
 
     def _setup_oob_demo(self):
         events = self._swap_trainee_role(PlayerRole.CHASER)
