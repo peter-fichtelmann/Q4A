@@ -32,7 +32,8 @@ class BoundaryLogic:
         Chasers that stray too close to their team's hoop are pushed back outside
         the protected area. Only applies to non-knocked-out players who are not currently inbounding.
         
-        Protected zone: hoop center ± (player_radius + volleyball_radius)
+        Protected zone: hoop center ± (player_radius + volleyball_radius) in x,
+        hoop center ± (hoop_radius + player_radius) in y
         """
         # Only for players which are not knocked out
         # if player in same team as hoop and within player.radius of the square of hoop thickness and hoop radius
@@ -54,7 +55,10 @@ class BoundaryLogic:
                                         (player.position.x > hoop.position.x - player.radius - volleyball.radius) and (player.position.x < hoop.position.x + player.radius + volleyball.radius)
                                     ):
                                         continue # not close enough own hoops
-                                if (player.position.y < hoop.position.y + hoop.radius) and (player.position.y > hoop.position.y - hoop.radius):
+                                # Include the player radius, like the x margin does: a chaser
+                                # blocks the hoop with their body, not just with their centre.
+                                y_margin = hoop.radius + player.radius
+                                if (player.position.y < hoop.position.y + y_margin) and (player.position.y > hoop.position.y - y_margin):
                                     # reset x position to outside hoop area
                                     if player.position.x < hoop.position.x:
                                         reset_vector = hoop.position.x - player.radius - volleyball.radius - player.position.x
