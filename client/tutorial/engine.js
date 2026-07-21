@@ -1,7 +1,7 @@
 // Tutorial step runner: drives sections/steps defined as data, persists
 // progress across page navigations, and handles skip/exit on every step.
 
-import { showBubble, showHero, showHighlight, clearAll } from './bubble_engine.js';
+import { showBubble, showHero, showHighlight, clearAll, isSmallScreen } from './bubble_engine.js';
 
 const STORAGE_KEY = 'q4a_tutorial';
 
@@ -36,6 +36,10 @@ export function clearState() {
 
 function progressLabel(sectionId, stepIndex, stepCount) {
     const sectionNumber = SECTION_ORDER.indexOf(sectionId) + 1;
+    // Compact on phones so the skip links keep their full width in the footer.
+    if (isSmallScreen()) {
+        return `🐾 ${sectionNumber}/${SECTION_ORDER.length} · ${stepIndex + 1}/${stepCount}`;
+    }
     return `🐾 ${SECTION_LABELS[sectionId] || sectionId} ${sectionNumber}/${SECTION_ORDER.length} · Step ${stepIndex + 1}/${stepCount}`;
 }
 

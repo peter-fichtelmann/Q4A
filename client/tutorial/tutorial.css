@@ -12,7 +12,8 @@
 
 .tut-bubble {
     position: fixed;
-    max-width: 320px;
+    /* wide enough to keep the footer (progress + both skip links + close) on one line */
+    max-width: 420px;
     min-width: 200px;
     background: rgba(255, 255, 255, 0.92);
     color: #1c2333;
@@ -84,13 +85,20 @@
     margin-top: 8px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 4px 9px;
     font-size: 0.72rem;
     color: #6a7390;
 }
 
+/* The progress label is the only item allowed to shrink/ellipsize, so the
+   skip links always stay fully readable. */
 .tut-progress {
     white-space: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tut-skip {
@@ -102,6 +110,7 @@
     text-decoration: underline;
     cursor: pointer;
     white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .tut-skip:hover {
@@ -114,8 +123,10 @@
     border: none;
     padding: 0 2px;
     font-size: 0.95rem;
+    line-height: 1;
     color: #6a7390;
     cursor: pointer;
+    flex: 0 0 auto;
 }
 
 .tut-exit:hover {
@@ -274,8 +285,8 @@
 
 @media (max-width: 700px), (max-height: 520px) {
     .tut-bubble {
-        max-width: 220px;
-        min-width: 140px;
+        max-width: 285px;
+        min-width: 150px;
         padding: 7px 9px;
         gap: 7px;
         border-radius: 9px;
@@ -301,7 +312,7 @@
         border-radius: 5px;
     }
 
-    .tut-footer { margin-top: 6px; gap: 7px; font-size: 0.62rem; }
+    .tut-footer { margin-top: 6px; gap: 3px 7px; font-size: 0.62rem; }
     .tut-skip { font-size: 0.62rem; }
     .tut-exit { font-size: 0.85rem; }
 
