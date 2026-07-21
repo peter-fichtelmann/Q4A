@@ -78,6 +78,15 @@ function ownCenterHoopId() {
     return `hoop_${traineeTeam()}_center`;
 }
 
+// The two outer own hoops — the center one is the bubble anchor and is
+// highlighted by the anchor ring already.
+function ownSideHoopRects() {
+    const centerId = ownCenterHoopId();
+    return A.findHoops((hoop) => hoop.team === traineeTeam() && hoop.id !== centerId)
+        .map((hoop) => A.hoopRect(hoop.id, 1.1))
+        .filter(Boolean);
+}
+
 function enemyCenterHoopId() {
     return `hoop_${1 - traineeTeam()}_center`;
 }
@@ -88,6 +97,55 @@ function traineeRect(pad = 1.0) {
 
 function volleyballRect() {
     return A.ballRect('volleyball', 0.9);
+}
+
+function isDodgeball(ball) {
+    return ball.ball_type === 'dodgeball' || ball.ball_type === 'DODGEBALL';
+}
+
+function dodgeballRects() {
+    return A.findBalls(isDodgeball)
+        .map((ball) => A.ballRect(ball.id, 0.9))
+        .filter(Boolean);
+}
+
+// The server never sends which dodgeball is the assigned third one, so latch
+// onto it while it is still the only free one — the enemy beater dumping theirs
+// makes a second dodgeball free moments later.
+function thirdDodgeballRect(ctx) {
+    if (!ctx.thirdDodgeballId) {
+        const free = A.findBalls((ball) => isDodgeball(ball) && !ball.holder_id);
+        if (free.length === 1) ctx.thirdDodgeballId = free[0].id;
+    }
+    return ctx.thirdDodgeballId ? A.ballRect(ctx.thirdDodgeballId, 1.0) : null;
+}
+
+// A CPU of the given role from the trainee's own line-up (the trainee itself
+// stands apart from the row and already wears the yellow ring).
+function lineupPlayerRect(role, pad = 1.2) {
+    const player = A.findPlayer((p) => p.team === traineeTeam() && p.role === role && p.id !== A.traineeId());
+    return player ? A.playerRect(player.id, pad) : null;
+}
+
+// Full-height band on the midline, introduced by the delay-of-game step.
+function midlineRect() {
+    const config = A.config();
+    if (!config) return null;
+    return A.worldBoxRect(midlineX() - 0.5, 0, midlineX() + 0.5, config.PITCH_WIDTH);
+}
+
+// Strip of the near touchline, introduced by the out-of-bounds step.
+function boundaryRect() {
+    const config = A.config();
+    if (!config) return null;
+    return A.worldBoxRect(midlineX() - 8, 0, midlineX() + 8, 1);
+}
+
+// The keeper line on the trainee's own half.
+function ownKeeperZoneX() {
+    const config = A.config();
+    if (!config) return null;
+    return traineeTeam() === 0 ? config.KEEPER_ZONE_X : config.PITCH_LENGTH - config.KEEPER_ZONE_X;
 }
 
 function midlineX() {
@@ -119,20 +177,20 @@ const sections = [
                 text: ['See the yellow ring? That is you.', 'The white headband marks you as a chaser.'],
                 interaction: 'next',
             },
-            {
-                id: 'keyboard_overview',
-                when: (ctx) => !ctx.isTouch,
-                anchor: null,
-                text: ['Move: mouse or WASD/arrows · Throw: click or Space', 'Fullscreen: F'],
-                interaction: 'next',
-            },
+            // {
+            //     id: 'keyboard_overview',
+            //     when: (ctx) => !ctx.isTouch,
+            //     anchor: null,
+            //     text: ['Move: mouse or WASD/arrows · Throw: click or Space', 'Fullscreen: F'],
+            //     interaction: 'next',
+            // },
             {
                 id: 'move',
                 anchor: () => traineeRect(1.2),
                 quip: QUIPS.moving,
                 text: (ctx) => ctx.isTouch
                     ? ['Touch the left side — a joystick appears.', 'Take a lap, trainee!']
-                    : ['Your player follows the mouse.', 'Take a lap, trainee!'],
+                    : ['Your player follows the mouse or WASD/arrows.', 'Take a lap, trainee!'],
                 interaction: 'client',
                 onEnter: (ctx) => { ctx.moveAccum = 0; ctx.lastPos = null; },
                 check: (ctx) => {
@@ -147,8 +205,21 @@ const sections = [
                     return ctx.moveAccum > 8;
                 },
                 success: {
-                    text: ['Smooth moves! One warning: chasers may', 'never block the space before their own hoops.'],
+                    text: ['Smooth moves, trainee!'],
                     quip: QUIPS.meow,
+                },
+            },
+            {
+                id: 'own_hoops',
+                scenario: 'hoop_blockage_demo',
+                anchor: () => A.hoopRect(ownCenterHoopId(), 1.1),
+                extraHighlight: () => ownSideHoopRects(),
+                quip: QUIPS.must,
+                text: ['The yellow rings are OUR hoops.', 'Try walking straight through one!'],
+                interaction: 'server',
+                hint: { afterMs: 15000, text: 'Head right at a hoop — something will stop you.' },
+                success: {
+                    text: ['Bounced off an invisible wall! Chasers may', 'never block the space before their own hoops.'],
                 },
             },
             {
@@ -184,6 +255,27 @@ const sections = [
                 },
             },
             {
+                id: 'score_behind',
+                scenario: 'scoring_behind_practice',
+                anchor: () => A.hoopRect(enemyCenterHoopId(), 2.0),
+                quip: QUIPS.sneaky,
+                text: ['Now you are behind the hoops.', 'Score again — from this side!'],
+                interaction: 'server',
+                hint: { afterMs: 20000, text: 'Hoops work both ways: just go through it again.' },
+                progressUpdates: {
+                    retry: { hint: 'Out of bounds! Try again.' },
+                },
+                success: {
+                    text: ['Both sides count! Attack from wherever', 'the defenders are not looking.'],
+                },
+            },
+            {
+                id: 'pitch_scorebug',
+                anchor: () => A.domRect('.game-ui .scorebug'),
+                text: ['Look up: your goals are on the board.', 'Time and score — the higher score wins.'],
+                interaction: 'next',
+            },
+            {
                 id: 'tackle',
                 scenario: 'tackle_practice',
                 anchor: () => {
@@ -193,7 +285,7 @@ const sections = [
                 quip: QUIPS.must,
                 text: (ctx) => ctx.isTouch
                     ? ['That one stole our ball! Touch the carrier', 'and tap the right side to tackle.']
-                    : ['That one stole our ball! Touch the carrier', 'and click to tackle.'],
+                    : ['That one stole our ball! Touch the carrier', 'and press space to tackle.'],
                 interaction: 'server',
                 hint: { afterMs: 20000, text: 'You must be in contact with the carrier when you tackle.' },
                 success: {
@@ -222,67 +314,25 @@ const sections = [
         id: 'rules',
         steps: [
             {
-                id: 'pitch_midline',
-                scenario: 'idle_all',
-                anchor: () => {
-                    const config = A.config();
-                    if (!config) return null;
-                    return A.worldBoxRect(midlineX() - 0.5, 0, midlineX() + 0.5, config.PITCH_WIDTH);
-                },
-                quip: QUIPS.surroundings,
-                text: ['The midline splits the pitch.', 'Stalling with the ball in your half? Penalty!'],
-                interaction: 'next',
-            },
-            {
-                id: 'pitch_keeper_lines',
-                anchor: () => {
-                    const config = A.config();
-                    if (!config) return null;
-                    return A.worldBoxRect(config.KEEPER_ZONE_X - 0.5, 0, config.KEEPER_ZONE_X + 0.5, config.PITCH_WIDTH);
-                },
-                text: ['Behind this line lies keeper territory.', 'In their zone, keepers shrug off dodgeballs.'],
-                interaction: 'next',
-            },
-            {
-                id: 'pitch_boundary',
-                anchor: () => {
-                    const config = A.config();
-                    if (!config) return null;
-                    return A.worldBoxRect(midlineX() - 8, 0, midlineX() + 8, 1);
-                },
-                text: ['The dark red frame is the boundary.', 'Balls that cross it are out of bounds.'],
-                interaction: 'next',
-            },
-            {
-                id: 'pitch_scorebug',
-                anchor: () => A.domRect('.game-ui .scorebug'),
-                text: ['Time and score live up here.', 'Goals score points — highest score wins.'],
-                interaction: 'next',
-            },
-            {
-                id: 'lineup_keeper',
+                id: 'lineup_headbands',
                 scenario: 'lineup',
-                anchor: () => {
-                    const keeper = A.findPlayer((p) => p.team === traineeTeam() && p.role === 'keeper');
-                    return keeper ? A.playerRect(keeper.id, 1.2) : null;
-                },
+                anchor: () => lineupPlayerRect('chaser'),
+                extraHighlight: () => [lineupPlayerRect('keeper'), lineupPlayerRect('beater')].filter(Boolean),
                 quip: QUIPS.stepByStep,
-                text: ['Green headband: the keeper.', 'Guards the hoops and handles dead balls.'],
+                text: ['Now you see the small rectangular headbands.', 'Each position a different color'],
                 interaction: 'next',
             },
             {
-                id: 'lineup_chaser_beater',
-                anchor: () => {
-                    const beater = A.findPlayer((p) => p.team === traineeTeam() && p.role === 'beater');
-                    return beater ? A.playerRect(beater.id, 1.2) : null;
-                },
-                text: ['Black band: beaters — they throw dodgeballs.', 'White band: chasers — they score goals.'],
-                interaction: 'next',
-            },
-            {
-                id: 'lineup_balls',
+                id: 'lineup_chasers',
                 anchor: () => volleyballRect(),
-                text: ['The pale ball scores goals. The red ones sting.', 'Yellow-band seekers? Not trained yet.'],
+                text: ['White band: chasers — they score goals.', '3 chasers per team, 1 pale volleyball for all'],
+                interaction: 'next',
+            },
+            {
+                id: 'lineup_beaters',
+                anchor: () => dodgeballRects()[0] || null,
+                extraHighlight: () => dodgeballRects().slice(1),
+                text: ['Black band: beaters — they throw dodgeballs.', '2 beaters per team, 3 red dodgeballs in total'],
                 interaction: 'next',
             },
             {
@@ -309,6 +359,7 @@ const sections = [
                     text: ['Bullseye! They are off stick — knocked out.'],
                     quip: QUIPS.meow,
                 },
+                
             },
             {
                 id: 'get_beaten',
@@ -319,7 +370,7 @@ const sections = [
                 interaction: 'server',
                 progressUpdates: {
                     knocked_out: {
-                        text: ['Beaten! You drop everything you hold.', 'You jog to your center hoop to recover.'],
+                        text: ['Beaten! You drop everything you hold.', 'You auto-jog to your center hoop to recover.'],
                         anchor: () => A.hoopRect(ownCenterHoopId(), 2.0),
                     },
                 },
@@ -328,17 +379,44 @@ const sections = [
                 },
             },
             {
+                id: 'lineup_keeper',
+                scenario: 'lineup',
+                anchor: () => lineupPlayerRect('keeper'),
+                quip: QUIPS.stepByStep,
+                text: ['Green headband: the keeper.', 'Guards the hoops and handles dead balls.'],
+                interaction: 'next',
+            },
+            {
+                id: 'pitch_keeper_lines',
+                anchor: () => {
+                    const config = A.config();
+                    const zoneX = ownKeeperZoneX();
+                    if (!config || zoneX === null) return null;
+                    return A.worldBoxRect(zoneX - 0.5, 0, zoneX + 0.5, config.PITCH_WIDTH);
+                },
+                text: ['Behind this line lies keeper territory.', 'In their zone, keepers shrug off dodgeballs.'],
+                interaction: 'next',
+            },
+            {
+                id: 'keeper_immunity',
+                scenario: 'keeper_immunity_demo',
+                anchor: () => traineeRect(1.2),
+                quip: QUIPS.paws,
+                text: ['You are the keeper now — green band!', 'Stay calm: in your zone, those beats bounce off.'],
+                interaction: 'next',
+            },
+            {
                 id: 'goal_restart',
                 scenario: 'goal_restart_demo',
                 anchor: () => {
                     const carrier = opponent((p) => p.has_ball);
                     return carrier ? A.playerRect(carrier.id, 1.2) : volleyballRect();
                 },
-                text: ['You are the keeper now — green band!', 'Watch them attack our hoops…'],
+                text: ['Still keeping — now mind the hoops.', 'Watch them attack…'],
                 interaction: 'server',
                 progressUpdates: {
                     goal_scored: {
-                        text: ['Goal against us! The ball is dead now.', 'Only you may pick it up — go fetch!'],
+                        text: ['Goal against us! The ball is dead now.', 'Only you may pick it up — but it is auto-fetch!'],
                         anchor: () => volleyballRect(),
                     },
                 },
@@ -347,10 +425,18 @@ const sections = [
                 },
             },
             {
+                id: 'seekers',
+                anchor: null,
+                text: ['One band is still missing: yellow for seekers,', 'chasing the snitch. Not implemented yet!'],
+                interaction: 'next',
+            },
+            {
                 id: 'delay_of_game',
                 scenario: 'delay_demo',
-                anchor: () => volleyballRect(),
-                text: ['You hold the ball in our own half.', 'Now stand completely still and watch…'],
+                anchor: () => midlineRect(),
+                extraHighlight: () => volleyballRect(),
+                quip: QUIPS.surroundings,
+                text: ['The midline splits the pitch — and you hold', 'the ball in our half. Stand still and watch…'],
                 interaction: 'server',
                 progressUpdates: {
                     delay_ticking: {
@@ -368,23 +454,33 @@ const sections = [
             {
                 id: 'out_of_bounds',
                 scenario: 'oob_demo',
-                anchor: () => volleyballRect(),
-                text: ['Time for mischief: throw the ball', 'over the nearby boundary line!'],
+                anchor: () => boundaryRect(),
+                extraHighlight: () => volleyballRect(),
+                text: ['The dark red frame is the boundary.', 'Mischief: throw the ball over the near line!'],
                 interaction: 'server',
                 hint: { afterMs: 15000, text: 'Face the closest red line and throw.' },
                 success: {
-                    text: ['Out! The other team throws it back in', 'with a free path. Do not make it a habit.'],
+                    text: ['Out! They inbound it with a free path.', 'Only volleyballs are inbounded, never dodgeballs.'],
                 },
             },
             {
                 id: 'third_dodgeball',
                 scenario: 'third_dodgeball_demo',
-                anchor: () => {
-                    const free = A.findBall((b) => (b.ball_type === 'dodgeball' || b.ball_type === 'DODGEBALL') && !b.holder_id);
-                    return free ? A.ballRect(free.id, 1.0) : null;
+                anchor: (ctx) => thirdDodgeballRect(ctx),
+                quip: QUIPS.must,
+                text: ['You are a beater. They hold both dodgeballs,', 'so the free one is ours. Watch them anyway…'],
+                interaction: 'server',
+                onEnter: (ctx) => { ctx.thirdDodgeballId = null; },
+                progressUpdates: {
+                    ball_dumped: {
+                        text: ['Dumped at their own hoops — that is no beat', 'attempt. Only a real beat earns the third ball.'],
+                    },
+                    retry: { hint: 'You picked it up — leave it and let them foul.' },
                 },
-                text: ['They hold two dodgeballs, so the free one', 'belongs to us. Grabbing a third is a foul.'],
-                interaction: 'next',
+                success: {
+                    text: ['Interference! Back to hoops for them,', 'and every ball turns over to us.'],
+                    quip: QUIPS.meow,
+                },
             },
             {
                 id: 'graduation',

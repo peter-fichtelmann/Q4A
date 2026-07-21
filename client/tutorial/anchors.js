@@ -108,6 +108,18 @@ export function hoopRect(hoopId, padMeters = 1.4) {
     return worldRect(hoop.position.x, hoop.position.y, padMeters);
 }
 
+export function findBalls(predicate) {
+    if (!gameReady()) return [];
+    const balls = GC().State.gameState.balls || {};
+    return Object.keys(balls).map((id) => balls[id]).filter(predicate);
+}
+
+export function findHoops(predicate) {
+    if (!gameReady()) return [];
+    const hoops = GC().State.gameState.hoops || {};
+    return Object.keys(hoops).map((id) => hoops[id]).filter(predicate);
+}
+
 export function domRect(selector) {
     const el = document.querySelector(selector);
     if (!el) return null;

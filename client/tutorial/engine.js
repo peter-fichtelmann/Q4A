@@ -1,7 +1,7 @@
 // Tutorial step runner: drives sections/steps defined as data, persists
 // progress across page navigations, and handles skip/exit on every step.
 
-import { showBubble, showHero, showHighlight, clearAll, isSmallScreen } from './bubble_engine.js';
+import { showBubble, showHero, showHighlight, showHighlights, clearAll, isSmallScreen } from './bubble_engine.js';
 
 const STORAGE_KEY = 'q4a_tutorial';
 
@@ -48,7 +48,8 @@ function resolve(value, context) {
 }
 
 /**
- * Run one step. Resolves with 'done' | 'skip-step' | 'skip-section' | 'exit'.
+ * Run one step. Resolves with
+ * 'done' | 'skip-step' | 'skip-section' | 'prev' | 'prev-section' | 'exit'.
  *
  * Step fields:
  *   id, hero?: bool
@@ -56,7 +57,7 @@ function resolve(value, context) {
  *   quip?: string | fn
  *   when?: (ctx) => bool                  (false → step silently skipped)
  *   anchor?: (ctx) => rect|null           (bubble target, also highlighted)
- *   extraHighlight?: (ctx) => rect|null
+ *   extraHighlight?: (ctx) => rect|rect[]|null
  *   scenario?: string                     (sent via ctx.sendScenario on enter)
  *   interaction: 'next' | 'client' | 'server' | 'buttons'
  *   check?: (ctx) => bool                 (client interaction predicate, polled)
@@ -122,6 +123,11 @@ function runStep(step, context, progress) {
             progress,
             getObstacles: context.getObstacles,
             getCriticalRects: context.getCriticalRects,
+            showPrevSection: true,
+            showPrevStep: true,
+            // null when there is nothing earlier on this page → control renders disabled
+            onPrevSection: context.hasPrevSection ? () => finish('prev-section') : null,
+            onPrevStep: context.hasPrevStep ? () => finish('prev') : null,
             onSkipStep: () => {
                 if (step.onSkip) step.onSkip(context);
                 finish('skip-step');
@@ -141,7 +147,11 @@ function runStep(step, context, progress) {
         }
         attachAnchor();
         if (step.extraHighlight) {
-            extraHighlight = showHighlight(() => step.extraHighlight(context));
+            extraHighlight = showHighlights(() => {
+                const rects = step.extraHighlight(context);
+                if (!rects) return [];
+                return Array.isArray(rects) ? rects : [rects];
+            });
         }
 
         const show = step.hero ? showHero : showBubble;
@@ -229,26 +239,71 @@ export async function runSections(sections, context) {
         }
     }
 
-    for (; sectionIndex < sections.length; sectionIndex++) {
+    let stepIndex = startStep;
+    // Steps hidden by `when` resolve instantly; keep travelling the way the user
+    // was going so 'previous' cannot bounce straight forward off a hidden step.
+    let direction = 1;
+
+    while (sectionIndex < sections.length) {
         const section = sections[sectionIndex];
-        let stepIndex = startStep;
-        startStep = 0;
-        for (; stepIndex < section.steps.length; stepIndex++) {
-            const step = section.steps[stepIndex];
-            saveState({ active: true, section: section.id, step: stepIndex });
-            const progress = progressLabel(section.id, stepIndex, section.steps.length);
-            const result = await runStep(step, context, progress);
-            if (result === 'exit') {
-                clearState();
-                clearAll();
-                return 'exit';
-            }
-            if (result === 'skip-section') {
-                if (section.onSkip) section.onSkip(context);
-                break;
-            }
-            // 'done', 'done-silent' and 'skip-step' continue to the next step
+
+        if (stepIndex >= section.steps.length) {
+            sectionIndex += 1;
+            stepIndex = 0;
+            direction = 1;
+            continue;
         }
+        if (stepIndex < 0) {
+            // Walk back into the previous section on this page, or stay put.
+            if (sectionIndex === 0) {
+                stepIndex = 0;
+                direction = 1;
+                continue;
+            }
+            sectionIndex -= 1;
+            stepIndex = sections[sectionIndex].steps.length - 1;
+            continue;
+        }
+
+        // Only the very first step of the page has nothing to go back to.
+        context.hasPrevStep = !(sectionIndex === 0 && stepIndex === 0);
+        // ‹‹ needs an earlier section that lives on this page.
+        context.hasPrevSection = sectionIndex > 0;
+
+        const step = section.steps[stepIndex];
+        saveState({ active: true, section: section.id, step: stepIndex });
+        const progress = progressLabel(section.id, stepIndex, section.steps.length);
+        const result = await runStep(step, context, progress);
+
+        if (result === 'exit') {
+            clearState();
+            clearAll();
+            return 'exit';
+        }
+        if (result === 'prev') {
+            direction = -1;
+            stepIndex -= 1;
+            continue;
+        }
+        if (result === 'prev-section') {
+            // Restart the previous section from its first step.
+            sectionIndex -= 1;
+            stepIndex = 0;
+            direction = 1;
+            continue;
+        }
+        if (result === 'done-silent') {
+            stepIndex += direction;   // hidden step: keep going the same way
+            continue;
+        }
+        direction = 1;
+        if (result === 'skip-section') {
+            if (section.onSkip) section.onSkip(context);
+            sectionIndex += 1;
+            stepIndex = 0;
+            continue;
+        }
+        stepIndex += 1;   // 'done' and 'skip-step'
     }
     return 'finished';
 }

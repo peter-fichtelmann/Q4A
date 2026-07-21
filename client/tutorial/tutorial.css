@@ -12,7 +12,7 @@
 
 .tut-bubble {
     position: fixed;
-    /* wide enough to keep the footer (progress + both skip links + close) on one line */
+    /* wide enough to keep the footer (nav symbols + progress + close) on one line */
     max-width: 420px;
     min-width: 200px;
     background: rgba(255, 255, 255, 0.92);
@@ -101,36 +101,71 @@
     text-overflow: ellipsis;
 }
 
-.tut-skip {
+/* Symbol actions: ‹ previous · › skip step · ›› skip section · ✕ exit.
+   Their wording appears as a tooltip on hover/focus. */
+.tut-nav {
+    position: relative;
+    flex: 0 0 auto;
     background: none;
     border: none;
-    padding: 0;
-    font-size: 0.72rem;
+    padding: 1px 4px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1;
     color: #6a7390;
-    text-decoration: underline;
     cursor: pointer;
-    white-space: nowrap;
-    flex: 0 0 auto;
+    border-radius: 4px;
 }
 
-.tut-skip:hover {
+.tut-nav:hover {
     color: #333c5c;
+    background: rgba(102, 126, 234, 0.14);
+}
+
+.tut-nav:disabled {
+    opacity: 0.3;
+    cursor: default;
+    background: none;
+    color: #6a7390;
+}
+
+.tut-nav::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    background: #2b3350;
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 3px 7px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(10, 15, 35, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+.tut-nav:hover::after,
+.tut-nav:focus-visible::after {
+    opacity: 1;
+}
+
+.tut-nav:disabled::after {
+    display: none;
 }
 
 .tut-exit {
     margin-left: auto;
-    background: none;
-    border: none;
-    padding: 0 2px;
-    font-size: 0.95rem;
-    line-height: 1;
-    color: #6a7390;
-    cursor: pointer;
-    flex: 0 0 auto;
 }
 
 .tut-exit:hover {
     color: #c04040;
+    background: rgba(192, 64, 64, 0.14);
 }
 
 /* bubble arrow: a rotated square poking out of the bubble edge */
@@ -312,9 +347,9 @@
         border-radius: 5px;
     }
 
-    .tut-footer { margin-top: 6px; gap: 3px 7px; font-size: 0.62rem; }
-    .tut-skip { font-size: 0.62rem; }
-    .tut-exit { font-size: 0.85rem; }
+    .tut-footer { margin-top: 6px; gap: 3px 5px; font-size: 0.62rem; }
+    .tut-nav { font-size: 0.85rem; padding: 1px 3px; }
+    .tut-nav::after { font-size: 0.62rem; padding: 2px 6px; }
 
     .tut-arrow { width: 10px; height: 10px; }
 

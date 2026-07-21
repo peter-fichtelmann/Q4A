@@ -44,6 +44,49 @@ function overlapArea(a, b) {
     return (w > 0 && h > 0) ? w * h : 0;
 }
 
+/**
+ * Footer shared by bubbles and hero cards:
+ *   [‹‹ prev section] [‹ prev step]  progress  [› skip step] [›› skip section]  … [✕ exit]
+ * The actions are symbols; their wording shows as a tooltip on hover/focus.
+ * `onPrevStep`/`onPrevSection` may be null — the control still renders, disabled,
+ * so the footer layout does not shift at the start of the tutorial.
+ */
+function buildFooter(options) {
+    const footer = document.createElement('div');
+    footer.className = 'tut-footer';
+
+    function navButton(symbol, tip, onClick) {
+        const el = document.createElement('button');
+        el.className = 'tut-nav';
+        el.textContent = symbol;
+        el.dataset.tip = tip;
+        el.setAttribute('aria-label', tip);
+        if (onClick) el.addEventListener('click', onClick);
+        else el.disabled = true;
+        footer.appendChild(el);
+        return el;
+    }
+
+    if (options.showPrevSection) navButton('‹‹', 'Previous section', options.onPrevSection);
+    if (options.showPrevStep) navButton('‹', 'Previous step', options.onPrevStep);
+
+    if (options.progress) {
+        const progress = document.createElement('span');
+        progress.className = 'tut-progress';
+        progress.textContent = options.progress;
+        footer.appendChild(progress);
+    }
+
+    if (options.onSkipStep) navButton('›', 'Skip step', options.onSkipStep);
+    if (options.onSkipSection) navButton('››', 'Skip section', options.onSkipSection);
+
+    if (options.onExit) {
+        const exit = navButton('✕', 'Exit tutorial', options.onExit);
+        exit.classList.add('tut-exit');
+    }
+    return footer.childNodes.length ? footer : null;
+}
+
 function centerInside(rect, container) {
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
@@ -60,7 +103,9 @@ function centerInside(rect, container) {
  *   hint: optional string (shown below text, updatable)
  *   buttons: [{label, kind: 'primary'|'secondary', onClick}]
  *   progress: optional string ("Section 2/4 · Step 1/5")
- *   onSkipStep / onSkipSection / onExit: optional callbacks (footer links)
+ *   onSkipStep / onSkipSection / onExit: optional callbacks (footer icon actions)
+ *   showPrevStep / showPrevSection: render the ‹ / ‹‹ controls
+ *   onPrevStep / onPrevSection: their callbacks (null → control renders disabled)
  *   getAnchorRect: () => rect|null  (viewport coords; null → centered bubble)
  *   getObstacles: optional () => rect[]  (placement prefers not to cover these)
  *   getCriticalRects: optional () => rect[]  (placement must not cover these, e.g. the player)
@@ -114,32 +159,8 @@ export function showBubble(options) {
         body.appendChild(actions);
     }
 
-    const footer = document.createElement('div');
-    footer.className = 'tut-footer';
-    if (options.progress) {
-        const progress = document.createElement('span');
-        progress.className = 'tut-progress';
-        progress.textContent = options.progress;
-        footer.appendChild(progress);
-    }
-    function footerLink(label, onClick) {
-        const el = document.createElement('button');
-        el.className = 'tut-skip';
-        el.textContent = label;
-        el.addEventListener('click', onClick);
-        footer.appendChild(el);
-    }
-    if (options.onSkipStep) footerLink('Skip step', options.onSkipStep);
-    if (options.onSkipSection) footerLink('Skip section', options.onSkipSection);
-    if (options.onExit) {
-        const exit = document.createElement('button');
-        exit.className = 'tut-exit';
-        exit.title = 'Exit tutorial';
-        exit.textContent = '✕';
-        exit.addEventListener('click', options.onExit);
-        footer.appendChild(exit);
-    }
-    if (footer.childNodes.length) body.appendChild(footer);
+    const footer = buildFooter(options);
+    if (footer) body.appendChild(footer);
 
     const arrow = document.createElement('div');
     arrow.className = 'tut-arrow';
@@ -385,32 +406,8 @@ export function showHero(options) {
         card.appendChild(actions);
     }
 
-    const footer = document.createElement('div');
-    footer.className = 'tut-footer';
-    if (options.progress) {
-        const progress = document.createElement('span');
-        progress.className = 'tut-progress';
-        progress.textContent = options.progress;
-        footer.appendChild(progress);
-    }
-    function footerLink(label, onClick) {
-        const el = document.createElement('button');
-        el.className = 'tut-skip';
-        el.textContent = label;
-        el.addEventListener('click', onClick);
-        footer.appendChild(el);
-    }
-    if (options.onSkipStep) footerLink('Skip step', options.onSkipStep);
-    if (options.onSkipSection) footerLink('Skip section', options.onSkipSection);
-    if (options.onExit) {
-        const exit = document.createElement('button');
-        exit.className = 'tut-exit';
-        exit.title = 'Exit tutorial';
-        exit.textContent = '✕';
-        exit.addEventListener('click', options.onExit);
-        footer.appendChild(exit);
-    }
-    if (footer.childNodes.length) card.appendChild(footer);
+    const footer = buildFooter(options);
+    if (footer) card.appendChild(footer);
 
     layer.appendChild(card);
     return {
@@ -421,24 +418,49 @@ export function showHero(options) {
 
 /** Pulsing highlight ring following getRect() each frame. */
 export function showHighlight(getRect) {
+    return showHighlights(() => {
+        const rect = getRect ? getRect() : null;
+        return rect ? [rect] : [];
+    });
+}
+
+/**
+ * Pulsing highlight rings following getRects() each frame. The ring pool grows
+ * to the largest count seen; surplus rings are hidden rather than recreated,
+ * so a resolver whose rect count varies does not thrash the DOM.
+ */
+export function showHighlights(getRects) {
     ensureLayer();
-    const ring = document.createElement('div');
-    ring.className = 'tut-ring';
-    layer.appendChild(ring);
+    const rings = [];
     let closed = false;
+
+    function ringAt(index) {
+        while (rings.length <= index) {
+            const ring = document.createElement('div');
+            ring.className = 'tut-ring';
+            layer.appendChild(ring);
+            rings.push(ring);
+        }
+        return rings[index];
+    }
 
     function place() {
         if (closed) return;
-        const rect = getRect ? getRect() : null;
-        if (rect) {
+        const rects = (getRects ? getRects() : null) || [];
+        for (let i = 0; i < rects.length; i++) {
+            const rect = rects[i];
+            const ring = ringAt(i);
+            if (!rect) {
+                ring.style.display = 'none';
+                continue;
+            }
             ring.style.display = '';
             ring.style.left = `${rect.left - 4}px`;
             ring.style.top = `${rect.top - 4}px`;
             ring.style.width = `${rect.width + 8}px`;
             ring.style.height = `${rect.height + 8}px`;
-        } else {
-            ring.style.display = 'none';
         }
+        for (let i = rects.length; i < rings.length; i++) rings[i].style.display = 'none';
         requestAnimationFrame(place);
     }
     requestAnimationFrame(place);
@@ -446,7 +468,7 @@ export function showHighlight(getRect) {
     return {
         close() {
             closed = true;
-            ring.remove();
+            for (const ring of rings) ring.remove();
         },
     };
 }

@@ -281,6 +281,38 @@ class TutorialDirector:
         self._set_ai('idle')
         return events
 
+    def _own_hoops(self, team: int) -> List:
+        return [hoop for hoop in self.state.hoops.values() if hoop.team == team]
+
+    def _setup_hoop_blockage_demo(self):
+        events = self._swap_trainee_role(PlayerRole.CHASER)
+        trainee = self.trainee
+        self._strip_all_balls()
+        self._park_others()
+        hoops = self._own_hoops(trainee.team)
+        if hoops:
+            hoop_x = hoops[0].position.x  # all own hoops share the same x
+            # Face the hoops from the pitch side, clear of the blockage band.
+            approach = 1 if hoop_x < self.state.midline_x else -1
+            self._teleport(trainee, hoop_x + approach * 6.0, self.state.boundaries_y[1] / 2)
+        self._set_ai('idle')
+        return events
+
+    def _check_hoop_blockage_demo(self):
+        """Succeed once _enforce_hoop_blockage is pinning the trainee at the band edge."""
+        trainee = self.trainee
+        volleyball = self.state.volleyball
+        if trainee is None or volleyball is None:
+            return []
+        # Same geometry as BoundaryLogic._enforce_hoop_blockage, which resets the
+        # chaser's x to exactly hoop.x +/- margin while they push against it.
+        margin = trainee.radius + volleyball.radius
+        for hoop in self._own_hoops(trainee.team):
+            if (abs(trainee.position.x - hoop.position.x) <= margin + 0.05
+                    and abs(trainee.position.y - hoop.position.y) < hoop.radius + trainee.radius):
+                return self._success()
+        return []
+
     def _setup_pass_practice(self):
         trainee = self.trainee
         events = self._swap_trainee_role(PlayerRole.CHASER)
@@ -305,11 +337,29 @@ class TutorialDirector:
         return []
 
     def _setup_scoring_practice(self):
+        return self._stage_scoring(behind=False)
+
+    def _setup_scoring_behind_practice(self):
+        """Same drill, but the trainee starts on the far side of the hoops."""
+        return self._stage_scoring(behind=True)
+
+    def _stage_scoring(self, behind: bool):
         trainee = self.trainee
         events = self._swap_trainee_role(PlayerRole.CHASER)
         self._strip_all_balls()
         self._park_others()
-        self._teleport(trainee, 40, 16.5)
+        hoop = self.state.hoops.get(f'hoop_{1 - trainee.team}_center')
+        if hoop is None:
+            self._teleport(trainee, 40, 16.5)
+        elif behind:
+            # Deep behind the hoop line, between the hoops and the end boundary.
+            pitch_length = self.state.boundaries_x[1]
+            x = 55.0 if hoop.position.x > self.state.midline_x else pitch_length - 55.0
+            self._teleport(trainee, x, self.state.boundaries_y[1] / 2)
+        else:
+            # The normal attacking side faces the midline.
+            toward_midline = -1 if hoop.position.x > self.state.midline_x else 1
+            self._teleport(trainee, hoop.position.x + 6.5 * toward_midline, hoop.position.y)
         self._give_ball(trainee, self.state.volleyball)
         self._baseline['score'] = self.state.score[trainee.team]
         self._set_ai('idle')
@@ -322,6 +372,9 @@ class TutorialDirector:
         if self._volleyball_out_of_play():
             return self._retry()
         return []
+
+    def _check_scoring_behind_practice(self):
+        return self._check_scoring_practice()
 
     def _setup_tackle_practice(self):
         trainee = self.trainee
@@ -401,12 +454,13 @@ class TutorialDirector:
         self._strip_all_balls()
         beater = self._cpu(1 - trainee.team, PlayerRole.BEATER)
         self._park_others({beater.id} if beater else ())
-        self._teleport(trainee, 26, 16.5)
+        self._teleport(trainee, 38, 16.5)
         if beater is not None:
-            self._teleport(beater, 34, 16.5)
+            self._teleport(beater, 52, 16.5)
             if self.state.dodgeballs:
                 self._give_ball(beater, self.state.dodgeballs[0])
-            self._set_ai('throw_at_trainee', beater_id=beater.id, trainee_id=trainee.id)
+            # Hold fire until the trainee closes 1 m nearer than the default range.
+            self._set_ai('throw_at_trainee', beater_id=beater.id, trainee_id=trainee.id, throw_range=5.0)
         return events
 
     def _check_get_beaten(self):
@@ -421,6 +475,29 @@ class TutorialDirector:
         elif not trainee.is_knocked_out:
             return self._success()
         return []
+
+    def _setup_keeper_immunity_demo(self):
+        events = self._swap_trainee_role(PlayerRole.KEEPER)
+        trainee = self.trainee
+        self._strip_all_balls()
+        opponent_team = 1 - trainee.team
+        beater_1 = self._cpu(opponent_team, PlayerRole.BEATER)
+        beater_2 = self._cpu(opponent_team, PlayerRole.BEATER, exclude={beater_1.id} if beater_1 else set())
+        beaters = [b for b in (beater_1, beater_2) if b is not None]
+        self._park_others({b.id for b in beaters})
+        pitch_width = self.state.boundaries_y[1]
+        # Deep inside the own keeper zone, with the beaters posted just outside it.
+        if trainee.team == self.state.team_0:
+            zone_x, outside_x = self.state.keeper_zone_x_0, self.state.keeper_zone_x_0 + 5
+        else:
+            zone_x, outside_x = self.state.keeper_zone_x_1, self.state.keeper_zone_x_1 - 5
+        self._teleport(trainee, (zone_x + self.state.hoops[f'hoop_{trainee.team}_center'].position.x) / 2, pitch_width / 2)
+        for index, beater in enumerate(beaters):
+            self._teleport(beater, outside_x, pitch_width / 2 + (4 if index else -4))
+            if index < len(self.state.dodgeballs):
+                self._give_ball(beater, self.state.dodgeballs[index])
+        self._set_ai('barrage_trainee', beater_ids=[b.id for b in beaters], trainee_id=trainee.id)
+        return events
 
     def _setup_goal_restart_demo(self):
         events = self._swap_trainee_role(PlayerRole.KEEPER)
@@ -511,35 +588,50 @@ class TutorialDirector:
         return []
 
     def _setup_third_dodgeball_demo(self):
-        events = self._swap_trainee_role(PlayerRole.CHASER)
+        """Both enemy dodgeballs held, the third free and ours — then they grab for it anyway."""
+        events = self._swap_trainee_role(PlayerRole.BEATER)
         trainee = self.trainee
         self._strip_all_balls()
         opponent_team = 1 - trainee.team
-        beater_1 = self._cpu(opponent_team, PlayerRole.BEATER)
-        beater_2 = self._cpu(opponent_team, PlayerRole.BEATER, exclude={beater_1.id} if beater_1 else set())
-        active = {b.id for b in (beater_1, beater_2) if b is not None}
+        cheater = self._cpu(opponent_team, PlayerRole.BEATER)
+        partner = self._cpu(opponent_team, PlayerRole.BEATER, exclude={cheater.id} if cheater else set())
+        active = {b.id for b in (cheater, partner) if b is not None}
         self._park_others(active)
-        self._teleport(trainee, 27, 16.5)
-        targets = {}
-        if beater_1 is not None:
-            self._teleport(beater_1, 36, 14)
+        # The trainee watches from a distance: the free dodgeball is legally
+        # theirs, and collecting it would end the situation before the foul.
+        self._teleport(trainee, 24, 16.5)
+        if cheater is not None:
+            self._teleport(cheater, 34, 16.5)
             if len(self.state.dodgeballs) > 0:
-                self._give_ball(beater_1, self.state.dodgeballs[0])
-            targets[beater_1.id] = (36, 14)
-        if beater_2 is not None:
-            self._teleport(beater_2, 36, 19)
+                self._give_ball(cheater, self.state.dodgeballs[0])
+            self._baseline['cheater_id'] = cheater.id
+        if partner is not None:
+            self._teleport(partner, 38, 21)
             if len(self.state.dodgeballs) > 1:
-                self._give_ball(beater_2, self.state.dodgeballs[1])
-            targets[beater_2.id] = (36, 19)
+                self._give_ball(partner, self.state.dodgeballs[1])
         if len(self.state.dodgeballs) > 2:
-            self._free_ball(self.state.dodgeballs[2], 31, 16.5)
-        self._set_ai('hold_positions', targets=targets)
+            self._free_ball(self.state.dodgeballs[2], 34, 12)
+        if cheater is not None:
+            self._set_ai('third_dodgeball_cheat', cheater_id=cheater.id)
+        else:
+            self._set_ai('idle')
         return events
 
     def _check_third_dodgeball_demo(self):
-        if self._phase == 0 and self.state.third_dodgeball is not None:
-            self._phase = 1
-            return [self._progress('third_dodgeball_assigned')]
+        cheater = self.state.get_player(self._baseline.get('cheater_id'))
+        if cheater is None:
+            return []
+        # The interference penalty sends the offender back to their hoops.
+        if cheater.is_knocked_out:
+            return self._success()
+        if self._phase == 0:
+            if not cheater.has_ball:
+                self._phase = 1
+                return [self._progress('ball_dumped')]
+        elif self.state.third_dodgeball is None:
+            # Somebody (most likely the trainee) collected the free dodgeball,
+            # which legally ends the third-dodgeball situation — stage it again.
+            return self._retry()
         return []
 
     def _setup_free_play(self):

@@ -163,6 +163,66 @@ class ScriptedComputerPlayer(ComputerPlayer):
             else:
                 self._stop(beater)
 
+    def _arm(self, player, ball) -> bool:
+        """
+        Put a free dodgeball straight into a beater's hands.
+
+        The barrage demo keeps its beaters posted at fixed spots, so they never
+        walk over to fetch what they threw; scripted re-arming keeps the rhythm
+        steady and the keeper zone clear of loitering beaters.
+        """
+        if ball.holder_id is not None or player.has_ball:
+            return False
+        ball.holder_id = player.id
+        ball.possession_team = player.team
+        ball.velocity = Vector2(0, 0)
+        ball.previous_thrower_id = None
+        ball.position = Vector2(player.position.x, player.position.y)
+        ball.previous_position = Vector2(player.position.x, player.position.y)
+        player.has_ball = ball.id
+        player.catch_cooldown = 0.0
+        return True
+
+    def _mode_barrage_trainee(self, dt: float):
+        """
+        Posted enemy beaters take turns pelting the trainee, one throw per interval.
+
+        Used for the keeper-immunity demo: they hold fire whenever the trainee
+        steps out of their keeper zone, so the "you are safe here" promise holds.
+        """
+        beater_ids = [pid for pid in self.mode_kwargs.get('beater_ids', []) if self._get_player(pid)]
+        trainee_id = self.mode_kwargs.get('trainee_id')
+        interval = self.mode_kwargs.get('interval', 2.0 * Config.GAME_TIME_TO_REAL_TIME_RATIO)
+        self._stop_all_except(set(beater_ids))
+        trainee = self._get_player(trainee_id)
+        for beater_id in beater_ids:
+            self._stop(self._get_player(beater_id))  # they throw from their posts
+        if trainee is None or not beater_ids:
+            return
+
+        cooldown = self.mode_kwargs.get('_cooldown', 0.0) - dt
+        self.mode_kwargs['_cooldown'] = cooldown
+        if cooldown > 0 or not trainee.dodgeball_immunity:
+            return
+
+        index = self.mode_kwargs.get('_next', 0) % len(beater_ids)
+        beater = self._get_player(beater_ids[index])
+        if beater is None or beater.is_knocked_out:
+            self.mode_kwargs['_next'] = index + 1
+            return
+        if not beater.has_ball:
+            for dodgeball in self.logic.state.dodgeballs:
+                if self._arm(beater, dodgeball):
+                    break
+        if not beater.has_ball:
+            return  # every dodgeball still in flight; try again next tick
+        self.logic.process_action_logic.process_throw_action(beater.id, Vector2(
+            trainee.position.x - beater.position.x,
+            trainee.position.y - beater.position.y,
+        ))
+        self.mode_kwargs['_next'] = index + 1
+        self.mode_kwargs['_cooldown'] = interval
+
     def _mode_score_and_restart(self, dt: float):
         """One enemy chaser carries the volleyball to the hoops and scores."""
         scorer_id = self.mode_kwargs.get('scorer_id')
@@ -190,6 +250,45 @@ class ScriptedComputerPlayer(ComputerPlayer):
             self._steer(scorer, volleyball.position.x, volleyball.position.y, stop_distance=0.1)
         else:
             self._stop(scorer)
+
+    def _mode_third_dodgeball_cheat(self, dt: float):
+        """
+        An enemy beater commits third-dodgeball interference on cue.
+
+        After a short pause they lob their own dodgeball back at their hoops —
+        aimed at nobody, so it is no beat attempt — and then walk onto the free
+        third dodgeball, which is what triggers the penalty. Had the dumped ball
+        been a genuine beat attempt, seizing the third one would have been legal
+        until that attempt failed.
+        """
+        cheater_id = self.mode_kwargs.get('cheater_id')
+        delay = self.mode_kwargs.get('delay', 2.0 * Config.GAME_TIME_TO_REAL_TIME_RATIO)
+        self._stop_all_except({cheater_id})
+        cheater = self._get_player(cheater_id)
+        if cheater is None or cheater.is_knocked_out:
+            return
+        elapsed = self.mode_kwargs.get('_elapsed', 0.0) + dt
+        self.mode_kwargs['_elapsed'] = elapsed
+        if elapsed < delay:
+            self._stop(cheater)
+            return
+        if cheater.has_ball:
+            hoop = self.logic.state.hoops.get(f'hoop_{cheater.team}_center')
+            if hoop is None:
+                return
+            self._stop(cheater)
+            self.logic.process_action_logic.process_throw_action(cheater.id, Vector2(
+                hoop.position.x - cheater.position.x,
+                hoop.position.y - cheater.position.y,
+            ))
+            return
+        # Only the assigned third dodgeball draws the penalty; the ball they
+        # just dumped is fair game and must not be picked up by mistake.
+        third = self.logic.state.balls.get(self.logic.state.third_dodgeball)
+        if third is not None and third.holder_id is None:
+            self._steer(cheater, third.position.x, third.position.y, stop_distance=0.1)
+        else:
+            self._stop(cheater)
 
     def _mode_free_play(self, dt: float):
         """Graduation free play: delegate to the normal rule-based AI."""

@@ -12,6 +12,7 @@ export const QUIPS = {
     moving: 'First rule of the wild: keep moving.',
     betting: "Choose like you're betting your tail on it.",
     stepByStep: "We'll take this step by step.",
+    sneaky: 'A lynx never attacks from where you are expected.',
 };
 
 function placeholder(container, emojiSize) {
