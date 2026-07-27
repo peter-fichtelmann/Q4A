@@ -359,3 +359,51 @@ class Hoop:
         memo[id(self)] = copied
         return copied
 
+@dataclass
+class Referee:
+    """Represents a referee in the game."""
+    id: str              # Unique referee identifier
+    position: Vector2    # Current position on field
+    velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))  # Current movement velocity
+    radius: float        # Collision radius in meters
+    
+    def serialize(self) -> dict:
+        """Convert referee to JSON-serializable dict."""
+        return {
+            "id": self.id,
+            "position": self.position.to_dict(),
+            "velocity": self.velocity.to_dict(),
+            "radius": self.radius
+        }
+
+    def copy(self) -> 'Referee':
+        return Referee(
+            id=self.id,
+            position=self.position.copy(),
+            velocity=self.velocity.copy(),
+            radius=self.radius,
+        )
+
+    def __copy__(self) -> 'Referee':
+        return self.copy()
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> 'Referee':
+        copied = self.copy()
+        memo[id(self)] = copied
+        return copied
+
+
+class FlagRunner(Referee):
+    """Represents a flag runner in the game."""
+    def __init__(self,
+                id: str,
+                position: Vector2,
+                velocity: Vector2 = Vector2(0, 0),
+                radius: float = 0.5,
+                ):
+        super().__init__(
+            id=id,
+            position=position,
+            velocity=velocity,
+            radius=radius
+        )

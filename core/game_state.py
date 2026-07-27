@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import json
-from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType, VolleyBall, DodgeBall
+from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType, VolleyBall, DodgeBall, FlagRunner
 
 @dataclass
 class GameState:
@@ -20,6 +20,7 @@ class GameState:
     volleyball: VolleyBall = None
     dodgeballs: List[DodgeBall] = field(default_factory=list)
     hoops: Dict[str, Hoop] = field(default_factory=dict)       # hoop_id -> Hoop
+    flag_runner: FlagRunner = None
     score: List[int] = field(default_factory=lambda: [0, 0])  # [team0, team1]
     max_player_radius: float = 0.35
     squared_distances_player_player_dicts: Dict[str, Dict[str, float]] = field(default_factory=dict)   # Nested dict for faster lookups: {entity_id: {other_entity_id: squared_distance}}
@@ -42,6 +43,7 @@ class GameState:
     seeker_on_pitch: bool = False                         # Seeker enters after 20 min
     set_score: Optional[int] = None                           # Snitch capture score
     seeker_floor_seconds: int = 1200  # Time before seeker can enter
+    flag_runner_floor_seconds: int = 1140  # Time before flag runner can enter
     
     def add_player(self, player: Player) -> None:
         """Add a player to the game state."""
@@ -93,7 +95,11 @@ class GameState:
     def get_ball(self, ball_id: str) -> Optional[Ball]:
         """Retrieve a ball by ID."""
         return self.balls.get(ball_id)
-    
+
+    def add_flag_runner(self, flag_runner: FlagRunner) -> None:
+        """Add a flag runner to the game state."""  
+        self.flag_runner = flag_runner
+
     def update_score(self, team: int, points: int) -> None:
         """Add points to a team's score."""
         if team in [0, 1]:

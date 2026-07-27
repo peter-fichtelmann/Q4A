@@ -55,6 +55,7 @@ class Config:
     
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
     SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter
+    FLAG_RUNNER_FLOOR_REAL_SECONDS = 19 * 60  # 19 minutes before flag runner can enter
 
     N_CHASERS_TEAM_0 = 3
     N_CHASERS_TEAM_1 = 3
