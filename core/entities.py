@@ -364,7 +364,9 @@ class Referee:
     """Represents a referee in the game."""
     id: str              # Unique referee identifier
     position: Vector2    # Current position on field
+    direction: Vector2 = field(default_factory=lambda: Vector2(0, 0))  # Current movement direction
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))  # Current movement velocity
+    max_speed: float = 2.0  # Maximum speed in meters per second
     radius: float        # Collision radius in meters
     
     def serialize(self) -> dict:
@@ -372,15 +374,19 @@ class Referee:
         return {
             "id": self.id,
             "position": self.position.to_dict(),
+            "direction": self.direction.to_dict(),
             "velocity": self.velocity.to_dict(),
-            "radius": self.radius
+            "max_speed": self.max_speed,
+            "radius": self.radius,
         }
 
     def copy(self) -> 'Referee':
         return Referee(
             id=self.id,
             position=self.position.copy(),
+            direction=self.direction.copy(),
             velocity=self.velocity.copy(),
+            max_speed=self.max_speed,
             radius=self.radius,
         )
 
@@ -398,12 +404,16 @@ class FlagRunner(Referee):
     def __init__(self,
                 id: str,
                 position: Vector2,
+                direction: Vector2 = Vector2(0, 0),
                 velocity: Vector2 = Vector2(0, 0),
+                max_speed: float = 2.0,
                 radius: float = 0.5,
                 ):
         super().__init__(
             id=id,
             position=position,
+            direction=direction,
             velocity=velocity,
+            max_speed=max_speed,
             radius=radius
         )
