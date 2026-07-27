@@ -23,3 +23,7 @@ class FlagSeekerLogic:
         if not self.state.game_time > self.state.flag_runner_floor_seconds:
             self.logger.debug("Game time below flag runner floor; flag runner cannot move.")
             return  # Flag runner cannot move yet
+
+        if self.state.flag_runner is None:
+            self.logger.warning("No flag runner present in the game state.")
+            return  # No flag runner to move
