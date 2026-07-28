@@ -367,7 +367,11 @@ class Referee:
     direction: Vector2 = field(default_factory=lambda: Vector2(0, 0))  # Current movement direction
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))  # Current movement velocity
     max_speed: float = 2.0  # Maximum speed in meters per second
+    min_speed: float = 0.3  # Minimum speed in meters per second
     radius: float        # Collision radius in meters
+    acceleration: float = 1              # Meters per second squared
+    deacceleration_rate: float = 0.5          # Ratio of speed lost per second
+    min_dir: float = 0.2 # of 1
     
     def serialize(self) -> dict:
         """Convert referee to JSON-serializable dict."""
@@ -377,7 +381,11 @@ class Referee:
             "direction": self.direction.to_dict(),
             "velocity": self.velocity.to_dict(),
             "max_speed": self.max_speed,
+            "min_speed": self.min_speed,
             "radius": self.radius,
+            "acceleration": self.acceleration,
+            "deacceleration_rate": self.deacceleration_rate,
+            "min_dir": self.min_dir
         }
 
     def copy(self) -> 'Referee':
@@ -387,7 +395,11 @@ class Referee:
             direction=self.direction.copy(),
             velocity=self.velocity.copy(),
             max_speed=self.max_speed,
+            min_speed=self.min_speed,
             radius=self.radius,
+            acceleration=self.acceleration,
+            deacceleration_rate=self.deacceleration_rate,
+            min_dir=self.min_dir
         )
 
     def __copy__(self) -> 'Referee':
@@ -407,7 +419,11 @@ class FlagRunner(Referee):
                 direction: Vector2 = Vector2(0, 0),
                 velocity: Vector2 = Vector2(0, 0),
                 max_speed: float = 2.0,
+                min_speed: float = 0.3,
                 radius: float = 0.5,
+                acceleration: float = 1,
+                deacceleration_rate: float = 0.5,
+                min_dir: float = 0.2
                 ):
         super().__init__(
             id=id,
@@ -415,5 +431,9 @@ class FlagRunner(Referee):
             direction=direction,
             velocity=velocity,
             max_speed=max_speed,
-            radius=radius
+            min_speed=min_speed,
+            radius=radius,
+            acceleration=acceleration,
+            deacceleration_rate=deacceleration_rate,
+            min_dir=min_dir
         )
