@@ -149,6 +149,8 @@ class GameState:
             volleyball=self.volleyball.copy(),
             dodgeballs=[dodgeball.copy() for dodgeball in self.dodgeballs],
             hoops=self.hoops,
+            flag_runner=self.flag_runner.copy() if self.flag_runner is not None else None,
+            flag_runner_on_pitch=self.flag_runner_on_pitch,
             score=self.score,
             max_player_radius=self.max_player_radius,
             game_time=self.game_time,
@@ -217,9 +219,11 @@ class GameState:
             "players": {pid: p.serialize() for pid, p in self.players.items()},
             "balls": {bid: b.serialize() for bid, b in self.balls.items()},
             "hoops": {hid: h.serialize() for hid, h in self.hoops.items()},
+            "flag_runner": self.flag_runner.serialize() if self.flag_runner is not None else None,
             "score": self.score,
             "game_time": self.game_time,
-            # "seeker_on_pitch": self.seeker_on_pitch,
+            "flag_runner_on_pitch": self.flag_runner_on_pitch,
+            "seeker_on_pitch": self.seeker_on_pitch,
             # "set_score": self.set_score,
             # "game_phase": self.game_phase
         }

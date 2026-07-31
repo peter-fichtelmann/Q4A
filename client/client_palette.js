@@ -14,6 +14,7 @@
             volleyball: '#e6e6e6',
             dodgeball: '#ff0064'
         },
+        flagRunner: '#ffff00',
         selectedPlayer: '#ffff00'
     };
 

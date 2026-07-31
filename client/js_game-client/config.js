@@ -9,6 +9,7 @@ export const Config = {
   PLAYER_RADIUS: 1.6,
   VOLLEYBALL_RADIUS: 0.1,
   DODGEBALL_RADIUS: 0.1,
+  FLAG_RUNNER_RADIUS: 0.4,
   // PLAYER_MAX_SPEED: 3,
   // PLAYER_MIN_DIR: 0.2,
 };

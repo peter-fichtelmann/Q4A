@@ -43,6 +43,7 @@ function buildRenderableState() {
   if (deltaSeconds > 0) {
     extrapolateEntities(renderState.players, deltaSeconds);
     extrapolateEntities(renderState.balls, deltaSeconds);
+    if (renderState.flag_runner) extrapolateEntities({ flag_runner: renderState.flag_runner }, deltaSeconds);
   }
   return renderState;
 }
@@ -133,6 +134,7 @@ export function renderGame() {
   const colour_seeker = roleColors.seeker || '#ffff00';
   const colour_quaffle = ballColors.volleyball || '#e6e6e6';
   const colour_bludger = ballColors.dodgeball || '#ff0064';
+  const colour_flag_runner = palette.flagRunner || '#ffff00';
   const colour_selected_player = palette.selectedPlayer || '#ffff00';
   const knocked_out_alpha = 0.5; const is_dead_alpha = 0.5;
 
@@ -150,8 +152,20 @@ export function renderGame() {
     }
   }
 
+  if (gs.flag_runner && gs.flag_runner_on_pitch) {
+    const frPos = gs.flag_runner.position || gs.flag_runner.pos;
+    if (frPos && isVisible(frPos.x, frPos.y)) {
+      const frs = worldToScreen(frPos.x, frPos.y);
+      const frRadius = (gs.flag_runner.radius !== undefined) ? gs.flag_runner.radius : Config.FLAG_RUNNER_RADIUS;
+      ctx.save(); ctx.fillStyle = colour_flag_runner;
+      ctx.beginPath(); ctx.arc(frs.x, frs.y, Math.max(2, frRadius * xScale), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+  }
+
   if (gs.players) {
     for (const player of Object.values(gs.players)) {
+      const isSeeker = (player.role === 'seeker' || player.role === 'SEEKER');
+      if (isSeeker && !gs.seeker_on_pitch) continue;
       const pos = player.position || player.pos || player;
       const margin = (player.id === State.localPlayerId) ? 10 : 2;
       if (!isVisible(pos.x, pos.y, margin)) continue;

@@ -54,11 +54,19 @@ class Config:
     BEAT_ATTEMPT_TIME_LIMIT = 6 # game seconds ball has time to beat player before potential third dodgeball interference
     
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
-    SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter
-    FLAG_RUNNER_FLOOR_REAL_SECONDS = 19 * 60  # 19 minutes before flag runner can enter
+    SEEKER_FLOOR_REAL_SECONDS = 0.4 * 60  # 20 minutes before seeker can enter
+    FLAG_RUNNER_FLOOR_REAL_SECONDS = 0.3 * 60  # 19 minutes before flag runner can enter
     FLAG_RUNNER_SEEKER_AVOIDANCE_FACTOR = 1.0  # how strongly the flag runner avoids seekers
     FLAG_RUNNER_BOUNDARY_AVOIDANCE_FACTOR = 1.0  # how strongly the flag runner avoids pitch boundaries
     FLAG_RUNNER_BOUNDARY_EPSILON = 1e-5  # prevents division by zero in boundary avoidance
+    FLAG_RUNNER_RADIUS = PLAYER_RADIUS
+    FLAG_RUNNER_MAX_SPEED_REAL = 3.5  # m/s per real second
+    FLAG_RUNNER_MAX_SPEED = FLAG_RUNNER_MAX_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    FLAG_RUNNER_MIN_SPEED = 0  # computer driven, so no minimum speed like for computer players
+    FLAG_RUNNER_ACCELERATION_REAL = 3  # m/s2 per real second
+    FLAG_RUNNER_ACCELERATION = FLAG_RUNNER_ACCELERATION_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    FLAG_RUNNER_DEACCELERATION_RATE = 0.5  # ratio of speed lost per second
+    FLAG_RUNNER_MIN_DIR = 0  # computer driven, so no minimum direction like for computer players
 
     N_CHASERS_TEAM_0 = 3
     N_CHASERS_TEAM_1 = 3

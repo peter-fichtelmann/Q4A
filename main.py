@@ -20,7 +20,7 @@ from collections import deque
 
 # Import your game modules
 from core.game_state import GameState
-from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop
+from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop, FlagRunner
 from core.game_logic.game_logic import GameLogic
 from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer, RuleBasedComputerPlayer
 from config import Config
@@ -112,6 +112,7 @@ class GameRoom:
         self.cpu_step_profile_finished: bool = False
 
         self._initialize_pitch()
+        self._initialize_flag_seeker_entities()
         # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
         self.computer_player_class: ComputerPlayer = RuleBasedComputerPlayer
         self.computer_player: ComputerPlayer = None # initialized later
@@ -234,6 +235,44 @@ class GameRoom:
                 dead_velocity_threshold=Config.DODGEBALL_DEAD_VELOCITY_THRESHOLD
             )
             self.game_state.add_dodgeball(dodgeball)
+
+    def _initialize_flag_seeker_entities(self):
+        """Add the seekers and the flag runner used in the flag seeker phase.
+
+        Seekers are never part of the room slot layout, so they are created here
+        instead of on game start and stay out of `self.players` (the lobby list).
+        Both teams line up along the far touchline, spreading outwards from the
+        midline so team 0 and team 1 seekers never overlap.
+        """
+        seeker_y = self.game_state.boundaries_y[1] - Config.PLAYER_RADIUS
+        for team, n_seekers in ((0, Config.N_SEEKERS_TEAM_0), (1, Config.N_SEEKERS_TEAM_1)):
+            x_sign = -1 if team == 0 else 1
+            for i in range(1, int(n_seekers) + 1):
+                seeker_x = self.game_state.midline_x + x_sign * 2 * i * Config.PLAYER_RADIUS
+                self.game_state.add_player(Player(
+                    id=f"seeker_{team}_{i}",
+                    team=team,
+                    role=PlayerRole.SEEKER,
+                    radius=Config.PLAYER_RADIUS,
+                    position=Vector2(seeker_x, seeker_y),
+                    max_speed=Config.PLAYER_MAX_SPEED,
+                    min_speed=Config.COMPUTER_PLAYER_MIN_SPEED,
+                    acceleration=Config.PLAYER_ACCELERATION,
+                    deacceleration_rate=Config.PLAYER_DEACCELERATION_RATE,
+                    min_dir=Config.COMPUTER_PLAYER_MIN_DIR,
+                    throw_velocity=Config.PLAYER_THROW_VELOCITY
+                ))
+
+        self.game_state.add_flag_runner(FlagRunner(
+            id="flag_runner",
+            position=Vector2(self.game_state.midline_x, Config.PITCH_WIDTH / 2),
+            radius=Config.FLAG_RUNNER_RADIUS,
+            max_speed=Config.FLAG_RUNNER_MAX_SPEED,
+            min_speed=Config.FLAG_RUNNER_MIN_SPEED,
+            acceleration=Config.FLAG_RUNNER_ACCELERATION,
+            deacceleration_rate=Config.FLAG_RUNNER_DEACCELERATION_RATE,
+            min_dir=Config.FLAG_RUNNER_MIN_DIR
+        ))
 
     def add_cpu_player(self, team: int, role: str):
         cpu_id = str(uuid.uuid4())
@@ -872,6 +911,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 "player_radius": Config.PLAYER_RADIUS,
                 "volleyball_radius": Config.VOLLEYBALL_RADIUS,
                 "dodgeball_radius": Config.DODGEBALL_RADIUS,
+                "flag_runner_radius": Config.FLAG_RUNNER_RADIUS,
             }
         })
 
@@ -999,7 +1039,9 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         - for each player: float16 x, float16 y, float16 vx, float16 vy, uint8 flags
             flags bit0 = is_knocked_out, bit1 = has_ball
         - for each ball: float16 x, float16 y, float16 vx, float16 vy, uint8 holder_flag
-        
+        - uint8 flag seeker phase flags
+            flags bit0 = flag_runner_on_pitch, bit1 = seeker_on_pitch
+        - float16 flag runner x, y, vx, vy (zeros when there is no flag runner)
 
         Clients must use the `players_order` and `balls_order` arrays sent in the
         initial_state message to map these items to entity ids.
@@ -1012,8 +1054,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header (version 3 adds per-ball possession_team)
-        buf += struct.pack('<B', 3)
+        # header (version 4 adds the flag seeker phase flags and the flag runner)
+        buf += struct.pack('<B', 4)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -1101,6 +1143,21 @@ async def broadcast_to_room(room: GameRoom, message: dict):
 
         buf += struct.pack('<B', int(bin_index))
         buf += struct.pack('<B', int(possession_code))
+
+        # flag seeker phase: visibility flags plus the flag runner's kinematics
+        phase_flags = (1 if getattr(gs, 'flag_runner_on_pitch', False) else 0) | ((1 if getattr(gs, 'seeker_on_pitch', False) else 0) << 1)
+        buf += struct.pack('<B', phase_flags)
+        flag_runner = getattr(gs, 'flag_runner', None)
+        if flag_runner is not None:
+            buf += struct.pack(
+                '<eeee',
+                float(flag_runner.position.x),
+                float(flag_runner.position.y),
+                float(flag_runner.velocity.x),
+                float(flag_runner.velocity.y),
+            )
+        else:
+            buf += struct.pack('<eeee', 0.0, 0.0, 0.0, 0.0)
 
         return bytes(buf)
 

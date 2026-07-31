@@ -95,6 +95,7 @@ export function handleMessage(message) {
       if (cfg.player_radius !== undefined) Config.PLAYER_RADIUS = cfg.player_radius;
       if (cfg.volleyball_radius !== undefined) Config.VOLLEYBALL_RADIUS = cfg.volleyball_radius;
       if (cfg.dodgeball_radius !== undefined) Config.DODGEBALL_RADIUS = cfg.dodgeball_radius;
+      if (cfg.flag_runner_radius !== undefined) Config.FLAG_RUNNER_RADIUS = cfg.flag_runner_radius;
     }
     rememberServerUpdateTime();
     try { resizeCanvasToFit(); } catch (e) {}
@@ -136,6 +137,15 @@ export function handleMessage(message) {
       }
       mergeBallVelocityFallbacks(State.gameState, State.ballVelocities);
       cacheBallVelocities(State.gameState);
+      if (incoming.flag_runner) {
+        // keep the static attributes (e.g. radius) received with the initial state
+        const existingFlagRunner = State.gameState.flag_runner || {};
+        existingFlagRunner.position = incoming.flag_runner.position || existingFlagRunner.position;
+        existingFlagRunner.velocity = incoming.flag_runner.velocity || existingFlagRunner.velocity;
+        State.gameState.flag_runner = existingFlagRunner;
+      }
+      if (incoming.flag_runner_on_pitch !== undefined) State.gameState.flag_runner_on_pitch = incoming.flag_runner_on_pitch;
+      if (incoming.seeker_on_pitch !== undefined) State.gameState.seeker_on_pitch = incoming.seeker_on_pitch;
       if (incoming.game_time !== undefined) State.gameState.game_time = incoming.game_time;
       if (incoming.score !== undefined) State.gameState.score = incoming.score;
       if (incoming.delay_bin !== undefined) State.gameState.delay_bin = incoming.delay_bin;
@@ -190,7 +200,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version !== 1 && version !== 2 && version !== 3) { console.warn('Unknown binary state version', version); return null; }
+    if (version < 1 || version > 4) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -244,7 +254,23 @@ export function parseBinaryState(arrayBuffer) {
       delay_bin = dv.getUint8(off, true); off += 1;
       possession_code = dv.getUint8(off, true); off += 1;
     }
-    return { players, balls, game_time: gameTime, score, delay_bin, possession_code };
+    let flag_runner_on_pitch = false;
+    let seeker_on_pitch = false;
+    let flag_runner = null;
+    if (version >= 4) {
+      const phaseFlags = dv.getUint8(off, true); off += 1;
+      flag_runner_on_pitch = !!(phaseFlags & 1);
+      seeker_on_pitch = !!(phaseFlags & 2);
+      const frxh = dv.getUint16(off, true); off += 2;
+      const fryh = dv.getUint16(off, true); off += 2;
+      const frvxh = dv.getUint16(off, true); off += 2;
+      const frvyh = dv.getUint16(off, true); off += 2;
+      flag_runner = {
+        position: { x: halfToFloat(frxh), y: halfToFloat(fryh) },
+        velocity: { x: halfToFloat(frvxh), y: halfToFloat(frvyh) },
+      };
+    }
+    return { players, balls, game_time: gameTime, score, delay_bin, possession_code, flag_runner, flag_runner_on_pitch, seeker_on_pitch };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }
 

@@ -416,8 +416,8 @@ class FlagRunner(Referee):
     def __init__(self,
                 id: str,
                 position: Vector2,
-                direction: Vector2 = Vector2(0, 0),
-                velocity: Vector2 = Vector2(0, 0),
+                direction: Optional[Vector2] = None,
+                velocity: Optional[Vector2] = None,
                 max_speed: float = 2.0,
                 min_speed: float = 0.3,
                 radius: float = 0.5,
@@ -428,12 +428,27 @@ class FlagRunner(Referee):
         super().__init__(
             id=id,
             position=position,
-            direction=direction,
-            velocity=velocity,
+            # fresh vectors per instance, otherwise every flag runner would share (and mutate) the same defaults
+            direction=direction if direction is not None else Vector2(0, 0),
+            velocity=velocity if velocity is not None else Vector2(0, 0),
             max_speed=max_speed,
             min_speed=min_speed,
             radius=radius,
             acceleration=acceleration,
             deacceleration_rate=deacceleration_rate,
             min_dir=min_dir
+        )
+
+    def copy(self) -> 'FlagRunner':
+        return FlagRunner(
+            id=self.id,
+            position=self.position.copy(),
+            direction=self.direction.copy(),
+            velocity=self.velocity.copy(),
+            max_speed=self.max_speed,
+            min_speed=self.min_speed,
+            radius=self.radius,
+            acceleration=self.acceleration,
+            deacceleration_rate=self.deacceleration_rate,
+            min_dir=self.min_dir
         )
