@@ -68,6 +68,9 @@ class UtilityLogic:
                 if ((player_1.role == PlayerRole.BEATER and player_2.role in (PlayerRole.KEEPER, PlayerRole.CHASER)) or
                     (player_2.role == PlayerRole.BEATER and player_1.role in (PlayerRole.KEEPER, PlayerRole.CHASER))):
                     continue
+                # skip seeker-player combinations except for seeker-seeker
+                if (player_1.role == PlayerRole.SEEKER and player_2.role != PlayerRole.SEEKER) or (player_2.role == PlayerRole.SEEKER and player_1.role != PlayerRole.SEEKER):
+                    continue
                 # Store squared distance for the pair
                 squared_distance = self._squared_distance(player_1.position, player_2.position)
                 if squared_distance <= self.state.min_squared_distance_player_player_calculation:
@@ -87,10 +90,15 @@ class UtilityLogic:
             if player.is_knocked_out:
                 continue # knocked out players do not interact with game
             for ball in balls:
-                # Skip beater-volleyball combinations (any order)
+                # Skip beater-volleyball and seeker-volleyball combinations (any order) and seeker-dodgeball combinations when seekers not on pitch
                 # no additional check in volleyball logic
                 if (player.role == PlayerRole.BEATER and ball.ball_type == BallType.VOLLEYBALL):
                     continue
+                if player.role == PlayerRole.SEEKER:
+                    if not self.state.seeker_on_pitch:
+                        continue
+                    if ball.ball_type == BallType.VOLLEYBALL:
+                        continue
                 squared_distance = self._squared_distance(player.position, ball.position)
                 # player_ball not needed
                 # self.state.squared_distances_player_ball[player.id][ball.id] = squared_distance

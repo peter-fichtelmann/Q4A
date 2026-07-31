@@ -83,6 +83,8 @@ class DodgeballLogic:
                 player = self.state.players.get(other_id)
                 if player is None:
                     continue
+                if player.role == PlayerRole.SEEKER and not self.state.seeker_on_pitch:
+                    continue  # skip seeker-dodgeball interactions when seekers are not on pitch
                 if not player.is_knocked_out:
                     if distance < (player.radius + dodgeball.radius) ** 2:
                         if dodgeball.turnover_to_player is not None and dodgeball.turnover_to_player != player.id:
