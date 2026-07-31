@@ -435,6 +435,7 @@ class FlagRunner(Referee):
                 acceleration: float = 1,
                 deacceleration_rate: float = 0.5,
                 min_dir: float = 0.2,
+                random_direction_factor: float = 0.2,
                 seeker_avoidance_factor: float = 1.0,
                 boundary_avoidance_factor: float = 1.0,
                 boundary_epsilon: float = 1e-5,
@@ -454,6 +455,7 @@ class FlagRunner(Referee):
             deacceleration_rate=deacceleration_rate,
             min_dir=min_dir
         )
+        self.random_direction_factor = random_direction_factor  # how much randomness is added to the flag runner's direction
         self.seeker_avoidance_factor = seeker_avoidance_factor  # how strongly the flag runner avoids seekers
         self.boundary_avoidance_factor = boundary_avoidance_factor  # how strongly the flag runner avoids pitch boundaries
         self.boundary_epsilon = boundary_epsilon  # prevents division by zero in boundary avoidance
@@ -472,6 +474,7 @@ class FlagRunner(Referee):
             acceleration=self.acceleration,
             deacceleration_rate=self.deacceleration_rate,
             min_dir=self.min_dir,
+            random_direction_factor=self.random_direction_factor,
             seeker_avoidance_factor=self.seeker_avoidance_factor,
             boundary_avoidance_factor=self.boundary_avoidance_factor,
             boundary_epsilon=self.boundary_epsilon,

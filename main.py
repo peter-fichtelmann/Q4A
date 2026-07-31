@@ -269,6 +269,7 @@ class GameRoom:
             acceleration=Config.FLAG_RUNNER_ACCELERATION,
             deacceleration_rate=Config.FLAG_RUNNER_DEACCELERATION_RATE,
             min_dir=Config.FLAG_RUNNER_MIN_DIR,
+            random_direction_factor=Config.FLAG_RUNNER_RANDOM_DIRECTION_FACTOR,
             seeker_avoidance_factor=Config.FLAG_RUNNER_SEEKER_AVOIDANCE_FACTOR,
             boundary_avoidance_factor=Config.FLAG_RUNNER_BOUNDARY_AVOIDANCE_FACTOR,
             boundary_epsilon=Config.FLAG_RUNNER_BOUNDARY_EPSILON,

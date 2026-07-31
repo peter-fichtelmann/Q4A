@@ -38,6 +38,10 @@ class FlagRunnerLogic:
             return
 
         flag_runner = self.state.flag_runner
+        # add some random direction to get not stuck and more unpredictable movement
+        random_x_direction = random.uniform(-1, 1) * flag_runner.random_direction_factor
+        random_y_direction = random.uniform(-1, 1) * flag_runner.random_direction_factor
+
         midline_x_direction = self.state.midline_x - flag_runner.position.x
         midline_x_distance = abs(midline_x_direction)
         # limit to 1/-1 if midline_x_distance is greater than 1 to avoid too much influence
@@ -62,8 +66,8 @@ class FlagRunnerLogic:
         y_avoidance = 1 / ((flag_runner.position.y - self.state.boundaries_y[0])**2 + boundary_epsilon) - 1 / ((flag_runner.position.y - self.state.boundaries_y[1])**2 + boundary_epsilon)
         seeker_avoid_boundary_direction = Vector2(x_avoidance * flag_runner.boundary_avoidance_factor, y_avoidance * flag_runner.boundary_avoidance_factor)
 
-        flag_runner.direction.x = midline_x_direction + seeker_avoid_direction.x + seeker_avoid_boundary_direction.x
-        flag_runner.direction.y = seeker_avoid_direction.y + seeker_avoid_boundary_direction.y
+        flag_runner.direction.x = random_x_direction + midline_x_direction + seeker_avoid_direction.x + seeker_avoid_boundary_direction.x
+        flag_runner.direction.y = random_y_direction + seeker_avoid_direction.y + seeker_avoid_boundary_direction.y
 
     def update_flag_runner_velocity(self, dt: float) -> None:
         """
