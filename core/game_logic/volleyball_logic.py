@@ -126,7 +126,7 @@ class VolleyballLogic:
                 else:
                     scoring_team = self.state.team_0
                 self.logger.info("Goal scored by team %s through hoop %s!", scoring_team, hoop_id)
-                self.state.update_score(scoring_team, 10)
+                self.state.update_score(scoring_team, 1)
                 volleyball.crossed_hoop = None
                 if volleyball.holder_id is not None:
                     # if player run with ball through hoop, so no throwing afterwards should be possible
