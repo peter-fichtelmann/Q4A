@@ -368,7 +368,7 @@ class Referee:
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))  # Current movement velocity
     max_speed: float = 2.0  # Maximum speed in meters per second
     min_speed: float = 0.3  # Minimum speed in meters per second
-    radius: float        # Collision radius in meters
+    radius: float = 0.5  # Collision radius in meters
     acceleration: float = 1              # Meters per second squared
     deacceleration_rate: float = 0.5          # Ratio of speed lost per second
     min_dir: float = 0.2 # of 1

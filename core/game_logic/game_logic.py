@@ -12,6 +12,7 @@ from core.game_logic.boundary_logic import BoundaryLogic
 from core.game_logic.penalty_logic import PenaltyLogic
 from core.game_logic.process_action_logic import ProcessActionLogic
 from core.game_logic.utility_logic import UtilityLogic
+from core.game_logic.flag_runner_logic import FlagRunnerLogic
 
 # Base logger for game logic subsystem
 BASE_LOGGER = logging.getLogger('quadball.game_logic')
@@ -32,6 +33,7 @@ class GameLogic:
         boundary_logic: Boundary, hoop blockage, and inbounding rules.
         process_action_logic: Handles player action inputs (throw, tackle).
         utility_logic: Distance precomputation for efficient collision checks.
+        flag_runner_logic: Flag runner direction/avoidance behavior (Flag Seeker phase).
     """
     
     def __init__(
@@ -42,7 +44,7 @@ class GameLogic:
     ):
         """
         Initialize the game logic system with a reference to the game state.
-        
+
         Sets up distance tracking structures used for efficient collision detection
         and interaction checks between entities (players and balls).
 
@@ -56,9 +58,12 @@ class GameLogic:
             boundary_logic: BoundaryLogic instance for boundary enforcement.
             process_action_logic: ProcessActionLogic instance for player actions.
             utility_logic: UtilityLogic instance for distance precomputation.
-        
+            flag_runner_logic: FlagRunnerLogic instance for flag runner movement.
+
         Args:
-            game_state: The GameState instance that this system will manage
+            game_state: The GameState instance that this system will manage. Its
+                flag_runner_seeker_avoidance_factor/flag_runner_boundary_avoidance_factor/
+                flag_runner_boundary_epsilon fields configure FlagRunnerLogic.
             log_level: Logging level (e.g., logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR)
             logger_name: Optional logger name. If omitted, an instance-specific
                 logger name is generated.
@@ -92,6 +97,7 @@ class GameLogic:
         self.boundary_logic = BoundaryLogic(self.state, logger=self.logger)
         self.process_action_logic = ProcessActionLogic(self.state, logger=self.logger)
         self.utility_logic = UtilityLogic(self.state)
+        self.flag_runner_logic = FlagRunnerLogic(self.state, logger=self.logger)
         self._step_profiler = _GameLogicStepProfiler()
         # # compile static functions for initial warmup of numba
         # UtilityLogic._distance_numba(0.5, 0.5, 0.5, 0.5)
@@ -110,7 +116,8 @@ class GameLogic:
         """
         # Update game time
         self.state.update_game_time(dt)
-        
+        self.flag_runner_logic.update_flag_runner_direction()
+        self.flag_runner_logic.update_flag_runner_velocity(dt)
         self.basic_logic.update_player_velocities(dt)
         # Check player collisions and enforce tackle effects before updating positions and after updating player velocities
         self.physical_contact_logic._check_player_collisions()
@@ -119,7 +126,8 @@ class GameLogic:
 
         self.basic_logic.update_ball_velocities(dt)
         
-        # Update player positions and ball positions
+        # Update player, ball and flag runner positions
+        self.flag_runner_logic.update_flag_runner_position(dt)
         self.basic_logic.update_positions(dt)
         self.basic_logic.check_keeper_special_powers() # e.g. dodgeball immunity, protected keeper
         # free way for volleyball inbounder
@@ -182,10 +190,13 @@ class GameLogic:
         """Return ordered step targets executed by update()."""
         return [
             ('state.update_game_time', self.state, 'update_game_time'),
+            ('flag_runner.update_flag_runner_direction', self.flag_runner_logic, 'update_flag_runner_direction'),
+            ('flag_runner.update_flag_runner_velocity', self.flag_runner_logic, 'update_flag_runner_velocity'),
             ('basic.update_player_velocities', self.basic_logic, 'update_player_velocities'),
             ('physical._check_player_collisions', self.physical_contact_logic, '_check_player_collisions'),
             ('physical._enforce_tackle', self.physical_contact_logic, '_enforce_tackle'),
             ('basic.update_ball_velocities', self.basic_logic, 'update_ball_velocities'),
+            ('flag_runner.update_flag_runner_position', self.flag_runner_logic, 'update_flag_runner_position'),
             ('basic.update_positions', self.basic_logic, 'update_positions'),
             ('basic.check_keeper_special_powers', self.basic_logic, 'check_keeper_special_powers'),
             ('boundary._inbounding_free_way', self.boundary_logic, '_inbounding_free_way'),

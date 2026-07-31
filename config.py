@@ -56,6 +56,9 @@ class Config:
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
     SEEKER_FLOOR_REAL_SECONDS = 20 * 60  # 20 minutes before seeker can enter
     FLAG_RUNNER_FLOOR_REAL_SECONDS = 19 * 60  # 19 minutes before flag runner can enter
+    FLAG_RUNNER_SEEKER_AVOIDANCE_FACTOR = 1.0  # how strongly the flag runner avoids seekers
+    FLAG_RUNNER_BOUNDARY_AVOIDANCE_FACTOR = 1.0  # how strongly the flag runner avoids pitch boundaries
+    FLAG_RUNNER_BOUNDARY_EPSILON = 1e-5  # prevents division by zero in boundary avoidance
 
     N_CHASERS_TEAM_0 = 3
     N_CHASERS_TEAM_1 = 3
@@ -63,6 +66,8 @@ class Config:
     N_KEEPERS_TEAM_1 = 1
     N_BEATERS_TEAM_0 = 2
     N_BEATERS_TEAM_1 = 2
+    N_SEEKERS_TEAM_0 = 1
+    N_SEEKERS_TEAM_1 = 1
 
 
     COMPUTER_PLAYER_TICK_RATE = 5 # number of game ticks between computer player updates

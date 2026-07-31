@@ -34,8 +34,11 @@ class BasicLogic:
         deceleration, caps top speed, and snaps near-stationary movement to zero.
         It also clears knockout state once a knocked-out player reaches the team hoop.
 
+        Also used for the flag runner (a Referee, not a Player), which has no
+        is_knocked_out/team attributes, so the knockout recovery check is skipped for it.
+
         Args:
-            player: The player whose velocity is updated.
+            player: The player (or flag runner) whose velocity is updated.
             dt: Delta game time since last frame in seconds.
         """
         # norm player.direction
@@ -47,6 +50,9 @@ class BasicLogic:
         if mag_dir > 1:
             player.direction.x /= mag_dir
             player.direction.y /= mag_dir
+        elif mag_dir < player.min_dir:
+            player.direction.x = 0
+            player.direction.y = 0
         player.velocity.x = player.velocity.x + ( - player.deacceleration_rate * player.velocity.x + player.direction.x * player.acceleration) * dt
         player.velocity.y = player.velocity.y + ( - player.deacceleration_rate * player.velocity.y + player.direction.y * player.acceleration) * dt
         
@@ -224,6 +230,7 @@ class BasicLogic:
             ball.previous_position.x = ball.position.x
             ball.previous_position.y = ball.position.y
             ball.position.x, ball.position.y = self.get_update_position(ball, dt)
+            
     
     def _check_ball_collisions(self):
         """

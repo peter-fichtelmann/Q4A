@@ -40,10 +40,15 @@ class GameState:
     third_dodgeball_team: str = None # team which is assigned the third dodgeball
     potential_third_dodgeball_interference_kwargs: Dict[str, str] = field(default_factory=lambda: {'player_id': None, 'dodgeball_id': None}) # third dodgeball id and player id if potential interferenece if not beat attempt
     beat_attempt_time_limit: float = 10.0
-    seeker_on_pitch: bool = False                         # Seeker enters after 20 min
-    set_score: Optional[int] = None                           # Snitch capture score
-    seeker_floor_seconds: int = 1200  # Time before seeker can enter
+    flag_runner_seeker_avoidance_factor: float = 1.0  # how strongly the flag runner avoids seekers
+    flag_runner_boundary_avoidance_factor: float = 1.0  # how strongly the flag runner avoids pitch boundaries
+    flag_runner_boundary_epsilon: float = 1e-5  # prevents division by zero in boundary avoidance
     flag_runner_floor_seconds: int = 1140  # Time before flag runner can enter
+    seeker_floor_seconds: int = 1200  # Time before seeker can enter
+    flag_runner_on_pitch: bool = False                         # Flag runner enters after 19 min
+    seeker_on_pitch: bool = False                         # Seeker enters after 20 min
+    is_overtime: bool = False                          # True if game is in overtime
+    set_score: Optional[int] = None                           # Snitch capture score
     
     def add_player(self, player: Player) -> None:
         """Add a player to the game state."""
@@ -109,7 +114,11 @@ class GameState:
         """Update elapsed game time."""
         self.game_time += dt
         # Seeker enters after 20 minutes (1200 seconds)
-        if self.game_time >= self.seeker_floor_seconds and not self.seeker_on_pitch:
+        if self.is_overtime:
+            return
+        if self.game_time >= self.flag_runner_floor_seconds:
+            self.flag_runner_on_pitch = True
+        if self.game_time >= self.seeker_floor_seconds:
             self.seeker_on_pitch = True
 
     def update_player(self, player: Player) -> None:
@@ -158,6 +167,10 @@ class GameState:
             seeker_on_pitch=self.seeker_on_pitch,
             set_score=self.set_score,
             seeker_floor_seconds=self.seeker_floor_seconds,
+            flag_runner_floor_seconds=self.flag_runner_floor_seconds,
+            flag_runner_seeker_avoidance_factor=self.flag_runner_seeker_avoidance_factor,
+            flag_runner_boundary_avoidance_factor=self.flag_runner_boundary_avoidance_factor,
+            flag_runner_boundary_epsilon=self.flag_runner_boundary_epsilon,
         )
 
     def __copy__(self) -> 'GameState':
