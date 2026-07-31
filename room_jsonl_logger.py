@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Tuple
 
-from core.entities import Ball, BallType, DodgeBall, Hoop, Player, PlayerRole, Vector2, VolleyBall
+from core.entities import Ball, BallType, DodgeBall, FlagRunner, Hoop, Player, PlayerRole, Vector2, VolleyBall
 from core.game_state import GameState
 
 try:
@@ -43,6 +43,13 @@ _PLAYER_DYNAMIC_FIELD_NAMES = [
     'in_contact_player_ids',
     'tackling_player_ids',
     'is_receiving_turnover_ball',
+    'flag_runner_interaction_time',
+]
+
+_FLAG_RUNNER_DYNAMIC_FIELD_NAMES = [
+    'position',
+    'direction',
+    'velocity',
 ]
 
 _BALL_DYNAMIC_FIELD_NAMES = [
@@ -67,6 +74,7 @@ _DODGEBALL_DYNAMIC_FIELD_NAMES = _BALL_DYNAMIC_FIELD_NAMES + [
 ]
 
 _GAME_STATE_DYNAMIC_FIELD_NAMES = [
+    'is_game_active',
     'players',
     'balls',
     'volleyball',
@@ -79,7 +87,28 @@ _GAME_STATE_DYNAMIC_FIELD_NAMES = [
     'potential_third_dodgeball_interference_kwargs',
     'seeker_on_pitch',
     'set_score',
+    'flag_runner',
+    'flag_runner_on_pitch',
 ]
+
+
+def _object_field_names(value) -> list[str]:
+    """Ordered attribute names used to encode an object positionally.
+
+    Dataclass fields come first, followed by any extra instance attributes assigned
+    outside the dataclass machinery. VolleyBall, DodgeBall and FlagRunner all subclass
+    a dataclass with a hand written __init__, so without the second part their own
+    attributes would never reach the log.
+    """
+    if is_dataclass(value):
+        field_names = [field.name for field in fields(value)]
+        known_field_names = set(field_names)
+        field_names.extend(
+            key for key in vars(value)
+            if key not in known_field_names and not key.startswith('_') and not callable(getattr(value, key, None))
+        )
+        return field_names
+    return [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
 
 
 def _quantize_float16(value: float) -> float:
@@ -145,6 +174,35 @@ def _decode_player_full_payload(payload) -> Player:
         in_contact_player_ids=list(payload[19]) if isinstance(payload[19], list) else [],
         tackling_player_ids=list(payload[20]) if isinstance(payload[20], list) else [],
         is_receiving_turnover_ball=bool(payload[21]),
+        flag_runner_interaction_time=float(payload[22]) if len(payload) > 22 and payload[22] is not None else 0.0,
+    )
+
+
+def _decode_flag_runner_full_payload(payload) -> FlagRunner:
+    if isinstance(payload, FlagRunner):
+        return payload.copy()
+
+    if not isinstance(payload, list):
+        raise ValueError('Invalid flag runner payload')
+
+    # Indices 0-9 are the inherited Referee dataclass fields, 10-14 the FlagRunner
+    # attributes set in its __init__ (same order the serializer walks them in).
+    return FlagRunner(
+        id=str(payload[0]),
+        position=_decode_vector2_payload(payload[1]),
+        direction=_decode_vector2_payload(payload[2]),
+        velocity=_decode_vector2_payload(payload[3]),
+        max_speed=float(payload[4]),
+        min_speed=float(payload[5]),
+        radius=float(payload[6]),
+        acceleration=float(payload[7]),
+        deacceleration_rate=float(payload[8]),
+        min_dir=float(payload[9]),
+        seeker_avoidance_factor=float(payload[10]) if len(payload) > 10 else 1.0,
+        boundary_avoidance_factor=float(payload[11]) if len(payload) > 11 else 1.0,
+        boundary_epsilon=float(payload[12]) if len(payload) > 12 else 1e-5,
+        interaction_time_threshold=float(payload[13]) if len(payload) > 13 else 1.0,
+        catch_probability=float(payload[14]) if len(payload) > 14 else 0.05,
     )
 
 
@@ -250,6 +308,16 @@ def _update_player_dynamic_payload(player: Player, payload) -> None:
     player.in_contact_player_ids = list(payload[9]) if isinstance(payload[9], list) else []
     player.tackling_player_ids = list(payload[10]) if isinstance(payload[10], list) else []
     player.is_receiving_turnover_ball = bool(payload[11])
+    player.flag_runner_interaction_time = float(payload[12]) if len(payload) > 12 and payload[12] is not None else 0.0
+
+
+def _update_flag_runner_dynamic_payload(flag_runner: FlagRunner, payload) -> None:
+    if not isinstance(payload, list) or flag_runner is None:
+        return
+
+    flag_runner.position = _update_vector2(flag_runner.position, payload[0])
+    flag_runner.direction = _update_vector2(flag_runner.direction, payload[1])
+    flag_runner.velocity = _update_vector2(flag_runner.velocity, payload[2])
 
 
 def _update_ball_dynamic_payload(ball: Ball, payload) -> None:
@@ -294,6 +362,7 @@ def _serialize_player_dynamic_payload(player: Player, default: bool = False):
             [],
             [],
             False,
+            0.0,
         ]
 
     return [
@@ -309,6 +378,22 @@ def _serialize_player_dynamic_payload(player: Player, default: bool = False):
         list(player.in_contact_player_ids),
         list(player.tackling_player_ids),
         player.is_receiving_turnover_ball,
+        player.flag_runner_interaction_time,
+    ]
+
+
+def _serialize_flag_runner_dynamic_payload(flag_runner: FlagRunner | None, default: bool = False):
+    if default or flag_runner is None:
+        return [
+            _serialize_vector2_payload(None, default=True),
+            _serialize_vector2_payload(None, default=True),
+            _serialize_vector2_payload(None, default=True),
+        ]
+
+    return [
+        _serialize_vector2_payload(flag_runner.position),
+        _serialize_vector2_payload(flag_runner.direction),
+        _serialize_vector2_payload(flag_runner.velocity),
     ]
 
 
@@ -362,7 +447,11 @@ def _serialize_game_state_dynamic_payload(state: GameState, default: bool = Fals
         for dodgeball in state.dodgeballs
     ]
 
+    # Order must match GameState.serialize_dynamic_attributes() exactly: the records are
+    # positional, so any key inserted there has to be mirrored at the same index here,
+    # in _GAME_STATE_DYNAMIC_FIELD_NAMES and in _apply_dynamic_snapshot_to_state.
     return [
+        False if default else state.is_game_active,
         players_payload,
         balls_payload,
         volleyball_payload,
@@ -378,6 +467,8 @@ def _serialize_game_state_dynamic_payload(state: GameState, default: bool = Fals
         ],
         False if default else state.seeker_on_pitch,
         None if default else state.set_score,
+        _serialize_flag_runner_dynamic_payload(state.flag_runner, default=default),
+        False if default else state.flag_runner_on_pitch,
     ]
 
 
@@ -576,10 +667,7 @@ class RoomJsonlLogger:
                 return {'type': 'sequence', 'element_structure': self._extract_structure(list(value)[0], dynamic_only, _type_registry)}
             return {'type': 'sequence'}
         if is_dataclass(value) or hasattr(value, '__dict__'):
-            if is_dataclass(value):
-                field_names = [field.name for field in fields(value)]
-            else:
-                field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
+            field_names = _object_field_names(value)
             class_name = f"{value.__class__.__module__}.{value.__class__.__qualname__}"
             
             # Register this type and its fields once.
@@ -641,10 +729,7 @@ class RoomJsonlLogger:
             return _schema
 
         if is_dataclass(value) or hasattr(value, '__dict__'):
-            if is_dataclass(value):
-                field_names = [field.name for field in fields(value)]
-            else:
-                field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
+            field_names = _object_field_names(value)
 
             _schema.append({
                 'path': path,
@@ -688,10 +773,7 @@ class RoomJsonlLogger:
         if isinstance(value, (list, tuple, set, deque)):
             return [self._serialize_value(item, f"{path}.{index}", dynamic_only=dynamic_only) for index, item in enumerate(value)]
         if is_dataclass(value) or hasattr(value, '__dict__'):
-            if is_dataclass(value):
-                field_names = [field.name for field in fields(value)]
-            else:
-                field_names = [key for key in vars(value).keys() if not key.startswith('_') and not callable(getattr(value, key))]
+            field_names = _object_field_names(value)
             return [self._serialize_value(getattr(value, key, None), f"{path}.{key}", dynamic_only=dynamic_only) for key in field_names]
         return self._serialize_scalar(value)
 
@@ -927,6 +1009,13 @@ class RoomJsonlStateReader:
                             state.dodgeballs.append(dodgeball)
                 continue
 
+            if field_name == 'flag_runner':
+                try:
+                    state.flag_runner = _decode_flag_runner_full_payload(value) if value is not None else None
+                except Exception:
+                    state.flag_runner = None
+                continue
+
             if field_name == 'hoops':
                 state.hoops = {}
                 if isinstance(value, list):
@@ -971,21 +1060,29 @@ class RoomJsonlStateReader:
         return state
 
     def _apply_dynamic_snapshot_to_state(self, state: GameState, snapshot) -> None:
-        if not isinstance(snapshot, list) or len(snapshot) < len(_GAME_STATE_DYNAMIC_FIELD_NAMES):
+        # Every field below is length-guarded, so shorter snapshots written before a
+        # field was appended still replay (they just keep the decoded default).
+        if not isinstance(snapshot, list):
             return
 
-        player_payloads = snapshot[0] if len(snapshot) > 0 else []
-        ball_payloads = snapshot[1] if len(snapshot) > 1 else []
-        volleyball_payload = snapshot[2] if len(snapshot) > 2 else None
-        dodgeball_payloads = snapshot[3] if len(snapshot) > 3 else []
-        score_payload = snapshot[4] if len(snapshot) > 4 else None
-        game_time_payload = snapshot[5] if len(snapshot) > 5 else None
-        warnings_payload = snapshot[6] if len(snapshot) > 6 else None
-        third_dodgeball_payload = snapshot[7] if len(snapshot) > 7 else None
-        third_dodgeball_team_payload = snapshot[8] if len(snapshot) > 8 else None
-        interference_payload = snapshot[9] if len(snapshot) > 9 else None
-        seeker_on_pitch_payload = snapshot[10] if len(snapshot) > 10 else None
-        set_score_payload = snapshot[11] if len(snapshot) > 11 else None
+        is_game_active_payload = snapshot[0] if len(snapshot) > 0 else None
+        player_payloads = snapshot[1] if len(snapshot) > 1 else []
+        ball_payloads = snapshot[2] if len(snapshot) > 2 else []
+        volleyball_payload = snapshot[3] if len(snapshot) > 3 else None
+        dodgeball_payloads = snapshot[4] if len(snapshot) > 4 else []
+        score_payload = snapshot[5] if len(snapshot) > 5 else None
+        game_time_payload = snapshot[6] if len(snapshot) > 6 else None
+        warnings_payload = snapshot[7] if len(snapshot) > 7 else None
+        third_dodgeball_payload = snapshot[8] if len(snapshot) > 8 else None
+        third_dodgeball_team_payload = snapshot[9] if len(snapshot) > 9 else None
+        interference_payload = snapshot[10] if len(snapshot) > 10 else None
+        seeker_on_pitch_payload = snapshot[11] if len(snapshot) > 11 else None
+        set_score_payload = snapshot[12] if len(snapshot) > 12 else None
+        flag_runner_payload = snapshot[13] if len(snapshot) > 13 else None
+        flag_runner_on_pitch_payload = snapshot[14] if len(snapshot) > 14 else None
+
+        if is_game_active_payload is not None:
+            state.is_game_active = bool(is_game_active_payload)
 
         if isinstance(player_payloads, list):
             current_player_ids = list(state.players.keys())
@@ -1036,6 +1133,10 @@ class RoomJsonlStateReader:
         if seeker_on_pitch_payload is not None:
             state.seeker_on_pitch = bool(seeker_on_pitch_payload)
         state.set_score = set_score_payload
+        if state.flag_runner is not None and flag_runner_payload is not None:
+            _update_flag_runner_dynamic_payload(state.flag_runner, flag_runner_payload)
+        if flag_runner_on_pitch_payload is not None:
+            state.flag_runner_on_pitch = bool(flag_runner_on_pitch_payload)
 
     def _find_replay_start_tick(self, tick: int) -> Optional[int]:
         """Find the best replay start record at or before target tick.

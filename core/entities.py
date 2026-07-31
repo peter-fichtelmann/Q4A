@@ -87,6 +87,7 @@ class Player:
     in_contact_player_ids: list[str] = field(default_factory=list)   # player ids where the player is in physical contact
     tackling_player_ids: list[str] = field(default_factory=list) # player ids where the player is tackling or being tackled by
     is_receiving_turnover_ball: bool = False  # True if player is currently receiving a turnover ball
+    flag_runner_interaction_time: float = 0.0  #only for seekers: Time in seconds that the player has been in contact with the flag runner
 
     def serialize(self) -> dict:
         """Convert player to JSON-serializable dict."""
@@ -99,6 +100,7 @@ class Player:
             "velocity": self.velocity.to_dict(),
             "is_knocked_out": self.is_knocked_out,
             "has_ball": self.has_ball,
+            "flag_runner_interaction_time": self.flag_runner_interaction_time
         }
     
     def serialize_dynamic_attributes(self) -> dict:
@@ -115,6 +117,7 @@ class Player:
             "in_contact_player_ids": self.in_contact_player_ids,
             "tackling_player_ids": self.tackling_player_ids,
             "is_receiving_turnover_ball": self.is_receiving_turnover_ball,
+            "flag_runner_interaction_time": self.flag_runner_interaction_time
         }
 
     def copy(self) -> 'Player':
@@ -141,6 +144,7 @@ class Player:
             in_contact_player_ids=self.in_contact_player_ids.copy(),
             tackling_player_ids=self.tackling_player_ids.copy(),
             is_receiving_turnover_ball=self.is_receiving_turnover_ball,
+            flag_runner_interaction_time=self.flag_runner_interaction_time
         )
 
     def __copy__(self) -> 'Player':
@@ -388,6 +392,13 @@ class Referee:
             "min_dir": self.min_dir
         }
 
+    def serialize_dynamic_attributes(self) -> dict:
+        return {
+            "position": self.position.to_dict(),
+            "direction": self.direction.to_dict(),
+            "velocity": self.velocity.to_dict(),
+        }
+
     def copy(self) -> 'Referee':
         return Referee(
             id=self.id,
@@ -423,7 +434,12 @@ class FlagRunner(Referee):
                 radius: float = 0.5,
                 acceleration: float = 1,
                 deacceleration_rate: float = 0.5,
-                min_dir: float = 0.2
+                min_dir: float = 0.2,
+                seeker_avoidance_factor: float = 1.0,
+                boundary_avoidance_factor: float = 1.0,
+                boundary_epsilon: float = 1e-5,
+                interaction_time_threshold: float = 1.0,
+                catch_probability: float = 0.05
                 ):
         super().__init__(
             id=id,
@@ -438,6 +454,11 @@ class FlagRunner(Referee):
             deacceleration_rate=deacceleration_rate,
             min_dir=min_dir
         )
+        self.seeker_avoidance_factor = seeker_avoidance_factor  # how strongly the flag runner avoids seekers
+        self.boundary_avoidance_factor = boundary_avoidance_factor  # how strongly the flag runner avoids pitch boundaries
+        self.boundary_epsilon = boundary_epsilon  # prevents division by zero in boundary avoidance
+        self.interaction_time_threshold = interaction_time_threshold  # time in seconds that a seeker must be in contact with the flag runner to "catch" it
+        self.catch_probability = catch_probability  # probability that a seeker will catch the flag runner if they are in contact for the interaction time threshold (catch_attempt)
 
     def copy(self) -> 'FlagRunner':
         return FlagRunner(
@@ -450,5 +471,10 @@ class FlagRunner(Referee):
             radius=self.radius,
             acceleration=self.acceleration,
             deacceleration_rate=self.deacceleration_rate,
-            min_dir=self.min_dir
+            min_dir=self.min_dir,
+            seeker_avoidance_factor=self.seeker_avoidance_factor,
+            boundary_avoidance_factor=self.boundary_avoidance_factor,
+            boundary_epsilon=self.boundary_epsilon,
+            interaction_time_threshold=self.interaction_time_threshold,
+            catch_probability=self.catch_probability
         )

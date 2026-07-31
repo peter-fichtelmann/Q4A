@@ -235,6 +235,8 @@ class BasicLogic:
     def _check_ball_collisions(self):
         """
         Detect and resolve collisions between balls.
+
+        Models as inelastic collisions.
         
         Only processes collisions between free (unheld) balls. When two balls
         collide, their velocities are reflected along the collision normal and

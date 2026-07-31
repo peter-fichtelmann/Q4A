@@ -114,41 +114,43 @@ class GameLogic:
         Args:
             dt: Delta game time in seconds since last frame
         """
-        # Update game time
-        self.state.update_game_time(dt)
-        self.flag_runner_logic.update_flag_runner_direction()
-        self.flag_runner_logic.update_flag_runner_velocity(dt)
-        self.basic_logic.update_player_velocities(dt)
-        # Check player collisions and enforce tackle effects before updating positions and after updating player velocities
-        self.physical_contact_logic._check_player_collisions()
-        # after collisions before updating positions so setting velocity to 0 when tackling takes effect before position updates and after velocity updates
-        self.physical_contact_logic._enforce_tackle()
+        if self.state.is_game_active:
+            # Update game time
+            self.state.update_game_time(dt)
+            self.flag_runner_logic.update_flag_runner_direction()
+            self.flag_runner_logic.update_flag_runner_velocity(dt)
+            self.basic_logic.update_player_velocities(dt)
+            # Check player collisions and enforce tackle effects before updating positions and after updating player velocities
+            self.physical_contact_logic._check_player_collisions()
+            # after collisions before updating positions so setting velocity to 0 when tackling takes effect before position updates and after velocity updates
+            self.flag_runner_logic._check_seeker_flag_runner_interaction(dt)
+            self.physical_contact_logic._enforce_tackle()
 
-        self.basic_logic.update_ball_velocities(dt)
-        
-        # Update player, ball and flag runner positions
-        self.flag_runner_logic.update_flag_runner_position(dt)
-        self.basic_logic.update_positions(dt)
-        self.basic_logic.check_keeper_special_powers() # e.g. dodgeball immunity, protected keeper
-        # free way for volleyball inbounder
-        self.boundary_logic._inbounding_free_way(dt)
-        self.boundary_logic._making_alive_keeper_free_way(dt)
-        self.boundary_logic._enforce_hoop_blockage() # after update positions because possibly resetting to previous position
-        self.volleyball_logic.make_volleyball_alive()
-        
-        self.utility_logic._calculate_distances()
-        self.basic_logic._check_ball_collisions() # after distance calculation
+            self.basic_logic.update_ball_velocities(dt)
+            
+            # Update player, ball and flag runner positions
+            self.flag_runner_logic.update_flag_runner_position(dt)
+            self.basic_logic.update_positions(dt)
+            self.basic_logic.check_keeper_special_powers() # e.g. dodgeball immunity, protected keeper
+            # free way for volleyball inbounder
+            self.boundary_logic._inbounding_free_way(dt)
+            self.boundary_logic._making_alive_keeper_free_way(dt)
+            self.boundary_logic._enforce_hoop_blockage() # after update positions because possibly resetting to previous position
+            self.volleyball_logic.make_volleyball_alive()
+            
+            self.utility_logic._calculate_distances()
+            self.basic_logic._check_ball_collisions() # after distance calculation
 
-        self.volleyball_logic._check_volleyball_possessions()
-        self.dodgeball_logic._check_dodgeball_interactions()
+            self.volleyball_logic._check_volleyball_possessions()
+            self.dodgeball_logic._check_dodgeball_interactions()
 
-        self.volleyball_logic._check_goals()
+            self.volleyball_logic._check_goals()
 
-        self.dodgeball_logic._check_third_dodgeball(dt)
-        self.penalty_logic._check_delay_of_game(dt)
-        
-        # Check pitch boundaries
-        self.boundary_logic._enforce_pitch_boundaries() # at least after free ways and position updates
+            self.dodgeball_logic._check_third_dodgeball(dt)
+            self.penalty_logic._check_delay_of_game(dt)
+            
+            # Check pitch boundaries
+            self.boundary_logic._enforce_pitch_boundaries() # at least after free ways and position updates
 
     def copy(self, log_level = None) -> 'GameLogic':
         """Return a new GameLogic instance with a copied GameState.
@@ -194,6 +196,7 @@ class GameLogic:
             ('flag_runner.update_flag_runner_velocity', self.flag_runner_logic, 'update_flag_runner_velocity'),
             ('basic.update_player_velocities', self.basic_logic, 'update_player_velocities'),
             ('physical._check_player_collisions', self.physical_contact_logic, '_check_player_collisions'),
+            ('flag_runner._check_seeker_flag_runner_interaction', self.flag_runner_logic, '_check_seeker_flag_runner_interaction'),
             ('physical._enforce_tackle', self.physical_contact_logic, '_enforce_tackle'),
             ('basic.update_ball_velocities', self.basic_logic, 'update_ball_velocities'),
             ('flag_runner.update_flag_runner_position', self.flag_runner_logic, 'update_flag_runner_position'),

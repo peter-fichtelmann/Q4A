@@ -238,7 +238,57 @@ class UtilityLogic:
     def _squared_sum(value_1: float, value_2: float) -> float:
         """Return sum of squared scalar components."""
         return value_1**2 + value_2**2
-    
+
+    @staticmethod
+    def _resolve_elastic_entity_collisions(entity, other_entity) -> None:
+        """
+        Resolve collisions between entities by adjusting their velocities based on collision physics.
+        """
+        normal = Vector2(
+            other_entity.position.x - entity.position.x,
+            other_entity.position.y - entity.position.y
+        )
+        normal_mag = UtilityLogic._magnitude(normal)
+        if normal_mag == 0:
+            return # avoid divide by zero
+        normal.x /= normal_mag
+        normal.y /= normal_mag
+        dot_entity = entity.velocity.x * normal.x + entity.velocity.y * normal.y
+        dot_other = other_entity.velocity.x * normal.x + other_entity.velocity.y * normal.y
+        if dot_entity < 0 and dot_other > 0:
+            return # both moving away from each other
+        # split velcoity into contribution along connecting vector and perpendicular to it
+        entity_velocity_along_normal = Vector2(normal.x * dot_entity, normal.y * dot_entity)
+        entity_velocity_perpendicular = Vector2(
+            entity.velocity.x - entity_velocity_along_normal.x,
+            entity.velocity.y - entity_velocity_along_normal.y
+        )
+        other_velocity_along_normal = Vector2(normal.x * dot_other, normal.y * dot_other)
+        other_velocity_perpendicular = Vector2(
+            other_entity.velocity.x - other_velocity_along_normal.x,
+            other_entity.velocity.y - other_velocity_along_normal.y
+        )
+        if dot_entity > 0 and dot_other > 0: # entity moves towards other entity
+            mag_entity_vel_along_normal = UtilityLogic._magnitude(entity_velocity_along_normal)
+            mag_other_vel_along_normal = UtilityLogic._magnitude(other_velocity_along_normal)
+            if mag_entity_vel_along_normal < mag_other_vel_along_normal: # entity slower than other so no pushing
+                return
+        elif dot_entity < 0 and dot_other < 0: # other entity moves towards entity
+            mag_entity_vel_along_normal = UtilityLogic._magnitude(entity_velocity_along_normal)
+            mag_other_vel_along_normal = UtilityLogic._magnitude(other_velocity_along_normal)
+            if mag_entity_vel_along_normal > mag_other_vel_along_normal: # other entity slower than entity so no pushing
+                return
+            # else both moving towards each other or one stationary
+        combined_velocity_along_normal = Vector2(
+            (entity_velocity_along_normal.x + other_velocity_along_normal.x) * 0.5,
+            (entity_velocity_along_normal.y + other_velocity_along_normal.y) * 0.5
+        )
+        entity.velocity.x = combined_velocity_along_normal.x + entity_velocity_perpendicular.x
+        entity.velocity.y = combined_velocity_along_normal.y + entity_velocity_perpendicular.y
+        other_entity.velocity.x = combined_velocity_along_normal.x + other_velocity_perpendicular.x
+        other_entity.velocity.y = combined_velocity_along_normal.y + other_velocity_perpendicular.y
+        # TODO: deal with boundaries close to entitys
+
     # numba more useful if more complex calculations, more looping
     # @jit(fastmath=True, cache=True)
     # def _distance_numba(pos1_x: float, pos1_y: float, pos2_x: float, pos2_y: float) -> float:

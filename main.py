@@ -77,9 +77,6 @@ class GameRoom:
         self.game_state.midline_x = Config.PITCH_LENGTH / 2
         self.game_state.seeker_floor_seconds = Config.SEEKER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO
         self.game_state.flag_runner_floor_seconds = Config.FLAG_RUNNER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO
-        self.game_state.flag_runner_seeker_avoidance_factor = Config.FLAG_RUNNER_SEEKER_AVOIDANCE_FACTOR
-        self.game_state.flag_runner_boundary_avoidance_factor = Config.FLAG_RUNNER_BOUNDARY_AVOIDANCE_FACTOR
-        self.game_state.flag_runner_boundary_epsilon = Config.FLAG_RUNNER_BOUNDARY_EPSILON
         self.game_state.min_squared_distance_player_player_calculation = Config.MIN_SQUARED_DISTANCE_PLAYER_PLAYER_CALCULATION
         self.game_state.delay_of_game_time_limit = Config.DELAY_OF_GAME_TIME_LIMIT
         self.game_state.delay_of_game_velocity_x_threshold = Config.DELAY_OF_GAME_VELOCITY_X_THRESHOLD
@@ -271,7 +268,12 @@ class GameRoom:
             min_speed=Config.FLAG_RUNNER_MIN_SPEED,
             acceleration=Config.FLAG_RUNNER_ACCELERATION,
             deacceleration_rate=Config.FLAG_RUNNER_DEACCELERATION_RATE,
-            min_dir=Config.FLAG_RUNNER_MIN_DIR
+            min_dir=Config.FLAG_RUNNER_MIN_DIR,
+            seeker_avoidance_factor=Config.FLAG_RUNNER_SEEKER_AVOIDANCE_FACTOR,
+            boundary_avoidance_factor=Config.FLAG_RUNNER_BOUNDARY_AVOIDANCE_FACTOR,
+            boundary_epsilon=Config.FLAG_RUNNER_BOUNDARY_EPSILON,
+            interaction_time_threshold=Config.FLAG_RUNNER_INTERACTION_TIME_THRESHOLD,
+            catch_probability=Config.FLAG_RUNNER_CATCH_PROBABILITY
         ))
 
     def add_cpu_player(self, team: int, role: str):

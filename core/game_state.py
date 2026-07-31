@@ -6,6 +6,7 @@ from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType, VolleyB
 @dataclass
 class GameState:
     """Central repository for all game data."""
+    is_game_active: bool = True
     boundaries_x: List[float] = field(default_factory=lambda: [0.0, 60])
     boundaries_y: List[float] = field(default_factory=lambda: [0.0, 33])
     keeper_zone_x_0: float = 19.0
@@ -40,15 +41,13 @@ class GameState:
     third_dodgeball_team: str = None # team which is assigned the third dodgeball
     potential_third_dodgeball_interference_kwargs: Dict[str, str] = field(default_factory=lambda: {'player_id': None, 'dodgeball_id': None}) # third dodgeball id and player id if potential interferenece if not beat attempt
     beat_attempt_time_limit: float = 10.0
-    flag_runner_seeker_avoidance_factor: float = 1.0  # how strongly the flag runner avoids seekers
-    flag_runner_boundary_avoidance_factor: float = 1.0  # how strongly the flag runner avoids pitch boundaries
-    flag_runner_boundary_epsilon: float = 1e-5  # prevents division by zero in boundary avoidance
     flag_runner_floor_seconds: int = 1140  # Time before flag runner can enter
     seeker_floor_seconds: int = 1200  # Time before seeker can enter
     flag_runner_on_pitch: bool = False                         # Flag runner enters after 19 min
     seeker_on_pitch: bool = False                         # Seeker enters after 20 min
     is_overtime: bool = False                          # True if game is in overtime
     set_score: Optional[int] = None                           # Snitch capture score
+    catched_team: Optional[int] = None                           # Team that catched the flag
     
     def add_player(self, player: Player) -> None:
         """Add a player to the game state."""
@@ -139,6 +138,7 @@ class GameState:
 
     def copy(self) -> 'GameState':
         return GameState(
+            is_game_active=self.is_game_active,
             boundaries_x=self.boundaries_x,
             boundaries_y=self.boundaries_y,
             keeper_zone_x_0=self.keeper_zone_x_0,
@@ -170,9 +170,6 @@ class GameState:
             set_score=self.set_score,
             seeker_floor_seconds=self.seeker_floor_seconds,
             flag_runner_floor_seconds=self.flag_runner_floor_seconds,
-            flag_runner_seeker_avoidance_factor=self.flag_runner_seeker_avoidance_factor,
-            flag_runner_boundary_avoidance_factor=self.flag_runner_boundary_avoidance_factor,
-            flag_runner_boundary_epsilon=self.flag_runner_boundary_epsilon,
         )
 
     def __copy__(self) -> 'GameState':
@@ -191,7 +188,12 @@ class GameState:
 
         This allows more efficient logging.
         """
+        # RoomJsonlLogger encodes this dict positionally. Any key added, removed or moved
+        # here must be mirrored at the same index in room_jsonl_logger's
+        # _GAME_STATE_DYNAMIC_FIELD_NAMES, _serialize_game_state_dynamic_payload() and
+        # _apply_dynamic_snapshot_to_state(), and invalidates already written state logs.
         return {
+            "is_game_active": self.is_game_active,
             # "boundaries_x": self.boundaries_x,
             # "boundaries_y": self.boundaries_y,
             # "keeper_zone_x_0": self.keeper_zone_x_0,
@@ -211,8 +213,12 @@ class GameState:
             "potential_third_dodgeball_interference_kwargs": self.potential_third_dodgeball_interference_kwargs,
             "seeker_on_pitch": self.seeker_on_pitch,
             "set_score": self.set_score,
+            # Appended at the end on purpose: RoomJsonlLogger encodes this dict positionally,
+            # so inserting anywhere else would misalign already written state logs.
+            "flag_runner": self.flag_runner,
+            "flag_runner_on_pitch": self.flag_runner_on_pitch,
         }
-    
+
     def serialize_to_broadcast(self) -> dict:
         """Convert entire game state to JSON-serializable dict."""
         return {
