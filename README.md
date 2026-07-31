@@ -123,11 +123,6 @@ Press `Ctrl+C` in the terminal where the server is running to stop it.
 	- fullscreen and viewport for better visability
 
 **Upcoming Features / Roadmap**
-- Adding other rules and physics
-    - Third dodgeball interference
-    - Tackling
-	- Delay of game
-- Improve client-side interpolation / prediction for smoother rendering under lag.
 - More advanced lobby with tutorial, lobby music, player strengths/weaknesses adjustment
 - Game UX improvements: HUD, player names, replays, spectator mode.
 - Saving and loading of games
