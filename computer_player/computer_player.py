@@ -7,6 +7,7 @@ from core.game_logic.game_logic import GameLogic
 from core.entities import Vector2, PlayerRole, BallType
 from computer_player.hoop_defence import HoopDefence
 from computer_player.diamond_attack import DiamondAttack
+from computer_player.seeker_director import SeekerDirector
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, ThrowDirector
@@ -198,6 +199,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
             throw_threshold_loaded_beater=beater_throw_threshold_loaded_beater
         )
+        self.seeker_director = SeekerDirector(self.logic.state)
 
     def make_move(self, dt: float):
         """Run one full rule-based decision cycle for all controlled players."""
@@ -250,6 +252,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             assigned_beater_ids=assigned_beater_ids
         )
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
+        self.seeker_director.update_seeker_direction()
 
     def _determine_beater_ball_getting(self, dt: float, attacking_team: int) -> List[str]:
         """
