@@ -20,8 +20,8 @@ class Config:
     HOOP_DISTANCES = 2.75
     HOOP_RADIUS = 0.86/2 #  The inner diameter of each hoop loop must be between 81 centimeters and 86 centimeters
     HOOP_THICKNESS = 0.1
-    VOLLEYBALL_RADIUS = 0.67 / 2 / 3.14 # 65 centimeters to 67 centimeters in circumference (approximately 0.106 m)
-    DODGEBALL_RADIUS = 0.70 / 2 / 3.14 # 68 centimeters and 70 centimeters in circumference (approximately 0.111 m)
+    VOLLEYBALL_RADIUS = 1.33 *0.67 / 2 / 3.14 # larger than in rulebook for better accessibility (rulebook: 65 centimeters to 67 centimeters in circumference (approximately 0.106 m))
+    DODGEBALL_RADIUS = 1.33 * 0.70 / 2 / 3.14 # larger than in rulebook for better accessibility (rulebook: 68 centimeters and 70 centimeters in circumference (approximately 0.111 m))
     PLAYER_RADIUS = 0.4
 
     PLAYER_MAX_SPEED_REAL = 3.5 # m/s per real second
@@ -96,7 +96,9 @@ class Config:
     COMPUTER_PLAYER_LOG_LEVEL = logging.DEBUG
     COMPUTER_PLAYER_KWARGS = {
         # 'throwing_probability': 0.3, # for RandomComputerPlayer, probability of throwing each tick
-        'move_buffer_factor': 1.2, # for RuleBasedComputerPlayer, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
+        'move_buffer_factor': 1.4, # for RuleBasedComputerPlayer move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
+        'move_tol': 1, # for RuleBasedComputerPlayer move_around_hoop_blockage, tolerance for checking if a player is at the target position (to avoid unnecessary movement)
+        'move_random_direction_factor': 0.0, # not applied, for RuleBasedComputerPlayer move_around_hoop_blockage, how much randomness to add to the direction to avoid getting stuck in a loop of moving back and forth between two hoops
         'determine_attacking_team_max_dt_steps': 10, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
         'determine_attacking_team_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when determining attacking team based on interception ratio
         'determine_attacking_team_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME
