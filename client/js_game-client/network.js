@@ -106,7 +106,7 @@ export function handleMessage(message) {
     showPrompt();
     ensureButtons();
   } else if (message.type === 'switch_player_failed') {
-    showForbidden(message.mode);
+    showForbidden(message.mode, message.reason);
   } else if (message.type === 'state_update') {
     State.debug.stateUpdateCounter += 1;
     const incoming = message.game_state || {};

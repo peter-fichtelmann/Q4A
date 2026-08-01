@@ -70,6 +70,13 @@ class Config:
     FLAG_RUNNER_BOUNDARY_EPSILON = 1e-5  # prevents division by zero in boundary avoidance
     FLAG_RUNNER_INTERACTION_TIME_THRESHOLD = 2.0  # time in game time seconds that a seeker must be in contact with the flag runner to "catch" it
     FLAG_RUNNER_CATCH_PROBABILITY = 1 / 1000 # probability that a seeker will catch the flag runner if they are in contact for the interaction time threshold (catch_attempt)
+    # Tutorial only, restored when the next scenario starts. The elastic collision
+    # pushes seeker and runner apart on contact, so holding the live 2 s of unbroken
+    # contact is rare: a seeker chasing head-on earns a roll only every ~9 s, which
+    # even at 1/3 leaves the catch demo taking half a minute or more. A shorter
+    # threshold is what makes it land in ~10 s while still needing luck.
+    TUTORIAL_FLAG_RUNNER_CATCH_PROBABILITY = 1 / 3
+    TUTORIAL_FLAG_RUNNER_INTERACTION_TIME_THRESHOLD = 1.0
 
 
     N_CHASERS_TEAM_0 = 3

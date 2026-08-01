@@ -246,30 +246,37 @@ _SWITCHERS = {
 }
 
 
-def request_switch(room, connection_player_id: str, current_player_id: str, mode: str) -> Optional[str]:
-    """Resolve and apply a switch request. Returns the new player id, or None on failure.
+# Failure reasons sent to the client so it can pick the right feedback.
+REASON_DISABLED = 'disabled'      # switching is locked right now (tutorial)
+REASON_NO_TARGET = 'no_target'    # nothing eligible to switch to
+REASON_INVALID = 'invalid'        # bad mode or no controlled player
 
-    Failure is a normal outcome (no eligible teammate, switching disabled) and is
-    logged at INFO so the client's forbidden sign has a matching server-side trace.
+
+def request_switch(room, connection_player_id: str, current_player_id: str, mode: str):
+    """Resolve and apply a switch request.
+
+    Returns `(new_player_id, None)` on success and `(None, reason)` on failure.
+    Failure is a normal outcome and is logged at INFO so the client's forbidden
+    sign has a matching server-side trace.
     """
     switcher = _SWITCHERS.get(mode)
     if switcher is None:
         logger.info("Player switch rejected: unknown mode %r (room=%s)", mode, room.room_id)
-        return None
+        return None, REASON_INVALID
 
     if not getattr(room, 'player_switch_enabled', True):
         logger.info(
             "Player switch (%s) rejected: switching is disabled in room=%s",
             mode, room.room_id,
         )
-        return None
+        return None, REASON_DISABLED
 
     if current_player_id is None or room.game_state.get_player(current_player_id) is None:
         logger.info(
             "Player switch (%s) rejected: no controlled player (room=%s connection=%s)",
             mode, room.room_id, connection_player_id,
         )
-        return None
+        return None, REASON_INVALID
 
     new_player_id = switcher(room, current_player_id)
     if new_player_id is None:
@@ -277,14 +284,14 @@ def request_switch(room, connection_player_id: str, current_player_id: str, mode
             "Player switch (%s) found no eligible player for %s (room=%s)",
             mode, current_player_id, room.room_id,
         )
-        return None
+        return None, REASON_NO_TARGET
 
     apply_switch(room, connection_player_id, current_player_id, new_player_id)
     logger.info(
         "Player switch (%s): %s -> %s (room=%s)",
         mode, current_player_id, new_player_id, room.room_id,
     )
-    return new_player_id
+    return new_player_id, None
 
 
 # ---- connection lifecycle ----

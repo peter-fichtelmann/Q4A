@@ -1013,7 +1013,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
 
                 elif message_type == "switch_player":
                     mode = str(message.get("mode", ""))
-                    new_player_id = player_switch.request_switch(
+                    new_player_id, failure_reason = player_switch.request_switch(
                         room, player_id, controlled_player_id, mode,
                     )
                     if new_player_id is None:
@@ -1021,6 +1021,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         await websocket.send_json({
                             "type": "switch_player_failed",
                             "mode": mode,
+                            "reason": failure_reason,
                         })
 
                 elif message_type == "tutorial_step":

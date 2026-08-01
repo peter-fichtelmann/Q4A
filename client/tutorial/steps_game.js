@@ -354,11 +354,17 @@ const sections = [
         steps: [
             {
                 id: 'lineup_headbands',
-                scenario: 'lineup',
+                // The one scenario that puts the flag seeker phase on pitch, so all
+                // four positions — seekers included — are visible at once.
+                scenario: 'lineup_all_positions',
                 anchor: () => lineupPlayerRect('chaser'),
-                extraHighlight: () => [lineupPlayerRect('keeper'), lineupPlayerRect('beater')].filter(Boolean),
+                extraHighlight: () => [
+                    lineupPlayerRect('keeper'),
+                    lineupPlayerRect('beater'),
+                    lineupPlayerRect('seeker'),
+                ].filter(Boolean),
                 quip: QUIPS.stepByStep,
-                text: ['Now you see the small rectangular headbands.', 'Each position a one color.'],
+                text: ['Now you see the small rectangular headbands.', 'Each position has one color.'],
                 interaction: 'next',
             },
             {
@@ -465,9 +471,31 @@ const sections = [
             },
             {
                 id: 'seekers',
-                anchor: null,
-                text: ['One band is still missing: yellow for seekers,', 'chasing the snitch. Not implemented yet!'],
+                // Puts the flag seeker phase on pitch and hands the trainee the seeker.
+                scenario: 'flag_catch_practice',
+                anchor: () => traineeRect(1.2),
+                quip: QUIPS.stepByStep,
+                text: ['The last band is yellow: the seeker — you.', 'Seekers only join late in the match.'],
                 interaction: 'next',
+            },
+            {
+                id: 'flag_runner',
+                anchor: () => A.flagRunnerRect(1.4),
+                quip: QUIPS.surroundings,
+                text: ['That yellow circle is the flag runner —', 'a referee running with the flag.'],
+                interaction: 'next',
+            },
+            {
+                id: 'flag_catch',
+                anchor: () => A.flagRunnerRect(1.4),
+                quip: QUIPS.betting,
+                text: ['Touch the runner and stay glued to them.', 'Hang on long enough and luck does the rest.'],
+                interaction: 'server',
+                hint: { afterMs: 20000, text: 'They swerve away from seekers — chase, do not just aim where they are.' },
+                success: {
+                    text: ['Caught! 3 points, and the seekers and the', 'runner leave the pitch. That ends a real match.'],
+                    quip: QUIPS.meow,
+                },
             },
             {
                 id: 'delay_of_game',

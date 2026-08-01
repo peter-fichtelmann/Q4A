@@ -13,6 +13,12 @@ export const NEXT_POSITION = 'next_position';
 
 const FORBIDDEN_MS = 5000;
 
+// Server-side failure reasons (see player_switch.py).
+const REASON_DISABLED = 'disabled';
+const REASON_MESSAGES = {
+  [REASON_DISABLED]: 'Stick with your current player for now.',
+};
+
 const BUTTONS = [
   {
     mode: SAME_POSITION,
@@ -84,8 +90,25 @@ function forbiddenOverlay() {
   return overlay;
 }
 
-/** Mark a switch as refused: show the forbidden sign over its button for 5s. */
-export function showForbidden(mode) {
+// Explains *why* a switch was refused, next to the button that refused it.
+// Sits left of the button column so it never covers the forbidden sign.
+function messageElement(text, top) {
+  const note = document.createElement('div');
+  note.className = 'switch-message';
+  note.textContent = text;
+  note.style.cssText = 'position: fixed; top: ' + top + 'px; right: 62px; z-index: 1000; '
+    + 'max-width: 210px; background: rgba(0,0,0,0.8); color: white; '
+    + 'border: 1px solid rgba(255,255,255,0.25); border-radius: 8px; padding: 6px 10px; '
+    + 'font-size: 13px; font-family: sans-serif; line-height: 1.3; text-align: right; '
+    + 'pointer-events: none; user-select: none;';
+  return note;
+}
+
+/**
+ * Mark a switch as refused: show the forbidden sign over its button for 5s,
+ * plus a short explanation when the server gave a reason we have copy for.
+ */
+export function showForbidden(mode, reason) {
   const button = State.playerSwitch.buttons[mode];
   if (!button) return;
 
@@ -93,14 +116,26 @@ export function showForbidden(mode) {
   if (timers[mode]) {
     clearTimeout(timers[mode].timer);
     timers[mode].overlay.remove();
+    if (timers[mode].note) timers[mode].note.remove();
   }
 
   const overlay = forbiddenOverlay();
   button.appendChild(overlay);
+
+  let note = null;
+  const text = REASON_MESSAGES[reason];
+  if (text) {
+    const spec = BUTTONS.find((entry) => entry.mode === mode);
+    note = messageElement(text, spec ? spec.top : 58);
+    document.body.appendChild(note);
+  }
+
   timers[mode] = {
     overlay,
+    note,
     timer: setTimeout(() => {
       overlay.remove();
+      if (note) note.remove();
       delete timers[mode];
     }, FORBIDDEN_MS),
   };

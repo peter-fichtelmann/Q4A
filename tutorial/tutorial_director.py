@@ -2,6 +2,7 @@ import logging
 from typing import List, Optional
 
 import player_switch
+from config import Config
 from core.entities import Player, Ball, VolleyBall, Vector2, PlayerRole
 
 logger = logging.getLogger('quadball.tutorial')
@@ -27,6 +28,11 @@ class TutorialDirector:
         # Zero the delay-of-game timer every tick (no penalty, no clock icon)
         # except while the delay rule itself is being demonstrated / in free play.
         self.suppress_delay_of_game = True
+        # Forces flag_runner_on_pitch / seeker_on_pitch every tick:
+        #   False -> keep them off (the whole tutorial)
+        #   True  -> keep them on (the four-headband line-up)
+        #   None  -> leave them to the game clock (free play)
+        self.flag_seeker_phase_override: Optional[bool] = False
 
     # ---- accessors ----
 
@@ -58,6 +64,15 @@ class TutorialDirector:
                 continue
             player = self.state.get_player(player_id)
             if player is not None and player.team == team and player.role == role and player.id not in exclude:
+                return player
+        return None
+
+    def _seeker(self, team: int, exclude=()) -> Optional[Player]:
+        """Seekers are created outside `cpu_player_ids`, so look them up by role."""
+        human_controlled = self._human_controlled_ids()
+        for player in self.state.players.values():
+            if (player.role == PlayerRole.SEEKER and player.team == team
+                    and player.id not in exclude and player.id not in human_controlled):
                 return player
         return None
 
@@ -149,6 +164,47 @@ class TutorialDirector:
             player.is_knocked_out = False
             player.catch_cooldown = 0.0
             player.tackling_player_ids = []
+            player.flag_runner_interaction_time = 0.0
+
+    def _reset_match_end_state(self):
+        """Undo the match-ending side effects of a flag catch.
+
+        `FlagRunnerLogic.resolve_catch` ends the match (`is_game_active = False`,
+        which stops `GameLogic.update` entirely) or opens overtime. The tutorial is
+        not a real match and has to keep ticking afterwards.
+        """
+        self.state.is_game_active = True
+        self.state.is_overtime = False
+        self.state.set_score = None
+
+    def _restore_flag_runner_tuning(self):
+        """Put the live catch odds back after the catch demo eased them."""
+        flag_runner = self.state.flag_runner
+        if flag_runner is not None:
+            flag_runner.catch_probability = Config.FLAG_RUNNER_CATCH_PROBABILITY
+            flag_runner.interaction_time_threshold = Config.FLAG_RUNNER_INTERACTION_TIME_THRESHOLD
+
+    def _reset_flag_seeker_positions(self):
+        """Send the flag runner and every seeker back to their kick-off spots.
+
+        Mirrors `GameRoom._initialize_flag_seeker_entities`: seekers line up on the
+        far touchline, spreading outwards from the midline, the runner waits on it.
+        """
+        center_y = self.state.boundaries_y[1] / 2
+        flag_runner = self.state.flag_runner
+        if flag_runner is not None:
+            flag_runner.position = Vector2(self.state.midline_x, center_y)
+            flag_runner.velocity = Vector2(0, 0)
+            flag_runner.direction = Vector2(0, 0)
+        seeker_y = self.state.boundaries_y[1] - Config.PLAYER_RADIUS
+        next_index = {self.state.team_0: 1, self.state.team_1: 1}
+        for player in self.state.players.values():
+            if player.role != PlayerRole.SEEKER:
+                continue
+            index = next_index.get(player.team, 1)
+            next_index[player.team] = index + 1
+            sign = -1 if player.team == self.state.team_0 else 1
+            self._teleport(player, self.state.midline_x + sign * 2 * index * Config.PLAYER_RADIUS, seeker_y)
 
     def _park_others(self, active_ids=()):
         """Bench every CPU not needed by the current scenario at the pitch edges."""
@@ -239,6 +295,16 @@ class TutorialDirector:
         self._phase = 0
         self._baseline = {}
         self.suppress_delay_of_game = name not in ('delay_demo', 'free_play')
+        # Switching is only for the step that teaches it and for free play; every
+        # other step needs the trainee to stay on the player it staged.
+        self.room.player_switch_enabled = name in ('player_switch_demo', 'free_play')
+        if name in ('lineup_all_positions', 'flag_catch_practice'):
+            self.flag_seeker_phase_override = True
+        elif name == 'free_play':
+            self.flag_seeker_phase_override = None
+        else:
+            self.flag_seeker_phase_override = False
+        self._apply_flag_seeker_phase()
         self._common_reset()
         events = setup() or []
         logger.info("Tutorial scenario started: %s (room=%s)", name, self.room.room_id)
@@ -271,16 +337,43 @@ class TutorialDirector:
         return (ball.position.x <= min_x + r + eps or ball.position.x >= max_x - r - eps
                 or ball.position.y <= min_y + r + eps or ball.position.y >= max_y - r - eps)
 
+    def _apply_flag_seeker_phase(self):
+        """Hold the flag seeker phase off (or on) regardless of the game clock.
+
+        The floor seconds have to move with the flags: the director runs *before*
+        `game_logic.update`, and `update_game_time` re-raises both flags on every
+        tick once the clock is past the thresholds, which would undo the override.
+        """
+        if self.flag_seeker_phase_override is None:
+            # Free play: hand the phase back to the game clock.
+            self.state.flag_runner_floor_seconds = (
+                Config.FLAG_RUNNER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO)
+            self.state.seeker_floor_seconds = (
+                Config.SEEKER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO)
+            return
+
+        on_pitch = self.flag_seeker_phase_override
+        floor_seconds = 0.0 if on_pitch else float('inf')
+        self.state.flag_runner_floor_seconds = floor_seconds
+        self.state.seeker_floor_seconds = floor_seconds
+        self.state.flag_runner_on_pitch = on_pitch
+        self.state.seeker_on_pitch = on_pitch
+
     def _common_reset(self):
         self._clear_knockouts()
         if self.state.volleyball is not None:
             self.state.volleyball.delay_of_game_timer = 0.0
         self.state.delay_of_game_warnings = {0: 0, 1: 0}
+        self._reset_match_end_state()
+        self._restore_flag_runner_tuning()
 
     def tick(self) -> List[dict]:
         """Evaluate the active scenario's success predicate. Runs before game_logic.update."""
         if self.suppress_delay_of_game and self.state.volleyball is not None:
             self.state.volleyball.delay_of_game_timer = 0.0
+        # Reapplied every tick: `update_game_time` would otherwise flip the phase on
+        # once the tutorial room's clock passes the flag runner / seeker thresholds.
+        self._apply_flag_seeker_phase()
         if self.scenario is None:
             return []
         checker = getattr(self, f'_check_{self.scenario}', None)
@@ -312,11 +405,10 @@ class TutorialDirector:
     def _setup_player_switch_demo(self):
         """Teach the two switch buttons by gathering the trainee's own line-up around them.
 
-        This is the one scenario that leaves switching enabled — every other one calls
-        `_restore_trainee_control` first, so the trainee is back on their own player by
-        the time the next step stages the pitch.
+        `start_scenario` enables switching for this scenario (and for free play) and
+        disables it again for every other one, where it also calls
+        `_restore_trainee_control` so the trainee is back on their own player.
         """
-        self.room.player_switch_enabled = True
         events = self._swap_trainee_role(PlayerRole.CHASER)
         self._strip_all_balls()
         self._reset_balls_default()
@@ -470,7 +562,7 @@ class TutorialDirector:
             return self._success()
         return []
 
-    def _setup_lineup(self):
+    def _setup_lineup(self, include_seekers: bool = False):
         events = self._swap_trainee_role(PlayerRole.CHASER)
         self._strip_all_balls()
         self._reset_balls_default()
@@ -478,19 +570,31 @@ class TutorialDirector:
         self._teleport(trainee, 30, 27)
         role_order = [PlayerRole.KEEPER, PlayerRole.CHASER, PlayerRole.CHASER,
                       PlayerRole.CHASER, PlayerRole.BEATER, PlayerRole.BEATER]
+        if include_seekers:
+            role_order = role_order + [PlayerRole.SEEKER]
         targets = {}
         used = set()
         for team, line_x in ((trainee.team, 27.0), (1 - trainee.team, 33.0)):
-            y = 8.0
+            y = 5.0
             for role in role_order:
-                cpu = self._cpu(team, role, exclude=used)
+                cpu = self._seeker(team, exclude=used) if role == PlayerRole.SEEKER \
+                    else self._cpu(team, role, exclude=used)
                 if cpu is None:
                     continue
                 used.add(cpu.id)
-                targets[cpu.id] = (line_x, y)
+                if role == PlayerRole.SEEKER:
+                    # The scripted AI only steers `cpu_players`, which excludes seekers,
+                    # so they have to be placed directly instead of walked into the row.
+                    self._teleport(cpu, line_x, y)
+                else:
+                    targets[cpu.id] = (line_x, y)
                 y += 3.0
         self._set_ai('hold_positions', targets=targets)
         return events
+
+    def _setup_lineup_all_positions(self):
+        """The line-up used to explain all four headbands, seekers included."""
+        return self._setup_lineup(include_seekers=True)
 
     def _setup_beat_practice(self):
         events = self._swap_trainee_role(PlayerRole.BEATER)
@@ -595,6 +699,72 @@ class TutorialDirector:
         elif volleyball.holder_id == trainee.id and not volleyball.is_dead:
             return self._success()
         return []
+
+    def _setup_flag_catch_practice(self):
+        """Hand the trainee their own seeker and let them run the flag runner down.
+
+        Control is switched onto the seeker entity rather than swapping roles:
+        seekers live outside `cpu_player_ids`, so `_swap_trainee_role` would strand
+        the ex-seeker as a stray chaser that `_park_others` never benches again.
+
+        `start_scenario` forces the flag seeker phase on for this scenario, and
+        `_common_reset` has just restored the live catch odds — they are raised to
+        the tutorial value below so the demo resolves in a few attempts.
+        """
+        trainee = self.trainee
+        flag_runner = self.state.flag_runner
+        if trainee is None or flag_runner is None:
+            return []
+        seeker = self._seeker(trainee.team)
+        if seeker is None:
+            return []
+
+        self._strip_all_balls()
+        self._park_others()
+        pitch_length = self.state.boundaries_x[1]
+        center_y = self.state.boundaries_y[1] / 2
+
+        # Park the trainee's own player on their half: control returns to it once
+        # the flag is caught, so it must be somewhere sensible to reappear.
+        self._teleport(trainee, self.state.midline_x - 12.0, center_y)
+        player_switch.apply_switch(self.room, self.room.creator_player_id, trainee.id, seeker.id)
+
+        # The opposing seeker has no AI in the tutorial, but it is on pitch now and
+        # would both clutter the shot and be eligible to catch the runner itself.
+        other_seeker = self._seeker(1 - seeker.team)
+        if other_seeker is not None:
+            self._teleport(other_seeker, pitch_length - 3.0, 2.0)
+
+        flag_runner.position = Vector2(self.state.midline_x, center_y)
+        flag_runner.velocity = Vector2(0, 0)
+        flag_runner.direction = Vector2(0, 0)
+        flag_runner.catch_probability = Config.TUTORIAL_FLAG_RUNNER_CATCH_PROBABILITY
+        flag_runner.interaction_time_threshold = Config.TUTORIAL_FLAG_RUNNER_INTERACTION_TIME_THRESHOLD
+        # Far enough that the runner is not already being touched while the first
+        # two bubbles are still being read.
+        self._teleport(seeker, self.state.midline_x - 7.0, center_y)
+
+        self._baseline['seeker_id'] = seeker.id
+        self._baseline['score'] = self.state.score[seeker.team]
+        self._set_ai('idle')
+        return []
+
+    def _check_flag_catch_practice(self):
+        seeker = self.state.get_player(self._baseline.get('seeker_id'))
+        if seeker is None:
+            return []
+        # resolve_catch is the only thing that can move the score here (all balls
+        # were stripped), and it awards 3 points to the catching team.
+        if self.state.score[seeker.team] <= self._baseline.get('score', 0):
+            return []
+        self._reset_match_end_state()
+        # Take the phase back off pitch: it stops a second catch from firing
+        # (and freezing the game again) while the success bubble is up.
+        self.flag_seeker_phase_override = False
+        # ...which would leave the trainee steering an entity that is no longer
+        # drawn, so give them their own player back first.
+        self._restore_trainee_control()
+        return self._success()
 
     def _setup_delay_demo(self):
         events = self._swap_trainee_role(PlayerRole.CHASER)
@@ -708,6 +878,14 @@ class TutorialDirector:
         trainee = self.trainee
         self._strip_all_balls()
         self._reset_balls_default()
+        # Free play hands the phase back to the game clock (override None), but the
+        # tutorial's clock is long past both floor times by now, so the flag runner
+        # and seekers would pop in the moment free play starts. Restart the match
+        # clock and send them back to their kick-off spots so they arrive on cue.
+        self.state.game_time = 0.0
+        self.state.flag_runner_on_pitch = False
+        self.state.seeker_on_pitch = False
+        self._reset_flag_seeker_positions()
         pitch_length = self.state.boundaries_x[1]
         self._teleport(trainee, 8, 16.5)
         offsets = {0: 0, 1: 0}

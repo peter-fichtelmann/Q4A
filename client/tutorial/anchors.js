@@ -108,6 +108,19 @@ export function hoopRect(hoopId, padMeters = 1.4) {
     return worldRect(hoop.position.x, hoop.position.y, padMeters);
 }
 
+export function flagRunner() {
+    if (!gameReady()) return null;
+    return GC().State.gameState.flag_runner || null;
+}
+
+/** Null while the flag seeker phase is off — the flag runner is not on the pitch then. */
+export function flagRunnerRect(padMeters = 1.2) {
+    if (!gameReady() || !GC().State.gameState.flag_runner_on_pitch) return null;
+    const runner = flagRunner();
+    if (!runner || !runner.position) return null;
+    return worldRect(runner.position.x, runner.position.y, padMeters);
+}
+
 export function findBalls(predicate) {
     if (!gameReady()) return [];
     const balls = GC().State.gameState.balls || {};
@@ -140,6 +153,8 @@ export function obstacleRects() {
             const rect = ballRect(id, 0.6);
             if (rect) rects.push(rect);
         }
+        const runnerRect = flagRunnerRect(1.2);
+        if (runnerRect) rects.push(runnerRect);
     }
     const scorebug = domRect('.game-ui .scorebug');
     if (scorebug) rects.push(scorebug);
