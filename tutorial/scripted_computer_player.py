@@ -18,11 +18,10 @@ class ScriptedComputerPlayer(ComputerPlayer):
 
     def __init__(self,
                  game_logic: GameLogic,
-                 cpu_player_ids: List[str],
                  computer_player_log_level: int = logging.INFO,
                  **_ignored_kwargs):
         # Swallows Config.COMPUTER_PLAYER_KWARGS passed by the generic room setup.
-        super().__init__(game_logic, cpu_player_ids, computer_player_log_level=computer_player_log_level)
+        super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
         self.mode = 'idle'
         self.mode_kwargs = {}
         self._free_play_delegate = None
@@ -35,7 +34,8 @@ class ScriptedComputerPlayer(ComputerPlayer):
             self._free_play_delegate = None
         self.logger.debug("ScriptedComputerPlayer mode set to %s %s", mode, kwargs)
 
-    def make_move(self, dt: float):
+    def make_move(self, dt: float, cpu_player_ids: List[str]):
+        self._bind_cpu_players(cpu_player_ids)
         handler = getattr(self, f'_mode_{self.mode}', None)
         if handler is None:
             handler = self._mode_idle
@@ -295,8 +295,7 @@ class ScriptedComputerPlayer(ComputerPlayer):
         if self._free_play_delegate is None:
             self._free_play_delegate = RuleBasedComputerPlayer(
                 self.logic,
-                self.cpu_player_ids,
                 computer_player_log_level=self.logger.level,
                 **Config.COMPUTER_PLAYER_KWARGS
             )
-        self._free_play_delegate.make_move(dt)
+        self._free_play_delegate.make_move(dt, self.cpu_player_ids)

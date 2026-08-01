@@ -5,6 +5,7 @@ import * as Fullscreen from './fullscreen.js';
 import * as Network from './network.js';
 import * as Input from './input.js';
 import * as Rendering from './rendering.js';
+import * as PlayerSwitch from './player_switch.js';
 
 function gameLoop() { Rendering.renderGame(); requestAnimationFrame(gameLoop); }
 
@@ -18,6 +19,8 @@ export function initializeCanvas() {
   document.addEventListener('msfullscreenchange', Fullscreen.updateState);
   document.addEventListener('mozfullscreenchange', Fullscreen.updateState);
   document.addEventListener('fullscreen-toggle', () => Fullscreen.toggle());
+  document.addEventListener('switch-player-same', () => PlayerSwitch.sendSwitch(PlayerSwitch.SAME_POSITION));
+  document.addEventListener('switch-player-next', () => PlayerSwitch.sendSwitch(PlayerSwitch.NEXT_POSITION));
 
   if (State.isTouchDevice) {
     let tapCount = 0; let tapTimer = null;
@@ -94,7 +97,7 @@ window.addEventListener('keydown', Input.onKeyDown);
 window.addEventListener('keyup', Input.onKeyUp);
 
 // Optional: expose namespace for debugging
-window.GameClient = { Config, State, Viewport, Fullscreen, Network, Input, Rendering, initializeCanvas };
+window.GameClient = { Config, State, Viewport, Fullscreen, Network, Input, Rendering, PlayerSwitch, initializeCanvas };
 
 // Initialize on load
 window.addEventListener('load', initializeCanvas);

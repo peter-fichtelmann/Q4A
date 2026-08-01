@@ -12,6 +12,8 @@ export function onKeyDown(e) {
   keys[e.key] = true;
   if (e.key === ' ') { e.preventDefault(); sendThrow(); }
   if (e.key === 'f' || e.key === 'F') { e.preventDefault(); document.dispatchEvent(new CustomEvent('fullscreen-toggle')); }
+  if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); document.dispatchEvent(new CustomEvent('switch-player-same')); }
+  if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.dispatchEvent(new CustomEvent('switch-player-next')); }
 }
 
 export function onKeyUp(e) { keys[e.key] = false; }

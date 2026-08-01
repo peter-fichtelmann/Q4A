@@ -78,14 +78,40 @@ class ComputerPlayer(ABC):
     Subclasses implement `make_move` and set per-player directions/actions for one
     simulation step.
     """
-    def __init__(self, game_logic: GameLogic, cpu_player_ids: List[str], computer_player_log_level: int = logging.INFO):
-        """Bind game logic and resolve the controlled player objects."""
+    def __init__(self, game_logic: GameLogic, computer_player_log_level: int = logging.INFO):
+        """Bind game logic. The controlled players are supplied per `make_move` call."""
         self.logic = game_logic
-        self.cpu_player_ids = cpu_player_ids
-        self.cpu_players = [self.logic.state.players[player_id] for player_id in cpu_player_ids]
+        # Filled by `_bind_cpu_players` at the start of every make_move. Which players
+        # the CPU drives changes during a match (humans hand players back and forth),
+        # so none of this may be resolved once at construction time.
+        self.cpu_player_ids: List[str] = []
+        self.cpu_player_id_set: set = set()
+        self.cpu_players: List = []
+        self.cpu_seekers: List = []
         self.logger = logging.getLogger("computer_player")
         self.logger.setLevel(computer_player_log_level)
         self._step_profiler = _ComputerPlayerStepProfiler()
+
+    def _bind_cpu_players(self, cpu_player_ids: List[str]) -> None:
+        """Resolve the player objects the CPU controls for this move.
+
+        Seekers are kept apart from `cpu_players`: they are steered by the
+        SeekerDirector, while `cpu_players` feeds the chaser/keeper/beater tactics.
+        Unknown ids are skipped instead of raising.
+        """
+        players = self.logic.state.players
+        self.cpu_player_ids = cpu_player_ids
+        self.cpu_player_id_set = set(cpu_player_ids)
+        self.cpu_players = []
+        self.cpu_seekers = []
+        for player_id in cpu_player_ids:
+            player = players.get(player_id)
+            if player is None:
+                continue
+            if player.role == PlayerRole.SEEKER:
+                self.cpu_seekers.append(player)
+            else:
+                self.cpu_players.append(player)
 
     def enable_step_profiling(self, reset_stats: bool = True) -> None:
         """Enable internal step profiling, optionally clearing prior stats."""
@@ -110,8 +136,8 @@ class ComputerPlayer(ABC):
         return self._step_profiler.time_call(step_name, fn, *args, **kwargs)
 
     @abstractmethod
-    def make_move(self, dt: float):
-        """Compute CPU actions for one game tick of length `dt`."""
+    def make_move(self, dt: float, cpu_player_ids: List[str]):
+        """Compute CPU actions for one game tick of length `dt` for `cpu_player_ids`."""
         pass
 
 
@@ -120,15 +146,15 @@ class RandomComputerPlayer(ComputerPlayer):
 
     def __init__(self,
                  game_logic: GameLogic,
-                 cpu_player_ids: List[str],
                  throwing_probability: float = 0.1,
                  computer_player_log_level: int = logging.INFO):
-        """Create a random baseline controller for the given CPU players."""
-        super().__init__(game_logic, cpu_player_ids, computer_player_log_level=computer_player_log_level)
+        """Create a random baseline controller."""
+        super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
         self.throwing_probability = throwing_probability
 
-    def make_move(self, dt: float):
+    def make_move(self, dt: float, cpu_player_ids: List[str]):
         """Apply random movement, occasional throws, and default tackle attempts."""
+        self._bind_cpu_players(cpu_player_ids)
         # add random number between -1 and 1 to the x and y direction of each CPU player
         # print(f'[CPU Player] Making move for {len(self.cpu_players)} CPU players')
         for player in self.cpu_players:
@@ -146,7 +172,6 @@ class RuleBasedComputerPlayer(ComputerPlayer):
 
     def __init__(self,
                  game_logic: GameLogic,
-                 cpu_player_ids: List[str],
                  move_buffer_factor: float = 1.2,
                  determine_attacking_team_max_dt_steps: int = 10,
                  determine_attacking_team_max_distance_per_step: float = None,
@@ -159,7 +184,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  computer_player_log_level: int = logging.INFO
                  ):
         """Initialize reusable tactical helpers and team-specific configuration."""
-        super().__init__(game_logic, cpu_player_ids, computer_player_log_level=computer_player_log_level)
+        super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
         self.move_buffer_factor = move_buffer_factor
         self.determine_attacking_team_max_dt_steps = determine_attacking_team_max_dt_steps
         self.determine_attacking_team_max_distance_per_step = determine_attacking_team_max_distance_per_step
@@ -201,8 +226,9 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         )
         self.seeker_director = SeekerDirector(self.logic.state)
 
-    def make_move(self, dt: float):
+    def make_move(self, dt: float, cpu_player_ids: List[str]):
         """Run one full rule-based decision cycle for all controlled players."""
+        self._bind_cpu_players(cpu_player_ids)
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_0], self.logic.state.team_0)
         attacking_team, next_volleyball_holder_id, intercepting_position = self._profile_call(
             'rule_based._determine_attacking_team',
@@ -252,7 +278,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             assigned_beater_ids=assigned_beater_ids
         )
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
-        self.seeker_director.update_seeker_direction(dt)
+        self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
 
     def _determine_beater_ball_getting(self, dt: float, attacking_team: int) -> List[str]:
         """
@@ -294,7 +320,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 self.logger.debug("Beater %s assigned to get third dodgeball for team %s", beater.id, third_dodgeball_team)
                 assigned_beater_ids.append(beater_id)
                     # move towards the dodgeball
-                if beater.id in self.cpu_player_ids:
+                if beater.id in self.cpu_player_id_set:
                     beater.direction = squared_distance_and_direction_to_dodgeball_dict[beater.id][1]
         else: # no third dodgeball, so no team already has two dodgeballs in possesion
             # step_ratio_dicts = {}
@@ -341,7 +367,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                             assigned_beater_ids.append(beater_id)
                             assigned_dodgeball_ids.append(dodgeball_id)
                             # move towards the dodgeball
-                            if beater.id in self.cpu_player_ids:
+                            if beater.id in self.cpu_player_id_set:
                                 interception_position = Vector2(
                                     dodgeball.position.x + dodgeball.velocity.x * interception_time,
                                     dodgeball.position.y + dodgeball.velocity.y * interception_time
@@ -365,7 +391,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             # check if assigned beater has ball to throw to teammate or back to hoops
             for beater_id in assigned_beater_ids:
                 beater = self.logic.state.players[beater_id]
-                if beater.has_ball and beater.id in self.cpu_player_ids:
+                if beater.has_ball and beater.id in self.cpu_player_id_set:
                     # check if in defence and volleyball holding chaser close, if so throw at volleyball holder and get the assigned ball
                     if beater.team != attacking_team:
                         volleyball = self.logic.state.volleyball
@@ -384,10 +410,12 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                         throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, beater_buddy)
                         self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
                         # move beater buddy to throwing player (at the moment only for one dt step)
-                        beater_buddy.direction = Vector2(
-                            - throw_direction.x,
-                            - throw_direction.y
-                        )
+                        # never steer the buddy when a human controls them
+                        if beater_buddy.id in self.cpu_player_id_set:
+                            beater_buddy.direction = Vector2(
+                                - throw_direction.x,
+                                - throw_direction.y
+                            )
                         assigned_beater_ids.append(beater_buddy.id)
                     else:
                         # pass back to central hoop
@@ -466,7 +494,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                 assigned_beater_ids.append(beater_id)
                 unassigned_dodgeball_ids.remove(dodgeball_id)
                 # move towards the dodgeball
-                if beater.id in self.cpu_player_ids:
+                if beater.id in self.cpu_player_id_set:
                     direction_to_dodgeball = squared_distances_dict[(beater_id, dodgeball_id)][1]
                     beater.direction = direction_to_dodgeball
                     # self.logger.debug("CPU Beater %s positioned at %s assigned to get dodgeball %s based on proximity", beater.id, beater.position, dodgeball.id)

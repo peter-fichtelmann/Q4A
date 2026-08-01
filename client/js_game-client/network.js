@@ -3,6 +3,7 @@ import { State } from './state.js';
 import { getQueryParam } from './utils.js';
 import { resizeCanvasToFit } from './viewport.js';
 import { showPrompt } from './fullscreen.js';
+import { ensureButtons, showForbidden } from './player_switch.js';
 
 function getNowMs() {
   return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -41,10 +42,12 @@ function cacheBallVelocities(gameState) {
 
 export function connectGame() {
   State.roomId = getQueryParam('room');
-  State.localPlayerId = getQueryParam('player');
-  if (!State.roomId || !State.localPlayerId) { window.location.href = '/'; return; }
+  State.connectionPlayerId = getQueryParam('player');
+  // Starts as our own player; the server tells us when a switch moves it.
+  State.localPlayerId = State.connectionPlayerId;
+  if (!State.roomId || !State.connectionPlayerId) { window.location.href = '/'; return; }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  State.gameSocket = new WebSocket(`${protocol}//${window.location.host}/ws/game/${State.roomId}/${State.localPlayerId}`);
+  State.gameSocket = new WebSocket(`${protocol}//${window.location.host}/ws/game/${State.roomId}/${State.connectionPlayerId}`);
   State.gameSocket.binaryType = 'arraybuffer';
   State.gameSocket.onmessage = (event) => {
     try {
@@ -97,9 +100,13 @@ export function handleMessage(message) {
       if (cfg.dodgeball_radius !== undefined) Config.DODGEBALL_RADIUS = cfg.dodgeball_radius;
       if (cfg.flag_runner_radius !== undefined) Config.FLAG_RUNNER_RADIUS = cfg.flag_runner_radius;
     }
+    if (message.controlled_player_id) State.localPlayerId = message.controlled_player_id;
     rememberServerUpdateTime();
     try { resizeCanvasToFit(); } catch (e) {}
     showPrompt();
+    ensureButtons();
+  } else if (message.type === 'switch_player_failed') {
+    showForbidden(message.mode);
   } else if (message.type === 'state_update') {
     State.debug.stateUpdateCounter += 1;
     const incoming = message.game_state || {};
@@ -151,6 +158,12 @@ export function handleMessage(message) {
       if (incoming.delay_bin !== undefined) State.gameState.delay_bin = incoming.delay_bin;
       if (incoming.possession_code !== undefined) State.gameState.possession_code = incoming.possession_code;
     }
+    // Which player we steer is sent as an index into playersOrder on every update
+    // (255 = none), so a switch needs no extra message and cannot get out of sync.
+    if (incoming.controlled_index !== undefined && incoming.controlled_index !== 255 && State.playersOrder) {
+      const controlledId = State.playersOrder[incoming.controlled_index];
+      if (controlledId) State.localPlayerId = controlledId;
+    }
     rememberServerUpdateTime();
   }
 }
@@ -200,7 +213,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version < 1 || version > 4) { console.warn('Unknown binary state version', version); return null; }
+    if (version < 1 || version > 5) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -270,7 +283,12 @@ export function parseBinaryState(arrayBuffer) {
         velocity: { x: halfToFloat(frvxh), y: halfToFloat(frvyh) },
       };
     }
-    return { players, balls, game_time: gameTime, score, delay_bin, possession_code, flag_runner, flag_runner_on_pitch, seeker_on_pitch };
+    // Trailing per-client byte: index of the player this client controls (255 = none).
+    let controlled_index;
+    if (version >= 5 && off < dv.byteLength) {
+      controlled_index = dv.getUint8(off, true); off += 1;
+    }
+    return { players, balls, game_time: gameTime, score, delay_bin, possession_code, flag_runner, flag_runner_on_pitch, seeker_on_pitch, controlled_index };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }
 

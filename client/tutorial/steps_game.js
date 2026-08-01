@@ -327,6 +327,26 @@ const sections = [
                     text: ['Big pitch, big dreams.'],
                 },
             },
+            {
+                // Switching is refused everywhere else in the tutorial (the forbidden
+                // sign shows on the buttons); this scenario is where it is unlocked.
+                id: 'switch_player',
+                scenario: 'player_switch_demo',
+                anchor: () => A.domRect('#switchSamePositionButton'),
+                extraHighlight: () => [A.domRect('#switchNextPositionButton')].filter(Boolean),
+                quip: QUIPS.stepByStep,
+                text: (ctx) => ctx.isTouch
+                    ? ['You command the whole team. Tap ⇆ for another', 'chaser, ⇅ for another position.']
+                    : ['You command the whole team. Q (or ⇆) takes another', 'chaser, E (or ⇅) another position.'],
+                interaction: 'client',
+                onEnter: (ctx) => { ctx.switchStartId = A.traineeId(); },
+                check: (ctx) => Boolean(A.traineeId()) && A.traineeId() !== ctx.switchStartId,
+                hint: { afterMs: 15000, text: 'Watch the yellow ring — it jumps to whoever you take over.' },
+                success: {
+                    text: ['The ring follows you, and the teammate', 'you left goes back to the AI.'],
+                    quip: QUIPS.meow,
+                },
+            },
         ],
     },
     {

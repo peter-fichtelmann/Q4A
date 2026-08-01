@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 
+import player_switch
 from core.entities import Player, Ball, VolleyBall, Vector2, PlayerRole
 
 logger = logging.getLogger('quadball.tutorial')
@@ -38,23 +39,34 @@ class TutorialDirector:
         player_id = getattr(self.room, 'creator_player_id', None)
         if player_id is None:
             return None
-        return self.state.get_player(player_id)
+        # Follow a player switch so scenario staging targets whoever the trainee
+        # actually steers (only the switch demo leaves them on another player).
+        return self.state.get_player(self.room.get_controlled_player_id(player_id))
 
     def _set_ai(self, mode: str, **kwargs):
         computer_player = self.room.computer_player
         if computer_player is not None and hasattr(computer_player, 'set_mode'):
             computer_player.set_mode(mode, **kwargs)
 
+    def _human_controlled_ids(self) -> set:
+        return set(self.room.controlled_player_by_player.values())
+
     def _cpu(self, team: int, role: PlayerRole, exclude=()) -> Optional[Player]:
+        human_controlled = self._human_controlled_ids()
         for player_id in self.room.cpu_player_ids:
+            if player_id in human_controlled:
+                continue
             player = self.state.get_player(player_id)
             if player is not None and player.team == team and player.role == role and player.id not in exclude:
                 return player
         return None
 
     def _cpu_players(self) -> List[Player]:
+        human_controlled = self._human_controlled_ids()
         players = []
         for player_id in self.room.cpu_player_ids:
+            if player_id in human_controlled:
+                continue
             player = self.state.get_player(player_id)
             if player is not None:
                 players.append(player)
@@ -199,8 +211,24 @@ class TutorialDirector:
 
     # ---- scenario lifecycle ----
 
+    def _restore_trainee_control(self):
+        """Put the trainee back on their own player before staging a scenario.
+
+        Only the switch demo leaves them on a teammate; every other scenario stages
+        entities around `creator_player_id`, so control is reset first.
+        """
+        creator_player_id = getattr(self.room, 'creator_player_id', None)
+        if creator_player_id is None:
+            return
+        current_id = self.room.get_controlled_player_id(creator_player_id)
+        if current_id != creator_player_id:
+            player_switch.apply_switch(self.room, creator_player_id, current_id, creator_player_id)
+            logger.info("Tutorial restored trainee control: %s -> %s", current_id, creator_player_id)
+
     def start_scenario(self, name: str) -> List[dict]:
         """Stage a named scenario. Returns tutorial_event messages to broadcast."""
+        if name != 'player_switch_demo':
+            self._restore_trainee_control()
         if not self.room.game_started or self.trainee is None:
             return []
         setup = getattr(self, f'_setup_{name}', None)
@@ -279,6 +307,47 @@ class TutorialDirector:
     def _setup_idle_all(self):
         events = self._swap_trainee_role(PlayerRole.CHASER)
         self._set_ai('idle')
+        return events
+
+    def _setup_player_switch_demo(self):
+        """Teach the two switch buttons by gathering the trainee's own line-up around them.
+
+        This is the one scenario that leaves switching enabled — every other one calls
+        `_restore_trainee_control` first, so the trainee is back on their own player by
+        the time the next step stages the pitch.
+        """
+        self.room.player_switch_enabled = True
+        events = self._swap_trainee_role(PlayerRole.CHASER)
+        self._strip_all_balls()
+        self._reset_balls_default()
+        trainee = self.trainee
+        # Own half: team 0 defends the low-x hoops, team 1 the high-x ones.
+        side = -1 if trainee.team == 0 else 1
+        center_y = self.state.boundaries_y[1] / 2
+        self._teleport(trainee, self.state.midline_x + side * 3.0, center_y)
+
+        # One of every position within sight, so both Q and E have a visible target.
+        layout = [
+            (PlayerRole.CHASER, 6.0, -4.0),
+            (PlayerRole.CHASER, 6.0, 4.0),
+            (PlayerRole.KEEPER, 9.0, 0.0),
+            (PlayerRole.BEATER, 3.0, -7.0),
+            (PlayerRole.BEATER, 3.0, 7.0),
+        ]
+        targets = {}
+        used = set()
+        for role, offset_x, offset_y in layout:
+            cpu = self._cpu(trainee.team, role, exclude=used)
+            if cpu is None:
+                continue
+            used.add(cpu.id)
+            x = self.state.midline_x + side * offset_x
+            y = center_y + offset_y
+            self._teleport(cpu, x, y)
+            targets[cpu.id] = (x, y)
+
+        self._park_others(active_ids=used)
+        self._set_ai('hold_positions', targets=targets)
         return events
 
     def _own_hoops(self, team: int) -> List:

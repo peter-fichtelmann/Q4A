@@ -4,7 +4,11 @@ export const State = {
   ballVelocities: {},
   canvas: null,
   ctx: null,
+  // The entity we currently steer. Starts as the connection's own player and
+  // follows player switches, so rendering, camera and input all track it.
   localPlayerId: null,
+  // The player id the game socket is bound to; never changes.
+  connectionPlayerId: null,
   roomId: null,
   playersOrder: null,
   ballsOrder: null,
@@ -12,6 +16,7 @@ export const State = {
   mousePos: null,
   isTouchDevice: false,
   fullscreen: { isFullscreen: false, attempted: false, button: null },
+  playerSwitch: { buttons: {}, forbiddenTimers: {} },
   viewport: { enabled: false, centerX: 0, centerY: 0, worldWidth: 30, worldHeight: 16.5, offsetX: 0, offsetY: 0 },
   joystick: { active: false, centerX: 0, centerY: 0, currentX: 0, currentY: 0, maxRadius: 40, baseRadius: 32, knobRadius: 12, deadZone: 4, touchId: null, fadeTimer: null, opacity: 0.7 },
   debug: { enabled: false, stateUpdateCounter: 0, lastPositions: {}, LOG_EVERY_N: 10, POS_EPSILON: 0.05 },

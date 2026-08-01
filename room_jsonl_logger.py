@@ -898,7 +898,10 @@ class RoomJsonlLogger:
             return
         self._ensure_header_written(room)
         cpu_moves = []
-        for cpu_player_id in room.cpu_player_ids:
+        # The players the AI actually drove on the last move — this follows player
+        # switches, unlike `cpu_player_ids` (the fixed set spawned at game start).
+        driven_ids = getattr(room, 'last_cpu_driven_ids', None) or room.cpu_player_ids
+        for cpu_player_id in driven_ids:
             player = room.game_state.get_player(cpu_player_id)
             if player is None:
                 continue

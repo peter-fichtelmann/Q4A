@@ -26,6 +26,7 @@ from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer
 from config import Config
 from room_jsonl_logger import RoomJsonlLogger
 from tutorial import setup_tutorial_room, mark_tutorial_room_abandoned, sweep_abandoned_tutorial_rooms
+import player_switch
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('quadball')
@@ -65,6 +66,20 @@ class GameRoom:
         self.created_at = datetime.now()
         self.cpu_player_ids: List[str] = []
         self.player_counter: int = 0
+        # Which entity each connection currently steers: connection player_id -> player id.
+        # Seeded with the identity mapping on game start; changed by player switches.
+        # This is the single source of truth for "human-driven", so anything not a
+        # value in here is CPU-driven.
+        self.controlled_player_by_player: Dict[str, str] = {}
+        # Game websocket client_id -> connection player_id, needed to address the
+        # per-client controlled-player index in the state broadcast.
+        self.game_client_player_ids: Dict[str, str] = {}
+        # player id -> index in `players_order`, built once on game start.
+        self.player_index_by_id: Dict[str, int] = {}
+        # Tutorial rooms turn this off until the switch is demonstrated.
+        self.player_switch_enabled: bool = True
+        # CPU ids handed to the last make_move call, for the jsonl logger.
+        self.last_cpu_driven_ids: List[str] = []
         # Slot layout for room lobby drag/drop. value is player_id or None.
         self.slot_assignments: Dict[str, Optional[str]] = self._build_slot_assignments()
         
@@ -121,6 +136,20 @@ class GameRoom:
     @staticmethod
     def _slot_id(team_label: str, role: str, index: int) -> str:
         return f"{team_label}_{role}_{index}"
+
+    def get_cpu_controlled_player_ids(self) -> List[str]:
+        """Every player in the game state that no connection currently steers.
+
+        Recomputed per computer-player tick so it follows player switches, and it
+        includes the seekers (they have always been CPU-driven, they were just
+        never part of `cpu_player_ids`).
+        """
+        controlled = set(self.controlled_player_by_player.values())
+        return [player_id for player_id in self.game_state.players if player_id not in controlled]
+
+    def get_controlled_player_id(self, connection_player_id: str) -> str:
+        """The entity a connection steers right now (its own player unless switched)."""
+        return self.controlled_player_by_player.get(connection_player_id, connection_player_id)
 
     def _build_slot_assignments(self) -> Dict[str, Optional[str]]:
         slots: Dict[str, Optional[str]] = {}
@@ -800,14 +829,26 @@ async def websocket_lobby(websocket: WebSocket):
 
                     room.game_state.max_player_radius = max(player.radius for player in room.game_state.players.values())
 
+                    # Freeze the entity order. `players_order` in initial_state is taken from
+                    # this map so the two can never diverge, and no player is added or removed
+                    # once the game has started.
+                    room.player_index_by_id = {pid: i for i, pid in enumerate(room.game_state.players)}
+                    # Every human slot player starts out controlling its own entity.
+                    room.controlled_player_by_player = {
+                        pid: pid
+                        for team_player_ids in human_players_by_team.values()
+                        for pid in team_player_ids
+                        if pid in room.game_state.players
+                    }
+
                     room.game_started = True
                     # reinitialize game logic system with all players and balls
                     room.game_logic = GameLogic(room.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
 
-                    # initialize computer player: has to be done after adding CPU players to the game state so it can find them
+                    # initialize computer player. The controlled ids are passed per make_move
+                    # call, since which players the CPU drives changes with player switches.
                     room.computer_player = room.computer_player_class(
                         room.game_logic,
-                        room.cpu_player_ids,
                         computer_player_log_level=Config.COMPUTER_PLAYER_LOG_LEVEL,
                         **Config.COMPUTER_PLAYER_KWARGS
                     )
@@ -892,15 +933,23 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
 
     client_id = str(uuid.uuid4())
     room.client_connections[client_id] = websocket
+    room.game_client_player_ids[client_id] = player_id
+    if player_id in room.game_state.players:
+        room.controlled_player_by_player.setdefault(player_id, player_id)
+        player_switch.apply_human_tuning(room.game_state.players[player_id])
 
     try:
-        # Send initial game state
+        # Send initial game state. This is the one broadcast carrying full player
+        # information; the per-tick updates only carry the controlled player index.
         await websocket.send_json({
             "type": "initial_state",
                 "game_state": room.game_state.serialize_to_broadcast(),
                 # send ordered id lists so clients can map binary updates to entities
-                "players_order": list(room.game_state.players.keys()),
+                "players_order": list(room.player_index_by_id) or list(room.game_state.players.keys()),
                 "balls_order": list(room.game_state.balls.keys()),
+                # which entity this client steers right now, so the first frame is
+                # correct without waiting for a binary state update
+                "controlled_player_id": room.get_controlled_player_id(player_id),
                 # send the fixed game tick duration once so the client can extrapolate between updates
                 "tick_time_seconds": (1.0 / Config.FPS) * Config.GAME_TIME_TO_REAL_TIME_RATIO,
             "players": list(room.players.values()),
@@ -936,18 +985,22 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
 
                 message_type = message.get("type")
 
+                # Input always targets the entity this connection currently steers,
+                # which is its own player until it switches to a teammate.
+                controlled_player_id = room.get_controlled_player_id(player_id)
+
                 if message_type == "player_input":
                     direction_x = message.get("direction_x", 0)
                     direction_y = message.get("direction_y", 0)
 
                     # Apply input
-                    player = room.game_state.get_player(player_id)
+                    player = room.game_state.get_player(controlled_player_id)
                     if player:
                         # log input for debugging
                         logger.debug(
                             "player_input room=%s player=%s dir=(%s,%s)",
                             room_id,
-                            player_id,
+                            controlled_player_id,
                             direction_x,
                             direction_y,
                         )
@@ -955,8 +1008,20 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         player.direction.y = float(direction_y)
 
                 elif message_type == "throw":
-                    success_throw = room.game_logic.process_action_logic.process_throw_action(player_id)
-                    success_tackle = room.game_logic.process_action_logic.process_tackle_action(player_id)
+                    success_throw = room.game_logic.process_action_logic.process_throw_action(controlled_player_id)
+                    success_tackle = room.game_logic.process_action_logic.process_tackle_action(controlled_player_id)
+
+                elif message_type == "switch_player":
+                    mode = str(message.get("mode", ""))
+                    new_player_id = player_switch.request_switch(
+                        room, player_id, controlled_player_id, mode,
+                    )
+                    if new_player_id is None:
+                        # Tell only this client, so it can show the forbidden sign.
+                        await websocket.send_json({
+                            "type": "switch_player_failed",
+                            "mode": mode,
+                        })
 
                 elif message_type == "tutorial_step":
                     # Only tutorial rooms accept scenario requests
@@ -983,7 +1048,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                     if len(b) >= 4:
                         dx = struct.unpack('<e', b[0:2])[0]
                         dy = struct.unpack('<e', b[2:4])[0]
-                        player = room.game_state.get_player(player_id)
+                        player = room.game_state.get_player(room.get_controlled_player_id(player_id))
                         if player:
                             player.direction.x = float(dx)
                             player.direction.y = float(dy)
@@ -993,9 +1058,20 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
     except WebSocketDisconnect:
         pass
     finally:
-        if client_id in room.client_connections:
-            del room.client_connections[client_id]
+        _drop_game_client(room, client_id)
         mark_tutorial_room_abandoned(room)
+
+
+def _drop_game_client(room: GameRoom, client_id: str) -> None:
+    """Forget a game connection and undo any player switch it made.
+
+    A player the connection had taken over goes back to the CPU; the connection's
+    own player stays human-owned, so a reconnect lands where the URL points.
+    """
+    room.client_connections.pop(client_id, None)
+    connection_player_id = room.game_client_player_ids.pop(client_id, None)
+    if connection_player_id is not None:
+        player_switch.release_to_connection_player(room, connection_player_id)
 
 async def broadcast_to_room(room: GameRoom, message: dict):
     """Broadcast message to all clients in a room"""
@@ -1035,16 +1111,23 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         """Build a compact binary representation of dynamic entities.
 
         Format (little-endian):
-        - uint8: version (1)
+        - uint8: version (5)
         - uint8: player_count
         - uint8: ball_count
         - float16: game_time
+        - uint8 score team 0, uint8 score team 1
         - for each player: float16 x, float16 y, float16 vx, float16 vy, uint8 flags
             flags bit0 = is_knocked_out, bit1 = has_ball
-        - for each ball: float16 x, float16 y, float16 vx, float16 vy, uint8 holder_flag
+        - for each ball: float16 x, float16 y, float16 vx, float16 vy, uint8 holder_flag,
+            uint8 is_dead, uint8 possession (0=None, 1=team_0, 2=team_1)
+        - uint8 delay-of-game bin, uint8 volleyball possession
         - uint8 flag seeker phase flags
             flags bit0 = flag_runner_on_pitch, bit1 = seeker_on_pitch
         - float16 flag runner x, y, vx, vy (zeros when there is no flag runner)
+
+        The caller appends one more uint8 per client: the index of the player that
+        client controls (255 = none). That trailing byte is the only per-client part
+        of the payload, so the rest is built once per room per tick.
 
         Clients must use the `players_order` and `balls_order` arrays sent in the
         initial_state message to map these items to entity ids.
@@ -1057,8 +1140,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header (version 4 adds the flag seeker phase flags and the flag runner)
-        buf += struct.pack('<B', 4)
+        # header (version 5 adds the trailing per-client controlled-player index)
+        buf += struct.pack('<B', 5)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -1166,8 +1249,13 @@ async def broadcast_to_room(room: GameRoom, message: dict):
 
     # Precompute payload once and send to all clients; track bytes per successful send
     if message.get('type') == 'state_update':
-        payload_bytes = build_binary_state(room)
+        base_bytes = build_binary_state(room)
         for client_id, websocket in list(room.client_connections.items()):
+            # Only the trailing controlled-player index differs per client.
+            connection_player_id = room.game_client_player_ids.get(client_id)
+            controlled_id = room.controlled_player_by_player.get(connection_player_id)
+            controlled_index = room.player_index_by_id.get(controlled_id, 255)
+            payload_bytes = base_bytes + struct.pack('<B', controlled_index)
             try:
                 await websocket.send_bytes(payload_bytes)
                 # update counters per successful send
@@ -1213,10 +1301,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
                 disconnected.add(client_id)
 
     for client_id in disconnected:
-        try:
-            del room.client_connections[client_id]
-        except KeyError:
-            pass
+        _drop_game_client(room, client_id)
 
 @app.on_event("startup")
 async def startup_event():
@@ -1352,7 +1437,13 @@ async def game_loop_manager():
                                 _log_cpu_step_profile_report(room)
 
                     cpu_player_start = time.monotonic()
-                    room.computer_player.make_move(clock_tick_game * Config.COMPUTER_PLAYER_TICK_RATE)
+                    # Recomputed every CPU tick so the AI picks up players humans released
+                    # and lets go of players humans took over.
+                    room.last_cpu_driven_ids = room.get_cpu_controlled_player_ids()
+                    room.computer_player.make_move(
+                        clock_tick_game * Config.COMPUTER_PLAYER_TICK_RATE,
+                        room.last_cpu_driven_ids,
+                    )
                     room.cpu_move_tick_count += 1
                     cpu_player_times.append(time.monotonic() - cpu_player_start)
                     try:

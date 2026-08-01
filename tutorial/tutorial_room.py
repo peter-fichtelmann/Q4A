@@ -18,6 +18,9 @@ def setup_tutorial_room(room):
     room.computer_player_class = ScriptedComputerPlayer
     room.tutorial_director = TutorialDirector(room)
     room.tutorial_abandoned_at = None
+    # Switching would pull the trainee off the player the scripted scenarios stage.
+    # The player_switch_demo scenario turns it on when it is time to teach it.
+    room.player_switch_enabled = False
     logger.info("Tutorial room created: %s", room.room_id)
 
 
