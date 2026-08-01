@@ -96,9 +96,8 @@ class Config:
     COMPUTER_PLAYER_LOG_LEVEL = logging.DEBUG
     COMPUTER_PLAYER_KWARGS = {
         # 'throwing_probability': 0.3, # for RandomComputerPlayer, probability of throwing each tick
-        'move_buffer_factor': 1.4, # for RuleBasedComputerPlayer move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
-        'move_tol': 1, # for RuleBasedComputerPlayer move_around_hoop_blockage, tolerance for checking if a player is at the target position (to avoid unnecessary movement)
-        'move_random_direction_factor': 0.0, # not applied, for RuleBasedComputerPlayer move_around_hoop_blockage, how much randomness to add to the direction to avoid getting stuck in a loop of moving back and forth between two hoops
+        'move_buffer_factor_x': 1.4, # for RuleBasedComputerPlayer move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
+        'move_buffer_factor_y': 1.4, # for RuleBasedComputerPlayer move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
         'determine_attacking_team_max_dt_steps': 10, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
         'determine_attacking_team_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when determining attacking team based on interception ratio
         'determine_attacking_team_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME

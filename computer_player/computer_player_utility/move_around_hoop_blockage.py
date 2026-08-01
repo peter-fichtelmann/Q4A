@@ -10,14 +10,16 @@ class MoveAroundHoopBlockage:
 
     def __init__(self,
                  defence_hoops: List[Hoop],
-                 move_buffer_factor: float = 1.2,
+                 move_buffer_factor_x: float = 1.2,
+                 move_buffer_factor_y: float = 1.2,
                  tol: float = 1e-2,
                  volleyball_radius: float = 0.0, # for hoop blockage_x
                  logger: Optional[logging.Logger] = None
                  ):
         """Store hoop geometry and tuning parameters for blockage avoidance."""
         self.defence_hoops = defence_hoops
-        self.move_buffer_factor = move_buffer_factor    
+        self.move_buffer_factor_x = move_buffer_factor_x
+        self.move_buffer_factor_y = move_buffer_factor_y
         self.tol = tol
         self.volleyball_radius = volleyball_radius
         self.logger = logger
@@ -79,10 +81,10 @@ class MoveAroundHoopBlockage:
         hoop_blockage_x_neg = target_hoop.position.x - add_hoop_blockage_x
         if x_pos_position:
             hoop_blockage_x = hoop_blockage_x_neg
-            add_x_buffer = - add_hoop_blockage_x * (self.move_buffer_factor - 1)
+            add_x_buffer = - add_hoop_blockage_x * (self.move_buffer_factor_x - 1)
         else:
             hoop_blockage_x = hoop_blockage_x_pos
-            add_x_buffer = add_hoop_blockage_x * (self.move_buffer_factor - 1)
+            add_x_buffer = add_hoop_blockage_x * (self.move_buffer_factor_x - 1)
         best_x_intercepting  = (float('inf'), None, None, None) # (t, x, y, hoop)
         best_y_intercepting = (float('inf'), None, None, None) # (t, x, y, hoop)
         # only calculate interceptings if target is on the opposite side of the hoop from the player, otherwise there is no blockage to worry about (player can move around the hoop without intercepting any blockage boundaries)
@@ -107,7 +109,7 @@ class MoveAroundHoopBlockage:
                         x = player.position.x + direction_to_target.x * line_t_y
                         if (x >= hoop.position.x - add_hoop_blockage_x and x <= hoop.position.x + add_hoop_blockage_x):
                             if line_t_y < best_y_intercepting[0]:
-                                y = hoop.position.y + add_hoop_blockage_radius * self.move_buffer_factor # add buffer after checks (before checks leads to wrong checks)
+                                y = hoop.position.y + add_hoop_blockage_radius * self.move_buffer_factor_y # add buffer after checks (before checks leads to wrong checks)
                                 best_y_intercepting = (line_t_y, x, y, hoop)
         if math.isinf(best_x_intercepting[0]) and math.isinf(best_y_intercepting[0]):
             # no blockage found, move directly towards the hoop with estimation of current velocity taken into account
@@ -122,14 +124,14 @@ class MoveAroundHoopBlockage:
             # use best x intercepting
             # check closest corner of the hoop where the player should move towards with buffer to avoid blockage
             if direction_to_target.y < 0: # move towards upper corner
-                corner_y = best_x_intercepting[3].position.y + best_x_intercepting[3].radius * self.move_buffer_factor
+                corner_y = best_x_intercepting[3].position.y + best_x_intercepting[3].radius * self.move_buffer_factor_y
             else: # move towards lower corner
-                corner_y = best_x_intercepting[3].position.y - best_x_intercepting[3].radius * self.move_buffer_factor
+                corner_y = best_x_intercepting[3].position.y - best_x_intercepting[3].radius * self.move_buffer_factor_y
             direction = Vector2(best_x_intercepting[1] - player.position.x, corner_y - player.position.y)
         else: # best y_intercepting is closer
             if x_pos_position:
-                corner_x = best_y_intercepting[3].position.x + add_hoop_blockage_x * self.move_buffer_factor
+                corner_x = best_y_intercepting[3].position.x + add_hoop_blockage_x * self.move_buffer_factor_x
             else:
-                corner_x = best_y_intercepting[3].position.x - add_hoop_blockage_x * self.move_buffer_factor
+                corner_x = best_y_intercepting[3].position.x - add_hoop_blockage_x * self.move_buffer_factor_x
             direction = Vector2(corner_x - player.position.x, best_y_intercepting[2] - player.position.y)
         return direction

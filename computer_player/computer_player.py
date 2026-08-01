@@ -172,7 +172,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
 
     def __init__(self,
                  game_logic: GameLogic,
-                 move_buffer_factor: float = 1.2,
+                 move_buffer_factor_x: float = 1.2,
+                 move_buffer_factor_y: float = 1.2,
                  determine_attacking_team_max_dt_steps: int = 10,
                  determine_attacking_team_max_distance_per_step: float = None,
                  determine_attacking_team_max_dt_per_step: int = None,
@@ -185,7 +186,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                  ):
         """Initialize reusable tactical helpers and team-specific configuration."""
         super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
-        self.move_buffer_factor = move_buffer_factor
+        self.move_buffer_factor_x = move_buffer_factor_x
+        self.move_buffer_factor_y = move_buffer_factor_y
         self.determine_attacking_team_max_dt_steps = determine_attacking_team_max_dt_steps
         self.determine_attacking_team_max_distance_per_step = determine_attacking_team_max_distance_per_step
         self.determine_attacking_team_max_dt_per_step = determine_attacking_team_max_dt_per_step
@@ -207,13 +209,15 @@ class RuleBasedComputerPlayer(ComputerPlayer):
         volleyball_radius = self.logic.state.volleyball.radius if self.logic.state.volleyball is not None else 0
         self.move_around_hoop_blockage_team_0 = MoveAroundHoopBlockage(
             defence_hoops=self.defence_hoops_0,
-            move_buffer_factor=self.move_buffer_factor,
+            move_buffer_factor_x=self.move_buffer_factor_x,
+            move_buffer_factor_y=self.move_buffer_factor_y,
             volleyball_radius=volleyball_radius,
             logger=self.logger
             )
         self.move_around_hoop_blockage_team_1 = MoveAroundHoopBlockage(
             defence_hoops=self.defence_hoops_1,
-            move_buffer_factor=self.move_buffer_factor,
+            move_buffer_factor_x=self.move_buffer_factor_x,
+            move_buffer_factor_y=self.move_buffer_factor_y,
             volleyball_radius=volleyball_radius,
             logger=self.logger
             )

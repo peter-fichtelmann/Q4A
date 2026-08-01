@@ -1,0 +1,3 @@
+When the flag runner is mentioned and explained, it should also be surrounded by the glowing rectangle.
+
+I faced an issue when the flag was catched. The seeker and flag disappeared but still the success message did not appear. Make sure the success message appears after the catch.
