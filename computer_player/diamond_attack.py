@@ -226,7 +226,9 @@ class DiamondAttack:
 
                 hoop = hoops[i]
                 if player.role == PlayerRole.CHASER:
-                    move_vector = self.move_around_hoop_blockage(player, hoop.position, add_hoop_blockage_x=player.radius)
+                    # move_vector = self.move_around_hoop_blockage(player, hoop.position, add_hoop_blockage_x=player.radius)
+                    move_vector = self.move_around_hoop_blockage(player, hoop.position)
+
                 else:
                     move_vector = Vector2(
                         hoop.position.x - player.position.x,
