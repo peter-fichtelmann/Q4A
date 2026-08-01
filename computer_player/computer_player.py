@@ -252,7 +252,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             assigned_beater_ids=assigned_beater_ids
         )
         # self._hoop_defence([cpu_player.id for cpu_player in self.cpu_players if cpu_player.team == self.logic.state.team_1], self.logic.state.team_1)
-        self.seeker_director.update_seeker_direction()
+        self.seeker_director.update_seeker_direction(dt)
 
     def _determine_beater_ball_getting(self, dt: float, attacking_team: int) -> List[str]:
         """

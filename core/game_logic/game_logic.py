@@ -117,13 +117,15 @@ class GameLogic:
         if self.state.is_game_active:
             # Update game time
             self.state.update_game_time(dt)
-            self.flag_runner_logic.update_flag_runner_direction()
+            self.flag_runner_logic.update_flag_runner_direction(dt)
             self.flag_runner_logic.update_flag_runner_velocity(dt)
             self.basic_logic.update_player_velocities(dt)
+
+            self.flag_runner_logic._check_seeker_flag_runner_interaction(dt)
+
             # Check player collisions and enforce tackle effects before updating positions and after updating player velocities
             self.physical_contact_logic._check_player_collisions()
             # after collisions before updating positions so setting velocity to 0 when tackling takes effect before position updates and after velocity updates
-            self.flag_runner_logic._check_seeker_flag_runner_interaction(dt)
             self.physical_contact_logic._enforce_tackle()
 
             self.basic_logic.update_ball_velocities(dt)

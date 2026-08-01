@@ -24,7 +24,7 @@ class FlagRunnerLogic:
         self.state = game_state
         self.logger = logger or BASE_LOGGER
 
-    def update_flag_runner_direction(self):
+    def update_flag_runner_direction(self, dt: float) -> None:
         """
         Update the direction of the flag runner if the game time is above the flag_runner_floor time threshold
         and there is a flag runner present in the game state.
@@ -53,12 +53,16 @@ class FlagRunnerLogic:
             for player in self.state.players.values():
                 if player.role == PlayerRole.SEEKER:
                     if not player.is_knocked_out:
-                        squared_distance = UtilityLogic._squared_distance(flag_runner.position, player.position)
+                        next_player_position = Vector2(
+                            player.position.x + player.velocity.x * dt,
+                            player.position.y + player.velocity.y * dt
+                        )
+                        squared_distance = UtilityLogic._squared_distance(flag_runner.position, next_player_position)
                         if squared_distance > 0:
                             # The closer the seeker, the more the flag runner tries to avoid it
                             avoidance_strength = 1 / squared_distance * flag_runner.seeker_avoidance_factor
-                            seeker_avoid_direction.x += (flag_runner.position.x - player.position.x) * avoidance_strength
-                            seeker_avoid_direction.y += (flag_runner.position.y - player.position.y) * avoidance_strength
+                            seeker_avoid_direction.x += (flag_runner.position.x - next_player_position.x) * avoidance_strength
+                            seeker_avoid_direction.y += (flag_runner.position.y - next_player_position.y) * avoidance_strength
 
         # Avoid boundaries of the pitch
         boundary_epsilon = flag_runner.boundary_epsilon
@@ -148,6 +152,8 @@ class FlagRunnerLogic:
                 if random.random() < flag_runner.catch_probability:
                     self.logger.info(f'Seeker {seeker.id} successfully caught the flag runner after {seeker.flag_runner_interaction_time:.2f} seconds of contact.')
                     self.resolve_catch(seeker, flag_runner)
+                seeker.flag_runner_interaction_time = 0.0
+
 
     def resolve_catch(self, seeker: Player, flag_runner: FlagRunner) -> None:
         self.state.flag_runner_on_pitch = False
