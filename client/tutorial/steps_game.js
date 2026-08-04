@@ -253,6 +253,8 @@ const sections = [
                 hint: { afterMs: 20000, text: 'Your throw flies in the direction you are moving/aiming.' },
                 progressUpdates: {
                     retry: { hint: 'Out of bounds! Try again.' },
+                    scored: { hint: "Nice goal trainee, but let's pass first." },
+                    own_goal: { hint: 'Oops not in your own hoops. Pass to your team mate!' },
                 },
                 success: {
                     text: ['Caught! Teamwork makes the wild work.'],

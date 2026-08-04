@@ -310,7 +310,7 @@ class TutorialDirector:
         logger.info("Tutorial scenario started: %s (room=%s)", name, self.room.room_id)
         return events
 
-    def _retry(self) -> List[dict]:
+    def _retry(self, detail: str = 'retry') -> List[dict]:
         """Re-stage the active scenario (e.g. after the practice ball went out of bounds)."""
         name = self.scenario
         setup = getattr(self, f'_setup_{name}')
@@ -319,7 +319,7 @@ class TutorialDirector:
         self._common_reset()
         events = setup() or []
         logger.info("Tutorial scenario retried: %s (room=%s)", name, self.room.room_id)
-        return events + [{"type": "tutorial_event", "event": "progress", "step": name, "detail": "retry"}]
+        return events + [{"type": "tutorial_event", "event": "progress", "step": name, "detail": detail}]
 
     def _volleyball_out_of_play(self) -> bool:
         """True when the volleyball left the practice flow (inbounding or turnover started)."""
@@ -486,6 +486,7 @@ class TutorialDirector:
             self._teleport(receiver, 34, 16.5)
             self._baseline['receiver_id'] = receiver.id
             self._set_ai('pass_receiver', receiver_id=receiver.id, trainee_id=trainee.id, home=(34, 16.5))
+        self._baseline['score'] = list(self.state.score)
         return events
 
     def _check_pass_practice(self):
@@ -493,6 +494,15 @@ class TutorialDirector:
         volleyball = self.state.volleyball
         if receiver_id is not None and volleyball is not None and volleyball.holder_id == receiver_id:
             return self._success()
+        trainee = self.trainee
+        baseline_score = self._baseline.get('score')
+        if trainee is not None and baseline_score is not None:
+            # Scoring either way leaves the volleyball dead with a keeper, not
+            # merely out of bounds — each direction needs its own retry detail.
+            if self.state.score[trainee.team] > baseline_score[trainee.team]:
+                return self._retry('scored')
+            if self.state.score[1 - trainee.team] > baseline_score[1 - trainee.team]:
+                return self._retry('own_goal')
         if self._volleyball_out_of_play():
             return self._retry()
         return []
