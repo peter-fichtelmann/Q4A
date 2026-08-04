@@ -208,7 +208,7 @@ const sections = [
                 anchor: () => traineeRect(1.2),
                 quip: QUIPS.moving,
                 text: (ctx) => ctx.isTouch
-                    ? ['Touch the left side — a joystick appears.', 'Take a lap, trainee!']
+                    ? ['Touch the left side of the green pitch — a joystick appears.', 'Take a lap, trainee!']
                     : ['Your player follows the mouse or WASD/arrows.', 'Take a lap, trainee!'],
                 interaction: 'client',
                 onEnter: (ctx) => { ctx.moveAccum = 0; ctx.lastPos = null; },
