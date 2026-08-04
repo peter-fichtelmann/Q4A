@@ -191,6 +191,51 @@ function buildPlayerCard(player) {
 const DRAG_THRESHOLD_PX = 6;
 let dragState = null;
 
+// --- Auto-scroll while dragging near the top/bottom edge of the screen ---
+
+const EDGE_SCROLL_ZONE_PX = 60;
+const EDGE_SCROLL_MAX_SPEED = 16;
+let autoScrollSpeed = 0;
+let autoScrollRAF = null;
+
+function updateAutoScroll(clientY) {
+    const viewportHeight = window.innerHeight;
+    let speed = 0;
+    if (clientY < EDGE_SCROLL_ZONE_PX) {
+        speed = -EDGE_SCROLL_MAX_SPEED * (1 - clientY / EDGE_SCROLL_ZONE_PX);
+    } else if (clientY > viewportHeight - EDGE_SCROLL_ZONE_PX) {
+        speed = EDGE_SCROLL_MAX_SPEED * (1 - (viewportHeight - clientY) / EDGE_SCROLL_ZONE_PX);
+    }
+    autoScrollSpeed = speed;
+
+    if (speed !== 0 && !autoScrollRAF) {
+        autoScrollRAF = requestAnimationFrame(runAutoScroll);
+    } else if (speed === 0 && autoScrollRAF) {
+        cancelAnimationFrame(autoScrollRAF);
+        autoScrollRAF = null;
+    }
+}
+
+function runAutoScroll() {
+    if (!dragState || autoScrollSpeed === 0) {
+        autoScrollRAF = null;
+        return;
+    }
+    window.scrollBy(0, autoScrollSpeed);
+    if (dragState.lastClientX !== undefined) {
+        updateDropTarget(findDropTargetAt(dragState.lastClientX, dragState.lastClientY));
+    }
+    autoScrollRAF = requestAnimationFrame(runAutoScroll);
+}
+
+function stopAutoScroll() {
+    if (autoScrollRAF) {
+        cancelAnimationFrame(autoScrollRAF);
+        autoScrollRAF = null;
+    }
+    autoScrollSpeed = 0;
+}
+
 function beginCardDrag(event, card) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (event.target.closest('.player-name-input')) return;
@@ -222,8 +267,11 @@ function onCardDragMove(event) {
         if (dist < DRAG_THRESHOLD_PX) return;
         activateCardDrag();
     }
+    dragState.lastClientX = event.clientX;
+    dragState.lastClientY = event.clientY;
     positionDragGhost(event.clientX, event.clientY);
     updateDropTarget(findDropTargetAt(event.clientX, event.clientY));
+    updateAutoScroll(event.clientY);
 }
 
 function activateCardDrag() {
@@ -285,6 +333,7 @@ function cleanupCardDrag() {
     window.removeEventListener('pointermove', onCardDragMove);
     window.removeEventListener('pointerup', onCardDragEnd);
     window.removeEventListener('pointercancel', onCardDragCancel);
+    stopAutoScroll();
     if (dragState.ghost) dragState.ghost.remove();
     if (dragState.dropTarget) dragState.dropTarget.classList.remove('slot-hover');
     dragState.card.classList.remove('dragging');

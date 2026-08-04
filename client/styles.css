@@ -344,8 +344,8 @@ input:focus, select:focus {
     border: 1px solid #7f8db1;
     background: #e9efff;
     border-radius: 6px;
-    padding: 20px 16px;
-    min-height: 72px;
+    padding: 16px;
+    min-height: 104px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -376,13 +376,53 @@ input:focus, select:focus {
     box-shadow: 0 8px 20px rgba(20, 30, 60, 0.35);
 }
 
+/* Touch devices need noticeably bigger drag handles than a mouse pointer
+   does — bump up the card/slot heights so a finger has room to grab and
+   drop accurately. */
+@media (pointer: coarse) {
+    .player-card {
+        min-height: 160px;
+        padding: 22px;
+        font-size: 1.15rem;
+    }
+
+    .slot-box {
+        min-height: 190px;
+        padding: 22px;
+    }
+
+    .slot-empty {
+        min-height: 140px;
+    }
+
+    .spectator-dropzone {
+        min-height: 340px;
+    }
+}
+
+/* Mouse-only devices (no touch) don't need a big touch target — shrink
+   the box and grow the text for a denser, more readable layout. */
+@media (pointer: fine) {
+    .player-card {
+        min-height: 56px;
+        padding: 10px 16px;
+        font-size: 1.25rem;
+    }
+
+    .player-name-input {
+        font-size: 1rem;
+        padding: 6px 8px;
+    }
+}
+
 .player-name-input {
-    width: 100%;
+    width: 75%;
+    margin: 0 auto;
     border: 1px solid #6a7899;
     border-radius: 4px;
-    padding: 10px 8px;
+    padding: 6px 6px;
     font-weight: 600;
-    font-size: 1.05rem;
+    font-size: 0.8rem;
     text-align: center;
     background: #ffffff;
     color: #203050;
@@ -399,8 +439,112 @@ input:focus, select:focus {
     background: #f0f5ff !important;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 960px) and (orientation: portrait) {
     .room-board {
         grid-template-columns: 1fr;
+    }
+}
+
+/* Mobile landscape: keep Team A / Spectators / Team B side by side,
+   but shrink everything so all three columns stay visible without
+   horizontal scrolling on short, wide phone screens. */
+@media (orientation: landscape) and (max-height: 500px) {
+    .container.room-container {
+        max-width: 100%;
+        padding: 10px 14px;
+    }
+
+    h1 {
+        font-size: 1.3rem;
+        margin-bottom: 4px;
+    }
+
+    .subtitle {
+        margin-bottom: 10px;
+        font-size: 0.85rem;
+    }
+
+    .room-status {
+        padding: 8px;
+        margin: 8px 0;
+    }
+
+    .room-hint {
+        margin: 4px 0 8px;
+        font-size: 0.8rem;
+    }
+
+    .room-board {
+        gap: 8px;
+    }
+
+    .board-column {
+        padding: 6px;
+    }
+
+    .board-column h2 {
+        font-size: 0.8rem;
+        margin-top: 0;
+        margin-bottom: 6px;
+    }
+
+    .slot-grid {
+        gap: 6px;
+    }
+
+    .slot-box {
+        min-height: 60px;
+        padding: 6px;
+    }
+
+    .slot-label {
+        font-size: 0.65rem;
+        margin-bottom: 4px;
+    }
+
+    .slot-empty {
+        min-height: 32px;
+        font-size: 0.75rem;
+    }
+
+    .spectator-dropzone {
+        min-height: 100px;
+        padding: 6px;
+        gap: 6px;
+    }
+
+    .player-card {
+        padding: 8px 6px;
+        min-height: 56px;
+        font-size: 0.75rem;
+    }
+
+    .player-name-input {
+        padding: 4px 4px;
+        font-size: 0.65rem;
+    }
+}
+
+/* Same reasoning as the general touch bump above, but moderated for the
+   cramped short-landscape layout — still a solid drag target without
+   forcing the three columns to scroll. Placed last so it wins over the
+   landscape-shrink rule despite matching (pointer: coarse) too. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+    .player-card {
+        min-height: 90px;
+        padding: 10px 8px;
+        font-size: 0.85rem;
+    }
+
+    .slot-box {
+        min-height: 100px;
+    }
+
+    .slot-empty {
+        min-height: 56px;
+    }
+
+    .spectator-dropzone {
+        min-height: 140px;
     }
 }
