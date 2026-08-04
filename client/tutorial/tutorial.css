@@ -13,8 +13,8 @@
 .tut-bubble {
     position: fixed;
     /* wide enough to keep the footer (nav symbols + progress + close) on one line */
-    max-width: 420px;
-    min-width: 200px;
+    max-width: 520px;
+    min-width: 250px;
     background: rgba(255, 255, 255, 0.92);
     color: #1c2333;
     border-radius: 12px;
@@ -183,8 +183,8 @@
 
 .tut-avatar {
     flex: 0 0 auto;
-    width: 40px;
-    height: 40px;
+    width: 70px;
+    height: 70px;
     border-radius: 50%;
     overflow: hidden;
     border: 2px solid #b9a2e8;
@@ -217,8 +217,8 @@
 }
 
 .tut-hero-image {
-    width: 150px;
-    height: 150px;
+    width: 250px;
+    height: 250px;
     margin: 0 auto 12px;
     border-radius: 50%;
     overflow: hidden;
@@ -318,10 +318,10 @@
 /* ---- small screens: compact bubbles and smaller text ----
    Breakpoint kept in sync with isSmallScreen() in bubble_engine.js. */
 
-@media (max-width: 700px), (max-height: 520px) {
+@media (max-width: 800px), (max-height: 620px) {
     .tut-bubble {
-        max-width: 285px;
-        min-width: 150px;
+        max-width: 320px;
+        min-width: 170px;
         padding: 7px 9px;
         gap: 7px;
         border-radius: 9px;
@@ -333,10 +333,10 @@
     .tut-hint { font-size: 0.72rem; margin-top: 4px; }
 
     .tut-avatar {
-        width: 28px;
-        height: 28px;
-        border-width: 1px;
-        font-size: 15px;
+        width: 50px;
+        height: 50px;
+        border-width: 2px;
+        font-size: 20px;
     }
 
     .tut-actions { margin-top: 6px; gap: 6px; }
@@ -360,17 +360,17 @@
     }
 
     .tut-hero-image {
-        width: 92px;
-        height: 92px;
-        margin-bottom: 8px;
+        width: 120px;
+        height: 120px;
+        margin-bottom: 10px;
         border-width: 2px;
     }
 
-    .tut-hero-image .tut-placeholder-emoji { font-size: 32px; }
-    .tut-hero-image .tut-placeholder-caption { font-size: 0.68rem; margin-top: 3px; }
-    .tut-hero .tut-quip { font-size: 0.8rem; }
-    .tut-hero .tut-text { font-size: 0.88rem; }
-    .tut-hero .tut-actions { margin-top: 10px; }
+    .tut-hero-image .tut-placeholder-emoji { font-size: 40px; }
+    .tut-hero-image .tut-placeholder-caption { font-size: 0.72rem; margin-top: 4px; }
+    .tut-hero .tut-quip { font-size: 0.85rem; }
+    .tut-hero .tut-text { font-size: 0.95rem; }
+    .tut-hero .tut-actions { margin-top: 12px; }
 
     /* thinner highlight ring (redefining the keyframes wins over the base rule) */
     @keyframes tut-ring-pulse {
