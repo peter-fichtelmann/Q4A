@@ -7,3 +7,9 @@ __pycache__/
 *.pyc
 *.code-workspace
 /game_data/
+assets/sound_effects/829454__itmightgetloud__crwdreac-soccer_millerntor-stadium-crowd-reaction-general-ambience-01_philipp-feit_fcsp-29.wav
+.gitignore
+# audacity project files
+*.aup3
+*.aup3-shm
+*.aup3-wal
