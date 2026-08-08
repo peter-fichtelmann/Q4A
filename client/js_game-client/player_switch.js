@@ -38,8 +38,9 @@ const BUTTONS = [
   },
 ];
 
-// Matches the fullscreen button's look; fixed box so the three-button stack lines up.
-function buttonStyle(top) {
+// Matches the fullscreen button's look; fixed box so the button stack lines up.
+// Exported because audio.js hangs the mute button off the bottom of the same stack.
+export function buttonStyle(top) {
   return 'position: fixed; top: ' + top + 'px; right: 10px; z-index: 1000; '
     + 'width: 44px; height: 40px; display: flex; align-items: center; justify-content: center; '
     + 'background: rgba(0,0,0,0.7); color: white; border: 2px solid rgba(255,255,255,0.3); '

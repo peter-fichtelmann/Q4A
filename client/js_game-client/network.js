@@ -4,6 +4,7 @@ import { getQueryParam } from './utils.js';
 import { resizeCanvasToFit } from './viewport.js';
 import { showPrompt } from './fullscreen.js';
 import { ensureButtons, showForbidden } from './player_switch.js';
+import * as Audio from './audio.js';
 
 function getNowMs() {
   return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -105,6 +106,9 @@ export function handleMessage(message) {
     try { resizeCanvasToFit(); } catch (e) {}
     showPrompt();
     ensureButtons();
+    Audio.ensureMuteButton();
+    // Baseline only, so joining a running game does not replay its goals.
+    Audio.noteScore(State.gameState && State.gameState.score);
   } else if (message.type === 'switch_player_failed') {
     showForbidden(message.mode, message.reason);
   } else if (message.type === 'state_update') {
@@ -164,6 +168,9 @@ export function handleMessage(message) {
       const controlledId = State.playersOrder[incoming.controlled_index];
       if (controlledId) State.localPlayerId = controlledId;
     }
+    // Cheers for a quaffle goal and for a caught flag runner; both show up here
+    // as a score increase.
+    Audio.noteScore(State.gameState && State.gameState.score);
     rememberServerUpdateTime();
   }
 }

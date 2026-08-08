@@ -6,6 +6,7 @@ import * as Network from './network.js';
 import * as Input from './input.js';
 import * as Rendering from './rendering.js';
 import * as PlayerSwitch from './player_switch.js';
+import * as Audio from './audio.js';
 
 function gameLoop() { Rendering.renderGame(); requestAnimationFrame(gameLoop); }
 
@@ -87,6 +88,7 @@ export function initializeCanvas() {
     });
   }
 
+  Audio.unlockOnFirstGesture();
   Network.connectGame();
   gameLoop();
   setInterval(Input.update, 50);
@@ -97,7 +99,7 @@ window.addEventListener('keydown', Input.onKeyDown);
 window.addEventListener('keyup', Input.onKeyUp);
 
 // Optional: expose namespace for debugging
-window.GameClient = { Config, State, Viewport, Fullscreen, Network, Input, Rendering, PlayerSwitch, initializeCanvas };
+window.GameClient = { Config, State, Viewport, Fullscreen, Network, Input, Rendering, PlayerSwitch, Audio, initializeCanvas };
 
 // Initialize on load
 window.addEventListener('load', initializeCanvas);
