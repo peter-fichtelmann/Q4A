@@ -7,6 +7,7 @@
 // is reached through State instead.
 
 import { State } from './state.js';
+import { onActivate } from './utils.js';
 
 export const SAME_POSITION = 'same_position';
 export const NEXT_POSITION = 'next_position';
@@ -45,7 +46,7 @@ export function buttonStyle(top) {
     + 'width: 44px; height: 40px; display: flex; align-items: center; justify-content: center; '
     + 'background: rgba(0,0,0,0.7); color: white; border: 2px solid rgba(255,255,255,0.3); '
     + 'border-radius: 8px; padding: 0; font-size: 18px; cursor: pointer; font-family: monospace; '
-    + 'transition: all 0.3s ease; user-select: none;';
+    + 'transition: all 0.3s ease; user-select: none; touch-action: manipulation;';
 }
 
 export function sendSwitch(mode) {
@@ -71,7 +72,7 @@ export function ensureButtons() {
       btn.style.borderColor = 'rgba(255,255,255,0.3)';
       btn.style.transform = 'scale(1)';
     });
-    btn.addEventListener('click', (e) => { e.preventDefault(); sendSwitch(spec.mode); });
+    onActivate(btn, () => sendSwitch(spec.mode));
     document.body.appendChild(btn);
     State.playerSwitch.buttons[spec.mode] = btn;
   }

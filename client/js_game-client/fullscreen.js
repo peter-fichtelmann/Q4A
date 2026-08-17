@@ -1,4 +1,5 @@
 import { State } from './state.js';
+import { onActivate } from './utils.js';
 
 export function request() {
   const element = document.documentElement;
@@ -26,10 +27,10 @@ export function showPrompt() {
     const btn = document.createElement('button');
     btn.id = 'fullscreenButton';
     btn.innerHTML = '⛶';
-    btn.style.cssText = 'position: fixed; top: 10px; right: 10px; z-index: 1000; background: rgba(0,0,0,0.7); color: white; border: 2px solid rgba(255,255,255,0.3); border-radius: 8px; padding: 8px 12px; font-size: 18px; cursor: pointer; font-family: monospace; transition: all 0.3s ease; user-select: none;';
+    btn.style.cssText = 'position: fixed; top: 10px; right: 10px; z-index: 1000; background: rgba(0,0,0,0.7); color: white; border: 2px solid rgba(255,255,255,0.3); border-radius: 8px; padding: 8px 12px; font-size: 18px; cursor: pointer; font-family: monospace; transition: all 0.3s ease; user-select: none; touch-action: manipulation;';
     btn.addEventListener('mouseenter', () => { btn.style.borderColor = 'rgba(255,255,255,0.6)'; btn.style.transform = 'scale(1.05)'; });
     btn.addEventListener('mouseleave', () => { btn.style.borderColor = 'rgba(255,255,255,0.3)'; btn.style.transform = 'scale(1)'; });
-    btn.addEventListener('click', (e) => { e.preventDefault(); toggle(); });
+    onActivate(btn, () => toggle());
     document.body.appendChild(btn);
     State.fullscreen.button = btn;
   }

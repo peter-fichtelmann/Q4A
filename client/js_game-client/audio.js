@@ -8,6 +8,7 @@
 // would create a module cycle.
 
 import { buttonStyle } from './player_switch.js';
+import { onActivate } from './utils.js';
 
 const ATMOSPHERE_TRACKS = [
   '/client/assets/sound_effects/pitch_atmosphere/itmightgetloud-1.mp3',
@@ -174,10 +175,9 @@ export function ensureMuteButton() {
     btn.style.borderColor = 'rgba(255,255,255,0.3)';
     btn.style.transform = 'scale(1)';
   });
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
+  onActivate(btn, () => {
     setMuted(!muted);
-    // The click is itself a gesture, so it can double as the autoplay unlock.
+    // The tap is itself a gesture, so it can double as the autoplay unlock.
     if (!muted) startAtmosphere().catch(() => {});
   });
   document.body.appendChild(btn);
