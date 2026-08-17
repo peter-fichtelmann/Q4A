@@ -6,7 +6,8 @@ from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType, VolleyB
 @dataclass
 class GameState:
     """Central repository for all game data."""
-    is_game_active: bool = True
+    is_game_live: bool = True
+    is_game_over: bool = False
     boundaries_x: List[float] = field(default_factory=lambda: [0.0, 60])
     boundaries_y: List[float] = field(default_factory=lambda: [0.0, 33])
     keeper_zone_x_0: float = 19.0
@@ -47,7 +48,9 @@ class GameState:
     seeker_on_pitch: bool = False                         # Seeker enters after 20 min
     is_overtime: bool = False                          # True if game is in overtime
     set_score: Optional[int] = None                           # Snitch capture score
-    catched_team: Optional[int] = None                           # Team that catched the flag
+    flag_catched_team: Optional[int|str] = None               # Team that catched the flag
+    flag_catch_continue_timer: float = 60                     # Game seconds left of the catch-resolution pause
+    flag_catch_continue_timer_total: float = 60                # Length of that pause, so clients can stage their catch message on it
     
     def add_player(self, player: Player) -> None:
         """Add a player to the game state."""
@@ -108,6 +111,10 @@ class GameState:
         """Add points to a team's score."""
         if team in [0, 1]:
             self.score[team] += points
+        # check if set score is reached and game is over
+        if self.is_overtime and self.score[team] >= self.set_score:
+            self.is_game_over = True
+            self.is_game_live = False
     
     def update_game_time(self, dt: float) -> None:
         """Update elapsed game time."""
@@ -138,7 +145,8 @@ class GameState:
 
     def copy(self) -> 'GameState':
         return GameState(
-            is_game_active=self.is_game_active,
+            is_game_live=self.is_game_live,
+            is_game_over=self.is_game_over,
             boundaries_x=self.boundaries_x,
             boundaries_y=self.boundaries_y,
             keeper_zone_x_0=self.keeper_zone_x_0,
@@ -170,6 +178,10 @@ class GameState:
             set_score=self.set_score,
             seeker_floor_seconds=self.seeker_floor_seconds,
             flag_runner_floor_seconds=self.flag_runner_floor_seconds,
+            is_overtime=self.is_overtime,
+            flag_catched_team=self.flag_catched_team,
+            flag_catch_continue_timer=self.flag_catch_continue_timer,
+            flag_catch_continue_timer_total=self.flag_catch_continue_timer_total
         )
 
     def __copy__(self) -> 'GameState':
@@ -193,7 +205,8 @@ class GameState:
         # _GAME_STATE_DYNAMIC_FIELD_NAMES, _serialize_game_state_dynamic_payload() and
         # _apply_dynamic_snapshot_to_state(), and invalidates already written state logs.
         return {
-            "is_game_active": self.is_game_active,
+            "is_game_live": self.is_game_live,
+            "is_game_over": self.is_game_over,
             # "boundaries_x": self.boundaries_x,
             # "boundaries_y": self.boundaries_y,
             # "keeper_zone_x_0": self.keeper_zone_x_0,
@@ -217,11 +230,16 @@ class GameState:
             # so inserting anywhere else would misalign already written state logs.
             "flag_runner": self.flag_runner,
             "flag_runner_on_pitch": self.flag_runner_on_pitch,
+            "is_overtime": self.is_overtime,
+            "flag_catched_team": self.flag_catched_team,
+            "flag_catch_continue_timer": self.flag_catch_continue_timer
         }
 
     def serialize_to_broadcast(self) -> dict:
         """Convert entire game state to JSON-serializable dict."""
         return {
+            "is_game_live": self.is_game_live,
+            "is_game_over": self.is_game_over,
             "players": {pid: p.serialize() for pid, p in self.players.items()},
             "balls": {bid: b.serialize() for bid, b in self.balls.items()},
             "hoops": {hid: h.serialize() for hid, h in self.hoops.items()},
@@ -230,6 +248,11 @@ class GameState:
             "game_time": self.game_time,
             "flag_runner_on_pitch": self.flag_runner_on_pitch,
             "seeker_on_pitch": self.seeker_on_pitch,
-            # "set_score": self.set_score,
+            "set_score": self.set_score,
+            "is_overtime": self.is_overtime,
+            "flag_catched_team": self.flag_catched_team,
+            "flag_catch_continue_timer": self.flag_catch_continue_timer,
+            # Static, but the client needs it to know where half of the pause is.
+            "flag_catch_continue_timer_total": self.flag_catch_continue_timer_total
             # "game_phase": self.game_phase
         }

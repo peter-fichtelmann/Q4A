@@ -54,8 +54,8 @@ class Config:
     BEAT_ATTEMPT_TIME_LIMIT = 6 # game seconds ball has time to beat player before potential third dodgeball interference
     
     VOLLEYBALL_RUNNER_STARTING_Y = 8.25
-    SEEKER_FLOOR_REAL_SECONDS = 0.4 * 60  # 20 minutes before seeker can enter
-    FLAG_RUNNER_FLOOR_REAL_SECONDS = 0.3 * 60  # 19 minutes before flag runner can enter
+    SEEKER_FLOOR_SECONDS = 20 * 60  # 20 minutes before seeker can enter
+    FLAG_RUNNER_FLOOR_SECONDS = 19 * 60  # 19 minutes before flag runner can enter
     FLAG_RUNNER_RADIUS = PLAYER_RADIUS
     FLAG_RUNNER_MAX_SPEED_REAL = 2.5  # m/s per real second
     FLAG_RUNNER_MAX_SPEED = FLAG_RUNNER_MAX_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
@@ -69,7 +69,9 @@ class Config:
     FLAG_RUNNER_BOUNDARY_AVOIDANCE_FACTOR = 5.0  # how strongly the flag runner avoids pitch boundaries
     FLAG_RUNNER_BOUNDARY_EPSILON = 1e-5  # prevents division by zero in boundary avoidance
     FLAG_RUNNER_INTERACTION_TIME_THRESHOLD = 2.0  # time in game time seconds that a seeker must be in contact with the flag runner to "catch" it
-    FLAG_RUNNER_CATCH_PROBABILITY = 1 / 1000 # probability that a seeker will catch the flag runner if they are in contact for the interaction time threshold (catch_attempt)
+    FLAG_RUNNER_CATCH_PROBABILITY = 1 / 20 # probability that a seeker will catch the flag runner if they are in contact for the interaction time threshold (catch_attempt)
+    FLAG_CATCH_CONTINUE_TIMER_REAL_SECONDS = 12.0  # time in real seconds to continue the flag catch after a seeker has caught the flag runner. We want to have some time to show an information message
+    FLAG_CATCH_CONTINUE_TIMER = FLAG_CATCH_CONTINUE_TIMER_REAL_SECONDS * GAME_TIME_TO_REAL_TIME_RATIO
     # Tutorial only, restored when the next scenario starts. The elastic collision
     # pushes seeker and runner apart on contact, so holding the live 2 s of unbroken
     # contact is rare: a seeker chasing head-on earns a roll only every ~9 s, which

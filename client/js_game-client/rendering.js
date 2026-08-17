@@ -1,6 +1,7 @@
 import { Config } from './config.js';
 import { State } from './state.js';
 import { updateViewport } from './viewport.js';
+import { updateMatchPopups, teamScoreText } from './match_popups.js';
 
 function cloneGameStateForRendering(gameState) {
   if (!gameState) return null;
@@ -39,7 +40,9 @@ function buildRenderableState() {
   const baseState = State.gameState;
   if (!baseState) return null;
   const renderState = cloneGameStateForRendering(baseState);
-  const deltaSeconds = getPredictionDeltaSeconds();
+  // Nothing moves while the server holds the match on a flag catch, so predicting
+  // ahead there would only drift entities away from where they stopped.
+  const deltaSeconds = baseState.is_game_live === false ? 0 : getPredictionDeltaSeconds();
   if (deltaSeconds > 0) {
     extrapolateEntities(renderState.players, deltaSeconds);
     extrapolateEntities(renderState.balls, deltaSeconds);
@@ -366,7 +369,9 @@ export function renderGame() {
     }
   }
 
-  if (gs.score) { document.getElementById('score0').textContent = gs.score[0] || 0; document.getElementById('score1').textContent = gs.score[1] || 0; }
+  // The catching team's score keeps a star after it, here and in the popups.
+  if (gs.score) { document.getElementById('score0').textContent = teamScoreText(gs, 0); document.getElementById('score1').textContent = teamScoreText(gs, 1); }
+  updateMatchPopups(gs);
   if (gs.game_time !== undefined) {
     const total = Math.floor(gs.game_time); const m = Math.floor(total / 60); const s = total % 60; document.getElementById('gameTime').textContent = `${m}:${s.toString().padStart(2, '0')}`;
   }

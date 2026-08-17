@@ -114,7 +114,7 @@ class GameLogic:
         Args:
             dt: Delta game time in seconds since last frame
         """
-        if self.state.is_game_active:
+        if self.state.is_game_live:
             # Update game time
             self.state.update_game_time(dt)
             self.flag_runner_logic.update_flag_runner_direction(dt)
@@ -153,6 +153,8 @@ class GameLogic:
             
             # Check pitch boundaries
             self.boundary_logic._enforce_pitch_boundaries() # at least after free ways and position updates
+        else:
+            self.flag_runner_logic.continue_after_flag_catch(dt)
 
     def copy(self, log_level = None) -> 'GameLogic':
         """Return a new GameLogic instance with a copied GameState.

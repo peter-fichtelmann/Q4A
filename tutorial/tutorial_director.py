@@ -169,13 +169,20 @@ class TutorialDirector:
     def _reset_match_end_state(self):
         """Undo the match-ending side effects of a flag catch.
 
-        `FlagRunnerLogic.resolve_catch` ends the match (`is_game_active = False`,
+        `FlagRunnerLogic.resolve_flag_catch` ends the match (`is_game_live = False`,
         which stops `GameLogic.update` entirely) or opens overtime. The tutorial is
         not a real match and has to keep ticking afterwards.
+
+        `flag_catched_team` is cleared too: it is what puts the catch-review popup
+        on the client and the star on the score, neither of which belongs in the
+        tutorial once the demo has been passed.
         """
-        self.state.is_game_active = True
+        self.state.is_game_live = True
+        self.state.is_game_over = False
         self.state.is_overtime = False
         self.state.set_score = None
+        self.state.flag_catched_team = None
+        self.state.flag_catch_continue_timer = self.state.flag_catch_continue_timer_total
 
     def _restore_flag_runner_tuning(self):
         """Put the live catch odds back after the catch demo eased them."""

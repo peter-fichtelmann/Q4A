@@ -161,6 +161,12 @@ export function handleMessage(message) {
       if (incoming.score !== undefined) State.gameState.score = incoming.score;
       if (incoming.delay_bin !== undefined) State.gameState.delay_bin = incoming.delay_bin;
       if (incoming.possession_code !== undefined) State.gameState.possession_code = incoming.possession_code;
+      if (incoming.is_game_live !== undefined) State.gameState.is_game_live = incoming.is_game_live;
+      if (incoming.is_game_over !== undefined) State.gameState.is_game_over = incoming.is_game_over;
+      if (incoming.is_overtime !== undefined) State.gameState.is_overtime = incoming.is_overtime;
+      if (incoming.flag_catched_team !== undefined) State.gameState.flag_catched_team = incoming.flag_catched_team;
+      if (incoming.flag_catch_continue_timer !== undefined) State.gameState.flag_catch_continue_timer = incoming.flag_catch_continue_timer;
+      if (incoming.set_score !== undefined) State.gameState.set_score = incoming.set_score;
     }
     // Which player we steer is sent as an index into playersOrder on every update
     // (255 = none), so a switch needs no extra message and cannot get out of sync.
@@ -220,7 +226,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version < 1 || version > 5) { console.warn('Unknown binary state version', version); return null; }
+    if (version < 1 || version > 6) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -290,12 +296,37 @@ export function parseBinaryState(arrayBuffer) {
         velocity: { x: halfToFloat(frvxh), y: halfToFloat(frvyh) },
       };
     }
+    // Flag catch block: drives the catch-review popup, the game over box and the
+    // star the catching team's score carries from then on.
+    let is_game_live = true;
+    let is_game_over = false;
+    let is_overtime = false;
+    let flag_catched_team = null;
+    let flag_catch_continue_timer = 0;
+    let set_score = null;
+    if (version >= 6) {
+      const matchFlags = dv.getUint8(off, true); off += 1;
+      is_game_live = !!(matchFlags & 1);
+      is_game_over = !!(matchFlags & 2);
+      is_overtime = !!(matchFlags & 4);
+      const catchedTeamCode = dv.getUint8(off, true); off += 1;
+      if (catchedTeamCode === 1) flag_catched_team = 0;
+      else if (catchedTeamCode === 2) flag_catched_team = 1;
+      flag_catch_continue_timer = halfToFloat(dv.getUint16(off, true)); off += 2;
+      const setScoreByte = dv.getUint8(off, true); off += 1;
+      if (setScoreByte !== 255) set_score = setScoreByte;
+    }
     // Trailing per-client byte: index of the player this client controls (255 = none).
     let controlled_index;
     if (version >= 5 && off < dv.byteLength) {
       controlled_index = dv.getUint8(off, true); off += 1;
     }
-    return { players, balls, game_time: gameTime, score, delay_bin, possession_code, flag_runner, flag_runner_on_pitch, seeker_on_pitch, controlled_index };
+    return {
+      players, balls, game_time: gameTime, score, delay_bin, possession_code,
+      flag_runner, flag_runner_on_pitch, seeker_on_pitch,
+      is_game_live, is_game_over, is_overtime, flag_catched_team,
+      flag_catch_continue_timer, set_score, controlled_index,
+    };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }
 

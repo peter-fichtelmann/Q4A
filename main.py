@@ -90,8 +90,8 @@ class GameRoom:
         self.game_state.keeper_zone_x_0 = Config.KEEPER_ZONE_X
         self.game_state.keeper_zone_x_1 = Config.PITCH_LENGTH - Config.KEEPER_ZONE_X
         self.game_state.midline_x = Config.PITCH_LENGTH / 2
-        self.game_state.seeker_floor_seconds = Config.SEEKER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO
-        self.game_state.flag_runner_floor_seconds = Config.FLAG_RUNNER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO
+        self.game_state.seeker_floor_seconds = Config.SEEKER_FLOOR_SECONDS
+        self.game_state.flag_runner_floor_seconds = Config.FLAG_RUNNER_FLOOR_SECONDS
         self.game_state.min_squared_distance_player_player_calculation = Config.MIN_SQUARED_DISTANCE_PLAYER_PLAYER_CALCULATION
         self.game_state.delay_of_game_time_limit = Config.DELAY_OF_GAME_TIME_LIMIT
         self.game_state.delay_of_game_velocity_x_threshold = Config.DELAY_OF_GAME_VELOCITY_X_THRESHOLD
@@ -99,6 +99,8 @@ class GameRoom:
         self.game_state.no_delay_of_game_opponent_chaser_squared_distance_threshold = Config.NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD
         self.game_state.no_delay_of_game_opponent_beater_squared_distance_threshold = Config.NO_DELAY_OF_GAME_OPPONENT_BEATER_SQUARED_DISTANCE_THRESHOLD
         self.game_state.beat_attempt_time_limit = Config.BEAT_ATTEMPT_TIME_LIMIT
+        self.game_state.flag_catch_continue_timer = Config.FLAG_CATCH_CONTINUE_TIMER
+        self.game_state.flag_catch_continue_timer_total = Config.FLAG_CATCH_CONTINUE_TIMER
         self.game_logic = GameLogic(self.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
         self.client_connections: Dict[str, WebSocket] = {}
         self.player_to_client: Dict[str, str] = {}
@@ -1112,7 +1114,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         """Build a compact binary representation of dynamic entities.
 
         Format (little-endian):
-        - uint8: version (5)
+        - uint8: version (6)
         - uint8: player_count
         - uint8: ball_count
         - float16: game_time
@@ -1125,6 +1127,11 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         - uint8 flag seeker phase flags
             flags bit0 = flag_runner_on_pitch, bit1 = seeker_on_pitch
         - float16 flag runner x, y, vx, vy (zeros when there is no flag runner)
+        - uint8 match flags
+            flags bit0 = is_game_live, bit1 = is_game_over, bit2 = is_overtime
+        - uint8 flag_catched_team (0=None, 1=team_0, 2=team_1)
+        - float16 flag_catch_continue_timer (game seconds left of the catch pause)
+        - uint8 set_score (255 = None)
 
         The caller appends one more uint8 per client: the index of the player that
         client controls (255 = none). That trailing byte is the only per-client part
@@ -1141,8 +1148,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header (version 5 adds the trailing per-client controlled-player index)
-        buf += struct.pack('<B', 5)
+        # header (version 6 adds the flag-catch block after the flag runner)
+        buf += struct.pack('<B', 6)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -1245,6 +1252,27 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             )
         else:
             buf += struct.pack('<eeee', 0.0, 0.0, 0.0, 0.0)
+
+        # flag catch: everything the client needs to render the catch-review popup,
+        # the game over box and the star on the catching team's score.
+        match_flags = (
+            (1 if getattr(gs, 'is_game_live', True) else 0)
+            | ((1 if getattr(gs, 'is_game_over', False) else 0) << 1)
+            | ((1 if getattr(gs, 'is_overtime', False) else 0) << 2)
+        )
+        buf += struct.pack('<B', match_flags)
+        flag_catched_team = getattr(gs, 'flag_catched_team', None)
+        if flag_catched_team == 0:
+            catched_team_code = 1
+        elif flag_catched_team == 1:
+            catched_team_code = 2
+        else:
+            catched_team_code = 0
+        buf += struct.pack('<B', catched_team_code)
+        buf += struct.pack('<e', max(0.0, float(getattr(gs, 'flag_catch_continue_timer', 0.0) or 0.0)))
+        set_score = getattr(gs, 'set_score', None)
+        # 255 stands for "no set score yet"; a real set score is a losing score plus 3.
+        buf += struct.pack('<B', 255 if set_score is None else min(254, max(0, int(set_score))))
 
         return bytes(buf)
 

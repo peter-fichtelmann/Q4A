@@ -151,26 +151,64 @@ class FlagRunnerLogic:
                 # sample random number to determine if the seeker catches the flag runner
                 if random.random() < flag_runner.catch_probability:
                     self.logger.info(f'Seeker {seeker.id} successfully caught the flag runner after {seeker.flag_runner_interaction_time:.2f} seconds of contact.')
-                    self.resolve_catch(seeker, flag_runner)
+                    self.resolve_flag_catch(seeker)
                 seeker.flag_runner_interaction_time = 0.0
 
 
-    def resolve_catch(self, seeker: Player, flag_runner: FlagRunner) -> None:
+    def resolve_flag_catch(self, seeker: Player) -> None:
+        """
+        Resolve the flag catch after a seeker has caught the flag runner.
+
+        Freezes the match for `flag_catch_continue_timer_total` game seconds so
+        clients can show the catch-review message; `continue_after_flag_catch`
+        runs the countdown and decides what happens when it expires.
+        """
+        self.state.is_game_live = False
+        self.state.flag_catched_team = seeker.team
         self.state.flag_runner_on_pitch = False
         self.state.seeker_on_pitch = False
-        if seeker.team == self.state.team_0:
-            self.state.catched_team = self.state.team_0
+        # Restart the pause, so a catch in overtime gets its own full review time.
+        self.state.flag_catch_continue_timer = self.state.flag_catch_continue_timer_total
+        if self.state.flag_catched_team == self.state.team_0:
             self.state.score[0] += 3
-            if self.state.score[0] > self.state.score[1]:
-                self.state.is_game_active = False
-            else: # overtime
+            if self.state.score[0] <= self.state.score[1]:
+                # overtime
                 self.state.is_overtime = True
                 self.state.set_score = self.state.score[1] + 3
         else:
-            self.state.catched_team = self.state.team_1
             self.state.score[1] += 3
-            if self.state.score[1] > self.state.score[0]:
-                self.state.is_game_active = False
-            else: # overtime
+            if self.state.score[1] <= self.state.score[0]:
+                # overtime
                 self.state.is_overtime = True
                 self.state.set_score = self.state.score[0] + 3
+
+    def continue_after_flag_catch(self, dt: float) -> None:
+        """
+        Run the catch-resolution pause and decide how the match goes on.
+
+        Clients render their catch message from `flag_catch_continue_timer`, so it
+        is clamped at 0 instead of running negative.
+
+        Args:
+            dt: Delta game time (game time since last frame) in seconds
+        """
+        if self.state.flag_catched_team is None:
+            return
+        if self.state.is_game_over:
+            # The match is over for good. Without this, an overtime goal that
+            # later sets is_game_over/is_game_live=False (GameState.update_score)
+            # would hit the `is_overtime` branch below on the very next tick and
+            # flip is_game_live back to True, since flag_catched_team and the
+            # already-elapsed pause timer still look exactly like they did right
+            # after the original catch.
+            return
+        if self.state.flag_catch_continue_timer > 0:
+            self.state.flag_catch_continue_timer = max(0.0, self.state.flag_catch_continue_timer - dt)
+            return
+        if self.state.is_overtime:
+            # continue the game
+            self.state.is_game_live = True
+        else:
+            # end the game
+            self.state.is_game_over = True
+    
