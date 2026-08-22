@@ -110,11 +110,12 @@ class Config:
             'score_squared_max_distance': 8**2, # for DiamondAttack, maximum  squared distance from volleyball to consider scoring
             'scoring_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a score
             'chaser_evade_beater_weight': 3.5,
-            'chaser_evade_chaser_keeper_weight': 1,
+            'chaser_evade_chaser_keeper_weight': 1.0,
             'chaser_evade_teamate_chaser_keeper_weight': 1.5,
+            'volleyball_holder_evade_own_hoop_weight': (2.0, 3.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
             'unloaded_beater_evade_loaded_opponent_beater_weight': -20, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
             'loaded_beater_evade_loaded_opponent_beater_weight': -15,
-            'loaded_beater_evade_unloaded_opponent_beater_weight': 4,
+            'loaded_beater_evade_unloaded_opponent_beater_weight': 4.0,
             'positioning_boundary_buffer_distance': 3, # for DiamondAttack, distance from boundary at which to start evading boundary
             'passing_evade_vector_position_penalty_weight': 100,
             'passing_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a pass

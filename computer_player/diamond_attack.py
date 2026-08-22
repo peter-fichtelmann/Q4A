@@ -1,7 +1,7 @@
 import itertools
 import logging
 import math
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
@@ -43,6 +43,7 @@ class DiamondAttack:
                 chaser_evade_beater_weight: float = 4,
                 chaser_evade_chaser_keeper_weight: float = 2,
                 chaser_evade_teamate_chaser_keeper_weight: float = 1,
+                volleyball_holder_evade_own_hoop_weight: float|Tuple[float, float] = (1, 2),
                 unloaded_beater_evade_loaded_opponent_beater_weight: float = -3, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
                 loaded_beater_evade_loaded_opponent_beater_weight: float = -2,
                 loaded_beater_evade_unloaded_opponent_beater_weight: float = 2,
@@ -67,6 +68,7 @@ class DiamondAttack:
         self.chaser_evade_beater_weight = chaser_evade_beater_weight
         self.chaser_evade_chaser_keeper_weight = chaser_evade_chaser_keeper_weight
         self.chaser_evade_teamate_chaser_keeper_weight = chaser_evade_teamate_chaser_keeper_weight
+        self.volleyball_holder_evade_own_hoop_weight = volleyball_holder_evade_own_hoop_weight
         self.unloaded_beater_evade_loaded_opponent_beater_weight = unloaded_beater_evade_loaded_opponent_beater_weight
         self.loaded_beater_evade_loaded_opponent_beater_weight = loaded_beater_evade_loaded_opponent_beater_weight
         self.loaded_beater_evade_unloaded_opponent_beater_weight = loaded_beater_evade_unloaded_opponent_beater_weight
@@ -174,8 +176,16 @@ class DiamondAttack:
             return True
         return False
     
-    def player_positioning(self, player: Player, total_evade_vector: Vector2, move_vector: Optional[Vector2] = None):
-        """Blend formation movement with evade vectors and boundary protection."""
+    def chaser_keeper_positioning(self, player: Player, total_evade_vector: Vector2, move_vector: Optional[Vector2] = None):
+        """
+        Blend formation movement with evade vectors and boundary protection.
+        
+        The following evade vectors are considered:
+            - opponent loaded beaters
+            - opponent chasers/keeper
+            - own chasers/keeper (to keep distance and form square)
+            - own hoops when carrying the volleyball (to avoid running through own hoops)
+        """
         if move_vector is None:
             move_vector = Vector2(
                 1 - 2 * self.attack_team, # 1 for team 0 attacking, -1 for team 1 attacking
@@ -186,6 +196,12 @@ class DiamondAttack:
             # self.logger.debug("Evade vector for player %s from opponent: %s", player.id, evade_vector)
         move_vector.x += total_evade_vector.x
         move_vector.y += total_evade_vector.y
+        if player.has_ball:
+            own_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team == self.attack_team]
+            for hoop in own_hoops:
+                evade_vector = MoveUtility.evade(player.position, hoop.position, weight=self.volleyball_holder_evade_own_hoop_weight)
+                move_vector.x += evade_vector.x
+                move_vector.y += evade_vector.y
         move_vector = MoveUtility.adjust_move_vector_to_avoid_boundary(
             player.position,
             move_vector,
@@ -246,7 +262,7 @@ class DiamondAttack:
         return move_vectors_dict
     
     def evade_vectors_chaser_keeper_calculation(self) -> Dict[str, Vector2]:
-        """Aggregate evade vectors for attacking chasers/keeper versus nearby players."""
+        """ Aggregate evade vectors for attacking chasers/keeper versus nearby players."""
         evade_vectors_dict = {}
         for player_id in self.attacking_chaser_keeper_ids:
             player = self.logic.state.players[player_id]
@@ -421,7 +437,7 @@ class DiamondAttack:
             )]
         # if volleyball.holder_id is not None:
         #     self.get_intercepting_scores_for_hoops(dt, volleyball, self.logic.state.players[volleyball.holder_id])
-        move_vector__chaser_dict = self.move_chaser_keeper_hoops(not_knocked_out_chaser_keeper)
+        move_vector_chaser_dict = self.move_chaser_keeper_hoops(not_knocked_out_chaser_keeper)
         evade_vectors_chaser_dict = self.evade_vectors_chaser_keeper_calculation()
         # for debugging
         # if volleyball.holder_id is not None and volleyball.holder_id not in self.attack_cpu_player_ids:
@@ -432,7 +448,7 @@ class DiamondAttack:
                 self.move_to_volleyball(volleyball, next_volleyball_holder_id, intercepting_position)
             else: # already hold of volleyball
                 volleyball_holder = self.logic.state.players[volleyball.holder_id]
-                self.player_positioning(volleyball_holder, evade_vectors_chaser_dict.get(volleyball_holder.id, Vector2(0, 0)), move_vector__chaser_dict.get(volleyball_holder.id, None)) # position volleyball holder to evade opponents while holding the ball
+                self.chaser_keeper_positioning(volleyball_holder, evade_vectors_chaser_dict.get(volleyball_holder.id, Vector2(0, 0)), move_vector_chaser_dict.get(volleyball_holder.id, None)) # position volleyball holder to evade opponents while holding the ball
                 tries_to_score = self.score_attempt(dt, volleyball, volleyball_holder)
                 if not tries_to_score:
                     self.player_passing(volleyball=volleyball, volleyball_holder=volleyball_holder, evade_vectors_dict=evade_vectors_chaser_dict)
@@ -449,7 +465,7 @@ class DiamondAttack:
                 if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]:
                     # not if knocked out, inbounding, or if keeper and volleyball is dead and in their possession (since in that case they should be trying to get the ball back to life instead of positioning for attack)
                     if not player.is_knocked_out and not player.inbounding and not (player.role == PlayerRole.KEEPER and volleyball.is_dead and volleyball.possession_team == player.team):
-                        self.player_positioning(player, evade_vectors_chaser_dict.get(player.id, Vector2(0, 0)), move_vector__chaser_dict.get(player.id, None))
+                        self.chaser_keeper_positioning(player, evade_vectors_chaser_dict.get(player.id, Vector2(0, 0)), move_vector_chaser_dict.get(player.id, None))
                 elif player.role == PlayerRole.BEATER and player.id not in assigned_beater_ids:
                     self.beater_move_action(player, volleyball)
                     self.beater_throw_action(player, volleyball)

@@ -1,4 +1,5 @@
 import math
+from typing import Tuple
 from core.entities import Player, Vector2
 from core.game_logic.utility_logic import UtilityLogic
 
@@ -7,7 +8,7 @@ class MoveUtility:
     """Helper functions for movement and boundary-safe steering."""
 
     @staticmethod
-    def evade(player_position: Vector2, entity_to_evade_position: Vector2, weight: float = 1.0) -> Vector2:
+    def evade(player_position: Vector2, entity_to_evade_position: Vector2, weight: float|Tuple[float, float] = 1.0) -> Vector2:
         """Return an inverse-distance weighted vector away from another entity."""
         player_to_entity_vector = Vector2(
             entity_to_evade_position.x - player_position.x,
@@ -16,9 +17,14 @@ class MoveUtility:
         squared_mag_player_to_entity_vector = UtilityLogic._squared_sum(player_to_entity_vector.x, player_to_entity_vector.y)
         if squared_mag_player_to_entity_vector == 0:
             return Vector2(0, 0)
+        if isinstance(weight, Tuple):
+            weight_x, weight_y = weight
+        else:
+            weight_x = weight
+            weight_y = weight
         evade_vector = Vector2(
-            -player_to_entity_vector.x * weight / squared_mag_player_to_entity_vector, # norm to one and then divide by distance to entity to get stronger evasion when closer
-            -player_to_entity_vector.y * weight / squared_mag_player_to_entity_vector
+            -player_to_entity_vector.x * weight_x / squared_mag_player_to_entity_vector, # norm to one and then divide by distance to entity to get stronger evasion when closer
+            -player_to_entity_vector.y * weight_y / squared_mag_player_to_entity_vector
         )
         return evade_vector
 
