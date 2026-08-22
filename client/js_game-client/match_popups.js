@@ -7,15 +7,16 @@
 // out of the state and stages the message off it:
 //
 //   full .. half   "was it a good catch?"
-//   half .. zero   the verdict, then either the overtime note (fading out as play
-//                  is about to resume) or the final score
+//   half .. zero   the verdict, then either a real-seconds "get ready" countdown to
+//                  the overtime resume, or the final score
 //   zero           `is_game_over` puts the game over box up instead
 //
 // Built in JS with inline styles like the rest of the game-page chrome (fullscreen,
-// player switch, mute buttons). The match state arrives as an argument, so the only
-// imports are for the game over box's return-to-lobby button; neither module reaches
-// back here, so there is no cycle.
+// player switch, mute buttons). The match state arrives as an argument; the only
+// imports are Config (to convert the overtime countdown to real seconds) and network.js's
+// returnToLobby for the game over box's button — neither reaches back here, so no cycle.
 
+import { Config } from './config.js';
 import { returnToLobby } from './network.js';
 import { onActivate } from './utils.js';
 
@@ -42,6 +43,12 @@ const LOBBY_BUTTON_STYLE = 'margin-top: 16px; pointer-events: auto; cursor: poin
   + 'border: 1px solid rgba(20,24,31,0.35); border-radius: 8px; '
   + 'transition: all 0.2s ease; user-select: none; touch-action: manipulation;';
 
+// The "get ready" block ahead of the overtime resume: a small label over a large,
+// bold number so it reads at a glance while players reposition.
+const COUNTDOWN_LABEL_STYLE = 'margin-top: 14px; font-size: 14px; letter-spacing: 1px; '
+  + 'text-transform: uppercase; opacity: 0.75;';
+const COUNTDOWN_NUMBER_STYLE = 'font-size: 64px; font-weight: 800; line-height: 1.1;';
+
 function lobbyButton() {
   const button = document.createElement('button');
   button.id = 'returnToLobbyButton';
@@ -54,8 +61,8 @@ function lobbyButton() {
 }
 
 // The text sits in its own child so `setLines` can rebuild it without taking the
-// return-to-lobby button (a sibling) with it.
-function ensureBox(existing, id, withLobbyButton = false) {
+// return-to-lobby button or the countdown (siblings) with it.
+function ensureBox(existing, id, { withLobbyButton = false, withCountdown = false } = {}) {
   if (existing) return existing;
   const box = document.createElement('div');
   box.id = id;
@@ -64,6 +71,19 @@ function ensureBox(existing, id, withLobbyButton = false) {
   const lines = document.createElement('div');
   lines.className = 'popup-lines';
   box.appendChild(lines);
+  if (withCountdown) {
+    const label = document.createElement('div');
+    label.className = 'popup-countdown-label';
+    label.textContent = 'Get ready!';
+    label.style.cssText = COUNTDOWN_LABEL_STYLE;
+    label.hidden = true;
+    const number = document.createElement('div');
+    number.className = 'popup-countdown-number';
+    number.style.cssText = COUNTDOWN_NUMBER_STYLE;
+    number.hidden = true;
+    box.appendChild(label);
+    box.appendChild(number);
+  }
   if (withLobbyButton) box.appendChild(lobbyButton());
   document.body.appendChild(box);
   return box;
@@ -98,8 +118,8 @@ function scoreLine(gameState) {
 
 /** Stage both boxes for the current state. Safe to call on every frame. */
 export function updateMatchPopups(gameState) {
-  reviewBox = ensureBox(reviewBox, 'flagCatchReviewBox');
-  gameOverBox = ensureBox(gameOverBox, 'gameOverBox', true);
+  reviewBox = ensureBox(reviewBox, 'flagCatchReviewBox', { withCountdown: true });
+  gameOverBox = ensureBox(gameOverBox, 'gameOverBox', { withLobbyButton: true });
   if (!gameState) return;
 
   const caughtTeam = gameState.flag_catched_team;
@@ -127,7 +147,9 @@ export function updateMatchPopups(gameState) {
   const half = total / 2;
 
   const lines = [`The flag was caught by ${TEAM_LABELS[caughtTeam]}, but was it a good catch?`];
-  let opacity = 1;
+  // Real seconds left until play resumes, so it counts down one whole number per
+  // real second regardless of how fast the game clock itself runs.
+  let countdownSeconds = null;
   if (total > 0 && remaining <= half) {
     lines.push('The catch is good!');
     if (gameState.is_overtime) {
@@ -135,14 +157,21 @@ export function updateMatchPopups(gameState) {
         ? '-' : gameState.set_score;
       lines.push(`Continuing to overtime. Set score is ${setScore}. `
         + `Current score is ${scoreLine(gameState)}.`);
-      // Fade across the second half, so the box is gone exactly as play resumes.
-      opacity = half > 0 ? Math.max(0, Math.min(1, remaining / half)) : 0;
+      const ratio = Number(Config.GAME_TIME_TO_REAL_TIME_RATIO) || 1;
+      countdownSeconds = Math.max(1, Math.ceil(remaining / ratio));
     } else {
       lines.push(`Game over! The final score is ${scoreLine(gameState)}.`);
     }
   }
 
   setLines(reviewBox, lines);
-  reviewBox.style.opacity = String(opacity);
+  const countdownLabel = reviewBox.querySelector('.popup-countdown-label');
+  const countdownNumber = reviewBox.querySelector('.popup-countdown-number');
+  if (countdownLabel && countdownNumber) {
+    const showCountdown = countdownSeconds !== null;
+    countdownLabel.hidden = !showCountdown;
+    countdownNumber.hidden = !showCountdown;
+    if (showCountdown) countdownNumber.textContent = String(countdownSeconds);
+  }
   reviewBox.hidden = false;
 }

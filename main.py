@@ -966,6 +966,9 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 "volleyball_radius": Config.VOLLEYBALL_RADIUS,
                 "dodgeball_radius": Config.DODGEBALL_RADIUS,
                 "flag_runner_radius": Config.FLAG_RUNNER_RADIUS,
+                # lets the client turn game-time timers (e.g. flag_catch_continue_timer)
+                # into real seconds for on-screen countdowns
+                "game_time_to_real_time_ratio": Config.GAME_TIME_TO_REAL_TIME_RATIO,
             }
         })
 

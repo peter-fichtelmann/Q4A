@@ -10,6 +10,9 @@ export const Config = {
   VOLLEYBALL_RADIUS: 0.1,
   DODGEBALL_RADIUS: 0.1,
   FLAG_RUNNER_RADIUS: 0.4,
+  // Overwritten from the server's initial_state config payload; this default matches
+  // config.py's GAME_TIME_TO_REAL_TIME_RATIO in case a client ever renders before it arrives.
+  GAME_TIME_TO_REAL_TIME_RATIO: 3,
   // PLAYER_MAX_SPEED: 3,
   // PLAYER_MIN_DIR: 0.2,
 };

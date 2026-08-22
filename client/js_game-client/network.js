@@ -100,6 +100,7 @@ export function handleMessage(message) {
       if (cfg.volleyball_radius !== undefined) Config.VOLLEYBALL_RADIUS = cfg.volleyball_radius;
       if (cfg.dodgeball_radius !== undefined) Config.DODGEBALL_RADIUS = cfg.dodgeball_radius;
       if (cfg.flag_runner_radius !== undefined) Config.FLAG_RUNNER_RADIUS = cfg.flag_runner_radius;
+      if (cfg.game_time_to_real_time_ratio !== undefined) Config.GAME_TIME_TO_REAL_TIME_RATIO = cfg.game_time_to_real_time_ratio;
     }
     if (message.controlled_player_id) State.localPlayerId = message.controlled_player_id;
     rememberServerUpdateTime();
