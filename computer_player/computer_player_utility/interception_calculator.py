@@ -1,7 +1,7 @@
 import math
 from typing import Dict, Optional, List, Tuple
 
-from core.entities import Vector2
+from core.entities import Hoop, Vector2
 from core.game_logic.utility_logic import UtilityLogic
 from core.game_logic.game_logic import GameLogic
 
@@ -193,6 +193,7 @@ class InterceptionCalculator:
         # self.logger.debug(f"Lowest interception time is {lowest_interception_dt} by player {lowest_interception_dt_player_id} at position ({interception_position.x}, {interception_position.y})")
         return lowest_interception_dt, lowest_interception_dt_player_id, interception_info_dict
 
+
     @staticmethod
     def get_interception_time(
         player_position_x: float,
@@ -257,3 +258,46 @@ class InterceptionCalculator:
         return dt
         # print('v_b_x', v_b_x)
         # print('v_b_y', v_b_y)
+
+    @staticmethod
+    def intercepting_hoop_before_target(moving_entity: object, target_position: Vector2, hoops: List[Hoop]) -> bool:
+        """
+        Check if any of the moving entity's trajectory intersects with the hoops before reaching the target.
+
+        Assumes the moving entity moves in a straight line from its current position to the target position with a constant velocity.
+
+        Assume the hoops have their radius on the x-axis.
+
+        Follows the following steps:
+        1. Calculate the trajectory vector from the moving entity's current position to the target position.
+        2. For each hoop, check if the moving entity and the target are on opposite sides of the hoop's x-coordinate. If they are not, skip to the next hoop.
+        3. Calculate the y-coordinate where the trajectory intersects the hoop's x-coordinate.
+        4. Check if this y-coordinate is within the hoop's y-range (i.e., between the hoop's y-position minus its radius and the hoop's y-position plus its radius).
+        5. If any hoop is intersected before reaching the target, return True. If no hoops are intersected, return False.
+
+        Returns True if any hoop is intersected before reaching the target, False otherwise.
+        """
+        trajectory_vector = Vector2(
+            target_position.x - moving_entity.position.x,
+            target_position.y - moving_entity.position.y
+        )
+        if trajectory_vector.x == 0:
+            return False  # Avoid division by zero; vertical trajectory won't intersect hoops in this context
+        # check if moving_entity and target on opposite sides of the hoop x-line
+        position_check = False
+        for hoop in hoops:
+            if (
+                (moving_entity.position.x < hoop.position.x) and (target_position.x > hoop.position.x)
+             ) or (
+                (moving_entity.position.x > hoop.position.x) and (target_position.x < hoop.position.x)
+                ):
+                position_check = True
+        if not position_check:
+            return False
+        # calculate the crossing y coordinate for each hoop and check if it is within the hoop's y-range
+        for hoop in hoops:
+            line_parameter = (hoop.position.x - moving_entity.position.x) / trajectory_vector.x
+            crossing_y = moving_entity.position.y + trajectory_vector.y * line_parameter
+            if (crossing_y >= hoop.position.y - hoop.radius) and (crossing_y <= hoop.position.y + hoop.radius):
+                return True
+        return False

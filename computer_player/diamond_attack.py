@@ -274,11 +274,15 @@ class DiamondAttack:
                        evade_vectors_dict: Dict[str, Vector2],
                        ):
         """
-        Calculate position penalty for each teammate chaser/keeper based on:
+         For each teammate chaser/keeper, which is:
+            - not knocked out
+            - within passing distance of the volleyball
+         
+         calculate position penalty  based on:
             - their squared distance to the closest attack hoop (the closer the better, since they can receive the ball and have a better chance to score or draw opponents when closer to the hoops)
             - their total_evade_vector magnitude (the higher the more pressure on that player, so the less likely we want to pass to them)
 
-        Sort teammates by lowest position penalty. If the lowest score is the volleyball_holder keep the ball. Otherwise, check with beam interception if passing to that teammate is an option.
+        Sort teammates by lowest position penalty. If the lowest score is the volleyball_holder keep the ball. Otherwise, check that the own hoops are not in between and check with beam interception if passing to that teammate is an option.
         """
         if volleyball.is_dead:
             return # don't pass if ball is dead, just try to get it back to life
@@ -301,17 +305,22 @@ class DiamondAttack:
         sorted_position_penalty = sorted(position_penalty_dict.items(), key=lambda x: x[1])
         
         # loop through sorted position penalty and pass to the first teammate that has a good enough interception score, if there is no such teammate then keep the ball
-        for player_id, position_penalty in sorted_position_penalty:
-            best_player_id, best_position_penalty = sorted_position_penalty[0]
+        for best_player_id, best_position_penalty in sorted_position_penalty:
+            # best_player_id, best_position_penalty = sorted_position_penalty[0] # why this line?
             if best_player_id == volleyball_holder.id:
                 self.logger.debug("Best player to pass to is current holder %s with position penalty %s, so keeping the ball", best_player_id, best_position_penalty)
                 return
             best_player = self.logic.state.players[best_player_id]
-            throw_direction = ThrowDirector.get_throw_direction_moving_receiver(volleyball_holder, best_player)
+            throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, best_player)
+            # check that the throw would not go through own hoops
+            own_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team == self.attack_team]
+            scoring_own_hoops = InterceptionCalculator.intercepting_hoop_before_target(volleyball, predicted_receiver_position, own_hoops)
+            if scoring_own_hoops:
+                continue # don't pass to this player if the throw would go through own hoops, look for next best player
             beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator_opponent.beam_cosine_angle(
                 moving_entity=volleyball,
                 intercepting_player_ids=self.defending_chaser_keeper_ids,
-                target_position=best_player.position, # approximate with current position instead of predicted position
+                target_position=predicted_receiver_position,
                 moving_entity_target_vector=throw_direction
             )
             interception_score = self.interception_calculator_opponent.interception_score_from_beam_cosine_angle(

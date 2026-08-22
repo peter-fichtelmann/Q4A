@@ -89,6 +89,21 @@ class ThrowDirector:
         )
 
     @staticmethod
+    def _prepare_linear_solve(player: Player, receiver: Player):
+        """Prepare variables for linear solve of throw direction to moving receiver."""
+        # assume ball starts at player position
+        s_b_x = player.position.x
+        s_b_y = player.position.y
+        s_p_x = receiver.position.x
+        s_p_y = receiver.position.y
+        v_p_x = receiver.velocity.x
+        v_p_y = receiver.velocity.y
+        v_b_value_sq = player.throw_velocity**2
+        root = math.sqrt(s_b_x**2*v_b_value_sq - s_b_x**2*v_p_y**2 + 2*s_b_x*s_b_y*v_p_x*v_p_y - 2*s_b_x*s_p_x*v_b_value_sq + 2*s_b_x*s_p_x*v_p_y**2 - 2*s_b_x*s_p_y*v_p_x*v_p_y + s_b_y**2*v_b_value_sq - s_b_y**2*v_p_x**2 - 2*s_b_y*s_p_x*v_p_x*v_p_y - 2*s_b_y*s_p_y*v_b_value_sq + 2*s_b_y*s_p_y*v_p_x**2 + s_p_x**2*v_b_value_sq - s_p_x**2*v_p_y**2 + 2*s_p_x*s_p_y*v_p_x*v_p_y + s_p_y**2*v_b_value_sq - s_p_y**2*v_p_x**2)
+
+        return s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root
+
+    @staticmethod
     def get_throw_direction_moving_receiver(player: Player, receiver: Player):
         """
         Assume constant ball velocity.
@@ -109,22 +124,23 @@ class ThrowDirector:
 
             solutions = sp.nonlinsolve([eq1, eq2, eq3], (v_b_x, v_b_y, dt))
         """
-        # assume ball starts at player position
-        s_b_x = player.position.x
-        s_b_y = player.position.y
-        s_p_x = receiver.position.x
-        s_p_y = receiver.position.y
-        v_p_x = receiver.velocity.x
-        v_p_y = receiver.velocity.y
-        v_b_value_sq = player.throw_velocity**2
-        # print('s_b_x', s_b_x)
-        # print('s_b_y', s_b_y)
-        # print('s_p_x', s_p_x)
-        # print('s_p_y', s_p_y)
-        # print('v_p_x', v_p_x)
-        # print('v_p_y', v_p_y)
-        # print('v_b_value_sq', v_b_value_sq)
-        root = math.sqrt(s_b_x**2*v_b_value_sq - s_b_x**2*v_p_y**2 + 2*s_b_x*s_b_y*v_p_x*v_p_y - 2*s_b_x*s_p_x*v_b_value_sq + 2*s_b_x*s_p_x*v_p_y**2 - 2*s_b_x*s_p_y*v_p_x*v_p_y + s_b_y**2*v_b_value_sq - s_b_y**2*v_p_x**2 - 2*s_b_y*s_p_x*v_p_x*v_p_y - 2*s_b_y*s_p_y*v_b_value_sq + 2*s_b_y*s_p_y*v_p_x**2 + s_p_x**2*v_b_value_sq - s_p_x**2*v_p_y**2 + 2*s_p_x*s_p_y*v_p_x*v_p_y + s_p_y**2*v_b_value_sq - s_p_y**2*v_p_x**2)
+        # # assume ball starts at player position
+        # s_b_x = player.position.x
+        # s_b_y = player.position.y
+        # s_p_x = receiver.position.x
+        # s_p_y = receiver.position.y
+        # v_p_x = receiver.velocity.x
+        # v_p_y = receiver.velocity.y
+        # v_b_value_sq = player.throw_velocity**2
+        # # print('s_b_x', s_b_x)
+        # # print('s_b_y', s_b_y)
+        # # print('s_p_x', s_p_x)
+        # # print('s_p_y', s_p_y)
+        # # print('v_p_x', v_p_x)
+        # # print('v_p_y', v_p_y)
+        # # print('v_b_value_sq', v_b_value_sq)
+        # root = math.sqrt(s_b_x**2*v_b_value_sq - s_b_x**2*v_p_y**2 + 2*s_b_x*s_b_y*v_p_x*v_p_y - 2*s_b_x*s_p_x*v_b_value_sq + 2*s_b_x*s_p_x*v_p_y**2 - 2*s_b_x*s_p_y*v_p_x*v_p_y + s_b_y**2*v_b_value_sq - s_b_y**2*v_p_x**2 - 2*s_b_y*s_p_x*v_p_x*v_p_y - 2*s_b_y*s_p_y*v_b_value_sq + 2*s_b_y*s_p_y*v_p_x**2 + s_p_x**2*v_b_value_sq - s_p_x**2*v_p_y**2 + 2*s_p_x*s_p_y*v_p_x*v_p_y + s_p_y**2*v_b_value_sq - s_p_y**2*v_p_x**2)
+        s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root = ThrowDirector._prepare_linear_solve(player, receiver)
         v_b_x = (-s_b_x*s_b_y*v_p_y + s_b_x*s_p_y*v_p_y - s_b_x*root + s_b_y**2*v_p_x + s_b_y*s_p_x*v_p_y - 2*s_b_y*s_p_y*v_p_x - s_p_x*s_p_y*v_p_y + s_p_x*root + s_p_y**2*v_p_x)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2) 
         v_b_y = (s_b_x**2*v_p_y - s_b_x*s_b_y*v_p_x - 2*s_b_x*s_p_x*v_p_y + s_b_x*s_p_y*v_p_x + s_b_y*s_p_x*v_p_x - s_b_y*root + s_p_x**2*v_p_y - s_p_x*s_p_y*v_p_x + s_p_y*root)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2)
         # dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)/(v_b_value_sq - v_p_x**2 - v_p_y**2) + root/(v_b_value_sq - v_p_x**2 - v_p_y**2)
@@ -132,3 +148,16 @@ class ThrowDirector:
         # print('v_b_y', v_b_y)
         # print('dt', dt)
         return Vector2(v_b_x, v_b_y)
+
+    @staticmethod
+    def get_throw_direction_and_position_moving_receiver(player: Player, receiver: Player):
+        """Return throw vector and predicted receiver position for moving receiver."""
+        s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root = ThrowDirector._prepare_linear_solve(player, receiver)
+        v_b_x = (-s_b_x*s_b_y*v_p_y + s_b_x*s_p_y*v_p_y - s_b_x*root + s_b_y**2*v_p_x + s_b_y*s_p_x*v_p_y - 2*s_b_y*s_p_y*v_p_x - s_p_x*s_p_y*v_p_y + s_p_x*root + s_p_y**2*v_p_x)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2) 
+        v_b_y = (s_b_x**2*v_p_y - s_b_x*s_b_y*v_p_x - 2*s_b_x*s_p_x*v_p_y + s_b_x*s_p_y*v_p_x + s_b_y*s_p_x*v_p_x - s_b_y*root + s_p_x**2*v_p_y - s_p_x*s_p_y*v_p_x + s_p_y*root)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2)
+        dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)/(v_b_value_sq - v_p_x**2 - v_p_y**2) + root/(v_b_value_sq - v_p_x**2 - v_p_y**2)
+        predicted_receiver_position = Vector2(
+            receiver.position.x + receiver.velocity.x * dt,
+            receiver.position.y + receiver.velocity.y * dt
+        )
+        return Vector2(v_b_x, v_b_y), predicted_receiver_position
