@@ -70,7 +70,7 @@ class Config:
     FLAG_RUNNER_BOUNDARY_EPSILON = 1e-5  # prevents division by zero in boundary avoidance
     FLAG_RUNNER_INTERACTION_TIME_THRESHOLD = 2.0  # time in game time seconds that a seeker must be in contact with the flag runner to "catch" it
     FLAG_RUNNER_CATCH_PROBABILITY = 1 / 20 # probability that a seeker will catch the flag runner if they are in contact for the interaction time threshold (catch_attempt)
-    FLAG_CATCH_CONTINUE_TIMER_REAL_SECONDS = 12.0  # time in real seconds to continue the flag catch after a seeker has caught the flag runner. We want to have some time to show an information message
+    FLAG_CATCH_CONTINUE_TIMER_REAL_SECONDS = 20.0  # time in real seconds to continue the flag catch after a seeker has caught the flag runner. We want to have some time to show an information message
     FLAG_CATCH_CONTINUE_TIMER = FLAG_CATCH_CONTINUE_TIMER_REAL_SECONDS * GAME_TIME_TO_REAL_TIME_RATIO
     # Tutorial only, restored when the next scenario starts. The elastic collision
     # pushes seeker and runner apart on contact, so holding the live 2 s of unbroken
