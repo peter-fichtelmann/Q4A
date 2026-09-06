@@ -15,7 +15,8 @@
             dodgeball: '#ff0064'
         },
         flagRunner: '#ffff00',
-        selectedPlayer: '#ffff00'
+        selectedPlayer: '#ffff00',
+        immunityShield: '#808080'
     };
 
     window.CLIENT_COLORS = CLIENT_COLORS;

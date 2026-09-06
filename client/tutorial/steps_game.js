@@ -449,7 +449,7 @@ const sections = [
                 scenario: 'keeper_immunity_demo',
                 anchor: () => traineeRect(1.2),
                 quip: QUIPS.paws,
-                text: ['You are the keeper now — green band!', 'Stay calm: in your zone, those beats bounce off.'],
+                text: ['You are the keeper now — green band!', 'See the shield: in your zone, those beats bounce off.'],
                 interaction: 'next',
             },
             {

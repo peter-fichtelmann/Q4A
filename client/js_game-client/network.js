@@ -126,6 +126,7 @@ export function handleMessage(message) {
           existing.velocity = pdata.velocity || existing.velocity;
           if (pdata.is_knocked_out !== undefined) existing.is_knocked_out = pdata.is_knocked_out;
           if (pdata.has_ball !== undefined) existing.has_ball = pdata.has_ball;
+          if (pdata.dodgeball_immunity !== undefined) existing.dodgeball_immunity = pdata.dodgeball_immunity;
           existing.id = id;
           if (!existing.direction) existing.direction = { x: 0, y: 0 };
           State.gameState.players[id] = existing;
@@ -249,8 +250,9 @@ export function parseBinaryState(arrayBuffer) {
       const flags = dv.getUint8(off, true); off += 1;
       const is_knocked_out = !!(flags & 1);
       const has_ball = !!(flags & 2);
+      const dodgeball_immunity = !!(flags & 4);
       let id = (State.playersOrder && State.playersOrder[i]) ? State.playersOrder[i] : `p_${i}`;
-      players[id] = { id, position: { x, y }, velocity: { x: vx, y: vy }, is_knocked_out, has_ball };
+      players[id] = { id, position: { x, y }, velocity: { x: vx, y: vy }, is_knocked_out, has_ball, dodgeball_immunity };
     }
 
     const balls = {};

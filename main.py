@@ -1123,7 +1123,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         - float16: game_time
         - uint8 score team 0, uint8 score team 1
         - for each player: float16 x, float16 y, float16 vx, float16 vy, uint8 flags
-            flags bit0 = is_knocked_out, bit1 = has_ball
+            flags bit0 = is_knocked_out, bit1 = has_ball, bit2 = dodgeball_immunity
         - for each ball: float16 x, float16 y, float16 vx, float16 vy, uint8 holder_flag,
             uint8 is_dead, uint8 possession (0=None, 1=team_0, 2=team_1)
         - uint8 delay-of-game bin, uint8 volleyball possession
@@ -1177,7 +1177,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             vx = float(getattr(p.velocity, 'x', 0.0))
             vy = float(getattr(p.velocity, 'y', 0.0))
             buf += struct.pack('<eeee', px, py, vx, vy)
-            flags = (1 if getattr(p, 'is_knocked_out', False) else 0) | ((1 if getattr(p, 'has_ball', False) else 0) << 1)
+            flags = (1 if getattr(p, 'is_knocked_out', False) else 0) | ((1 if getattr(p, 'has_ball', False) else 0) << 1) | ((1 if getattr(p, 'dodgeball_immunity', False) else 0) << 2)
             buf += struct.pack('<B', flags)
 
         # balls: x,y,vx,vy + holder_flag + is_dead + possession_team

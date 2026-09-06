@@ -100,6 +100,7 @@ class Player:
             "velocity": self.velocity.to_dict(),
             "is_knocked_out": self.is_knocked_out,
             "has_ball": self.has_ball,
+            "dodgeball_immunity": self.dodgeball_immunity,
             "flag_runner_interaction_time": self.flag_runner_interaction_time
         }
     

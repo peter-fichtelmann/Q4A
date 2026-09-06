@@ -51,6 +51,41 @@ function buildRenderableState() {
   return renderState;
 }
 
+// Full pulse sweep (faint -> clear -> faint) of the dodgeball immunity shield, in ms.
+const IMMUNITY_SHIELD_CYCLE_MS = 2000;
+const IMMUNITY_SHIELD_MIN_ALPHA = 0.3;
+const IMMUNITY_SHIELD_MAX_ALPHA = 0.9;
+
+function immunityShieldAlpha() {
+  const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const phase = (nowMs % IMMUNITY_SHIELD_CYCLE_MS) / IMMUNITY_SHIELD_CYCLE_MS;
+  // Triangle wave: linear up over the first half of the cycle, linear down over the second.
+  const ramp = phase < 0.5 ? phase * 2 : 2 - phase * 2;
+  return IMMUNITY_SHIELD_MIN_ALPHA + (IMMUNITY_SHIELD_MAX_ALPHA - IMMUNITY_SHIELD_MIN_ALPHA) * ramp;
+}
+
+// Grey shield badge drawn over an immune player, inscribed in the player circle.
+function drawImmunityShield(ctx, cx, cy, radiusPx, color) {
+  const halfW = radiusPx * 0.85;
+  const halfH = radiusPx;
+  ctx.save();
+  ctx.globalAlpha = immunityShieldAlpha();
+  ctx.translate(cx, cy);
+  ctx.beginPath();
+  ctx.moveTo(-halfW, -halfH);
+  ctx.lineTo(halfW, -halfH);
+  ctx.lineTo(halfW, halfH * 0.15);
+  ctx.quadraticCurveTo(halfW, halfH * 0.7, 0, halfH);
+  ctx.quadraticCurveTo(-halfW, halfH * 0.7, -halfW, halfH * 0.15);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, radiusPx * 0.12);
+  ctx.strokeStyle = '#3c3c3c';
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawOffScreenBallIndicators(offScreenBalls, xScale) {
   const ctx = State.ctx;
   if (!State.viewport.enabled || !State.gameState || !State.localPlayerId) return;
@@ -139,6 +174,7 @@ export function renderGame() {
   const colour_bludger = ballColors.dodgeball || '#ff0064';
   const colour_flag_runner = palette.flagRunner || '#ffff00';
   const colour_selected_player = palette.selectedPlayer || '#ffff00';
+  const colour_immunity_shield = palette.immunityShield || '#808080';
   const knocked_out_alpha = 0.5; const is_dead_alpha = 0.5;
 
   if (gs.hoops) {
@@ -191,6 +227,8 @@ export function renderGame() {
       else if (player.role === 'seeker' || player.role === 'SEEKER') hbColor = colour_seeker;
       ctx.fillStyle = hbColor; if (player.is_knocked_out) ctx.globalAlpha = knocked_out_alpha; else ctx.globalAlpha = 1.0;
       ctx.fillRect(-0.01 * headbandW, -0.5 * headbandH, Math.max(0.5, headbandW), Math.max(1, headbandH)); ctx.restore();
+
+      if (player.dodgeball_immunity) drawImmunityShield(ctx, px, py, Math.max(2, sizePx) * 0.8, colour_immunity_shield);
 
       if (player.id === State.localPlayerId) {
         const lw = 0.15 * Config.PLAYER_RADIUS * xScale; ctx.save(); ctx.strokeStyle = colour_selected_player; ctx.lineWidth = lw;
