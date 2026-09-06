@@ -112,7 +112,7 @@ class Config:
             'chaser_evade_beater_weight': 3.5,
             'chaser_evade_chaser_keeper_weight': 1.0,
             'chaser_evade_teamate_chaser_keeper_weight': 1.5,
-            'volleyball_holder_evade_own_hoop_weight': (2.0, 3.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
+            'volleyball_holder_evade_own_hoop_weight': (1.0, 2.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
             'unloaded_beater_evade_loaded_opponent_beater_weight': -20, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
             'loaded_beater_evade_loaded_opponent_beater_weight': -15,
             'loaded_beater_evade_unloaded_opponent_beater_weight': 4.0,
