@@ -361,10 +361,9 @@ class TutorialDirector:
         """
         if self.flag_seeker_phase_override is None:
             # Free play: hand the phase back to the game clock.
-            self.state.flag_runner_floor_seconds = (
-                Config.FLAG_RUNNER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO)
-            self.state.seeker_floor_seconds = (
-                Config.SEEKER_FLOOR_REAL_SECONDS / Config.GAME_TIME_TO_REAL_TIME_RATIO)
+            # Same game-time floors as a regular room (see GameRoom.__init__).
+            self.state.flag_runner_floor_seconds = Config.FLAG_RUNNER_FLOOR_SECONDS
+            self.state.seeker_floor_seconds = Config.SEEKER_FLOOR_SECONDS
             return
 
         on_pitch = self.flag_seeker_phase_override
@@ -898,11 +897,13 @@ class TutorialDirector:
             return self._retry()
         return []
 
-    def _stage_claim(self, trainee_x: float, third_spot: tuple) -> tuple:
+    def _stage_claim(self, trainee_x: float, beater_spots: tuple, third_spot: tuple) -> tuple:
         """Trainee as an empty-handed beater, both enemy beaters loaded, the third dodgeball free.
 
-        Returns the two enemy beaters (either may be None). The third-dodgeball
-        assignment itself is left to game logic, which picks it up on the next update.
+        Returns the two enemy beaters (either may be None). They are placed before
+        being armed: a held ball keeps its offset to the holder, so arming first
+        would leave the ball (and later the throw) at their old spot. The
+        third-dodgeball assignment is left to game logic on the next update.
         """
         trainee = self.trainee
         self._strip_all_balls()
@@ -911,8 +912,9 @@ class TutorialDirector:
         second = self._cpu(opponent_team, PlayerRole.BEATER, exclude={first.id} if first else set())
         self._park_others({b.id for b in (first, second) if b is not None})
         self._teleport(trainee, trainee_x, 16.5)
-        for beater, dodgeball in zip((first, second), self.state.dodgeballs[:2]):
+        for beater, spot, dodgeball in zip((first, second), beater_spots, self.state.dodgeballs[:2]):
             if beater is not None:
+                self._teleport(beater, *spot)
                 self._give_ball(beater, dodgeball)
         if len(self.state.dodgeballs) > 2:
             self._free_ball(self.state.dodgeballs[2], *third_spot)
@@ -921,24 +923,18 @@ class TutorialDirector:
     def _setup_claim_practice(self):
         """Controls: press claim and let the beater run to the third dodgeball."""
         events = self._swap_trainee_role(PlayerRole.BEATER)
-        first, second = self._stage_claim(trainee_x=16, third_spot=(36, 16.5))
-        targets = {}
-        for beater, spot in ((first, (46, 6)), (second, (46, 27))):
-            if beater is not None:
-                self._teleport(beater, *spot)
-                targets[beater.id] = spot
+        spots = ((46, 6), (46, 27))
+        first, second = self._stage_claim(trainee_x=16, beater_spots=spots, third_spot=(36, 16.5))
+        targets = {beater.id: spot for beater, spot in zip((first, second), spots) if beater is not None}
         self._set_ai('hold_positions', targets=targets)
         return events
 
     def _setup_claim_rules_demo(self):
         """Rules: one enemy beater blocks the path, the other throws at the claiming trainee."""
         events = self._swap_trainee_role(PlayerRole.BEATER)
-        blocker, thrower = self._stage_claim(trainee_x=14, third_spot=(40, 16.5))
         blocker_post = (28, 16.5)
-        if blocker is not None:
-            self._teleport(blocker, *blocker_post)
-        if thrower is not None:
-            self._teleport(thrower, 31, 20)
+        blocker, thrower = self._stage_claim(
+            trainee_x=14, beater_spots=(blocker_post, (34, 18.5)), third_spot=(40, 16.5))
         self._set_ai(
             'claim_challenge',
             blocker_id=blocker.id if blocker else None,

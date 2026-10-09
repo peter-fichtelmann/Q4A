@@ -301,7 +301,7 @@ class ScriptedComputerPlayer(ComputerPlayer):
         blocker_id = self.mode_kwargs.get('blocker_id')
         thrower_id = self.mode_kwargs.get('thrower_id')
         trainee_id = self.mode_kwargs.get('trainee_id')
-        throw_range = self.mode_kwargs.get('throw_range', 4.5)
+        throw_range = self.mode_kwargs.get('throw_range', 2.6)
         self._stop_all_except({blocker_id, thrower_id})
         blocker = self._get_player(blocker_id)
         post = self.mode_kwargs.get('blocker_post')
