@@ -301,7 +301,40 @@ class BoundaryLogic:
                     other_player.position.y += move_vector.y
             else:
                 break
-        
+
+    def _claiming_beater_free_way(self, dt: float) -> None:
+        """
+        Create a free way around a beater claiming the third dodgeball.
+
+        Moves nearby other beaters (both teams) away from the claiming beater so
+        the claim to the third dodgeball cannot be blocked.
+
+        Args:
+            dt: Delta game time since last frame in seconds.
+        """
+        claiming_beater = None
+        for player in self.state.players.values():
+            if player.is_claiming:
+                claiming_beater = player
+                break
+        if claiming_beater is None:
+            return
+        for other_id, distance in self.state.squared_distances_player_player.get(claiming_beater.id, []):
+            other_player = self.state.players.get(other_id)
+            if other_player is None:
+                continue
+            if distance < (4 * (other_player.radius)) ** 2:
+                if other_player.role != PlayerRole.BEATER or other_player.is_knocked_out:
+                    continue
+                move_away_speed = other_player.max_speed
+                move_away = self._calculate_move_away_vector(claiming_beater, other_player, dt, move_away_speed)
+                if move_away is not None:
+                    move_vector, _ = move_away
+                    other_player.position.x += move_vector.x
+                    other_player.position.y += move_vector.y
+            else:
+                break
+
 
     def _calculate_move_away_vector(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> Optional[tuple[Vector2, Vector2]]:
         """

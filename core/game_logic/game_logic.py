@@ -137,6 +137,7 @@ class GameLogic:
             # free way for volleyball inbounder
             self.boundary_logic._inbounding_free_way(dt)
             self.boundary_logic._making_alive_keeper_free_way(dt)
+            self.boundary_logic._claiming_beater_free_way(dt)
             self.boundary_logic._enforce_hoop_blockage() # after update positions because possibly resetting to previous position
             self.volleyball_logic.make_volleyball_alive()
             
@@ -208,6 +209,7 @@ class GameLogic:
             ('basic.check_keeper_special_powers', self.basic_logic, 'check_keeper_special_powers'),
             ('boundary._inbounding_free_way', self.boundary_logic, '_inbounding_free_way'),
             ('boundary._making_alive_keeper_free_way', self.boundary_logic, '_making_alive_keeper_free_way'),
+            ('boundary._claiming_beater_free_way', self.boundary_logic, '_claiming_beater_free_way'),
             ('boundary._enforce_hoop_blockage', self.boundary_logic, '_enforce_hoop_blockage'),
             ('volleyball.make_volleyball_alive', self.volleyball_logic, 'make_volleyball_alive'),
             ('utility._calculate_distances', self.utility_logic, '_calculate_distances'),

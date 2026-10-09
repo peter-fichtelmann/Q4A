@@ -125,3 +125,53 @@ class ProcessActionLogic:
                                 self.logger.debug("Player %s tackled player %s", player_id, other_id)
                                 return True
         return False
+
+
+    def can_claim(self, player: Player) -> bool:
+        """
+        Whether a player may start claiming the third dodgeball.
+
+        Only a beater of the team the third dodgeball is assigned to can claim,
+        while not knocked out, not holding a ball, and only if no other beater
+        is already claiming.
+        """
+        if self.state.third_dodgeball is None or self.state.third_dodgeball_team is None:
+            return False
+        if player.role != PlayerRole.BEATER or player.team != self.state.third_dodgeball_team:
+            return False
+        if player.is_knocked_out or player.has_ball or player.is_claiming:
+            return False
+        for other_player in self.state.players.values():
+            # only one claiming beater at a time
+            if other_player.is_claiming:
+                return False
+        return True
+
+    def process_claiming(self, player_id: str) -> bool:
+        """
+        Start claiming the third dodgeball.
+
+        The claiming beater runs straight to the third dodgeball until picking it
+        up or the third dodgeball situation ends, is immune to dodgeballs while
+        claiming and gets a free way from other beaters.
+
+        Args:
+            player_id: The ID of the beater claiming.
+
+        Returns:
+            True if the claim started, otherwise False.
+        """
+        player = self.state.get_player(player_id)
+        if player is None or not self.can_claim(player):
+            return False
+        player.is_claiming = True
+        player.dodgeball_immunity = True
+        self.logger.info("Player %s claims third dodgeball %s", player.id, self.state.third_dodgeball)
+        return True
+
+    @staticmethod
+    def end_claim(player: Player) -> None:
+        """End a claim and drop the immunity it granted."""
+        if player.is_claiming:
+            player.is_claiming = False
+            player.dodgeball_immunity = False

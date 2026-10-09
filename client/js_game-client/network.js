@@ -4,6 +4,7 @@ import { getQueryParam } from './utils.js';
 import { resizeCanvasToFit } from './viewport.js';
 import { showPrompt } from './fullscreen.js';
 import { ensureButtons, showForbidden } from './player_switch.js';
+import { ensureClaimButton, updateClaimButton } from './claim.js';
 import * as Audio from './audio.js';
 
 function getNowMs() {
@@ -107,6 +108,7 @@ export function handleMessage(message) {
     try { resizeCanvasToFit(); } catch (e) {}
     showPrompt();
     ensureButtons();
+    ensureClaimButton();
     Audio.ensureMuteButton();
     // Baseline only, so joining a running game does not replay its goals.
     Audio.noteScore(State.gameState && State.gameState.score);
@@ -127,6 +129,7 @@ export function handleMessage(message) {
           if (pdata.is_knocked_out !== undefined) existing.is_knocked_out = pdata.is_knocked_out;
           if (pdata.has_ball !== undefined) existing.has_ball = pdata.has_ball;
           if (pdata.dodgeball_immunity !== undefined) existing.dodgeball_immunity = pdata.dodgeball_immunity;
+          if (pdata.is_claiming !== undefined) existing.is_claiming = pdata.is_claiming;
           existing.id = id;
           if (!existing.direction) existing.direction = { x: 0, y: 0 };
           State.gameState.players[id] = existing;
@@ -169,6 +172,7 @@ export function handleMessage(message) {
       if (incoming.flag_catched_team !== undefined) State.gameState.flag_catched_team = incoming.flag_catched_team;
       if (incoming.flag_catch_continue_timer !== undefined) State.gameState.flag_catch_continue_timer = incoming.flag_catch_continue_timer;
       if (incoming.set_score !== undefined) State.gameState.set_score = incoming.set_score;
+      if (incoming.third_dodgeball_team !== undefined) State.gameState.third_dodgeball_team = incoming.third_dodgeball_team;
     }
     // Which player we steer is sent as an index into playersOrder on every update
     // (255 = none), so a switch needs no extra message and cannot get out of sync.
@@ -179,6 +183,7 @@ export function handleMessage(message) {
     // Cheers for a quaffle goal and for a caught flag runner; both show up here
     // as a score increase.
     Audio.noteScore(State.gameState && State.gameState.score);
+    updateClaimButton();
     rememberServerUpdateTime();
   }
 }
@@ -228,7 +233,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version < 1 || version > 6) { console.warn('Unknown binary state version', version); return null; }
+    if (version < 1 || version > 7) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -251,8 +256,9 @@ export function parseBinaryState(arrayBuffer) {
       const is_knocked_out = !!(flags & 1);
       const has_ball = !!(flags & 2);
       const dodgeball_immunity = !!(flags & 4);
+      const is_claiming = !!(flags & 8);
       let id = (State.playersOrder && State.playersOrder[i]) ? State.playersOrder[i] : `p_${i}`;
-      players[id] = { id, position: { x, y }, velocity: { x: vx, y: vy }, is_knocked_out, has_ball, dodgeball_immunity };
+      players[id] = { id, position: { x, y }, velocity: { x: vx, y: vy }, is_knocked_out, has_ball, dodgeball_immunity, is_claiming };
     }
 
     const balls = {};
@@ -319,6 +325,13 @@ export function parseBinaryState(arrayBuffer) {
       const setScoreByte = dv.getUint8(off, true); off += 1;
       if (setScoreByte !== 255) set_score = setScoreByte;
     }
+    // Third dodgeball team (null = no third dodgeball): drives the claim button.
+    let third_dodgeball_team = null;
+    if (version >= 7) {
+      const thirdTeamCode = dv.getUint8(off, true); off += 1;
+      if (thirdTeamCode === 1) third_dodgeball_team = 0;
+      else if (thirdTeamCode === 2) third_dodgeball_team = 1;
+    }
     // Trailing per-client byte: index of the player this client controls (255 = none).
     let controlled_index;
     if (version >= 5 && off < dv.byteLength) {
@@ -328,7 +341,7 @@ export function parseBinaryState(arrayBuffer) {
       players, balls, game_time: gameTime, score, delay_bin, possession_code,
       flag_runner, flag_runner_on_pitch, seeker_on_pitch,
       is_game_live, is_game_over, is_overtime, flag_catched_team,
-      flag_catch_continue_timer, set_score, controlled_index,
+      flag_catch_continue_timer, set_score, third_dodgeball_team, controlled_index,
     };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }

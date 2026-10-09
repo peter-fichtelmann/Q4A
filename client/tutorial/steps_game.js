@@ -11,6 +11,10 @@ import * as A from './anchors.js';
 
 const eventListeners = new Set();
 
+// Scenarios that allow claiming the third dodgeball (mirrors CLAIM_SCENARIOS in
+// tutorial_director.py); everywhere else the claim button stays hidden.
+const CLAIM_SCENARIOS = new Set(['claim_practice', 'claim_rules_demo', 'free_play']);
+
 const context = {
     isTouch: false,
     moveAccum: 0,
@@ -23,6 +27,7 @@ const context = {
     },
     sendScenario(name) {
         const state = A.state();
+        if (state) state.claimDisabled = !CLAIM_SCENARIOS.has(name);
         if (state && state.gameSocket && state.gameSocket.readyState === WebSocket.OPEN) {
             state.gameSocket.send(JSON.stringify({ type: 'tutorial_step', step: name }));
         }
@@ -134,6 +139,14 @@ function thirdDodgeballRect(ctx) {
         if (free.length === 1) ctx.thirdDodgeballId = free[0].id;
     }
     return ctx.thirdDodgeballId ? A.ballRect(ctx.thirdDodgeballId, 1.0) : null;
+}
+
+// The claim button only exists on screen while claiming is possible; until then
+// point at the free dodgeball it would claim.
+function claimButtonRect(ctx) {
+    const rect = A.domRect('#claimButton');
+    if (rect && rect.width > 0 && rect.height > 0) return rect;
+    return thirdDodgeballRect(ctx);
 }
 
 // A CPU of the given role from the trainee's own line-up (the trainee itself
@@ -311,6 +324,32 @@ const sections = [
                 hint: { afterMs: 20000, text: 'You must be in contact with the carrier when you tackle.' },
                 success: {
                     text: ['Flattened! Tackling stops carriers cold.'],
+                },
+            },
+            {
+                id: 'claim',
+                scenario: 'claim_practice',
+                anchor: (ctx) => claimButtonRect(ctx),
+                extraHighlight: (ctx) => thirdDodgeballRect(ctx),
+                quip: QUIPS.betting,
+                text: (ctx) => ctx.isTouch
+                    ? ['They hold both dodgeballs: the free one is ours.', 'Tap CLAIM to call dibs on it!']
+                    : ['They hold both dodgeballs: the free one is ours.', 'Press C (or click CLAIM) to call dibs!'],
+                interaction: 'server',
+                onEnter: (ctx) => { ctx.thirdDodgeballId = null; },
+                hint: { afterMs: 15000, text: (ctx) => (ctx.isTouch
+                    ? 'The pulsing CLAIM button sits bottom right.'
+                    : 'Press C — the pulsing CLAIM button is bottom right.') },
+                progressUpdates: {
+                    claiming: {
+                        text: ['Claimed! You now run there on autopilot', 'until the ball is in your hands.'],
+                        anchor: (ctx) => thirdDodgeballRect(ctx),
+                    },
+                    walked: { hint: 'Use CLAIM this time instead of walking there.' },
+                },
+                success: {
+                    text: ['Got it! Claiming is the fast lane', 'to the third dodgeball.'],
+                    quip: QUIPS.meow,
                 },
             },
             {
@@ -548,6 +587,27 @@ const sections = [
                 success: {
                     text: ['3rd DodgeballInterference! Back to hoops', 'for them, and ball turnovers to us.'],
                     quip: QUIPS.meow,
+                },
+            },
+            {
+                id: 'claim_rules',
+                scenario: 'claim_rules_demo',
+                anchor: (ctx) => thirdDodgeballRect(ctx),
+                quip: QUIPS.must,
+                text: ['A claiming beater cannot be beaten, and', 'other beaters must make way. Claim it!'],
+                interaction: 'server',
+                onEnter: (ctx) => { ctx.thirdDodgeballId = null; },
+                hint: { afterMs: 15000, text: (ctx) => (ctx.isTouch ? 'Tap CLAIM, bottom right.' : 'Press C to claim.') },
+                progressUpdates: {
+                    claiming: {
+                        text: ['See your shield? Their beats bounce off,', 'and the blocker gets pushed aside.'],
+                        anchor: () => traineeRect(1.2),
+                    },
+                    walked: { hint: 'Claim first: walking in leaves you unprotected.' },
+                    knocked_out: { hint: 'Beaten! Claim first, the claim makes you immune.' },
+                },
+                success: {
+                    text: ['The claim ends once you hold the ball,', 'or when there is no third dodgeball anymore.'],
                 },
             },
             {

@@ -290,6 +290,43 @@ class ScriptedComputerPlayer(ComputerPlayer):
         else:
             self._stop(cheater)
 
+    def _mode_claim_challenge(self, dt: float):
+        """
+        Show what claiming the third dodgeball protects against.
+
+        The blocker keeps returning to its post in the claim path, so the free
+        way visibly pushes it aside. The thrower fires once, only after the
+        trainee has claimed, so the beat bounces off the claim immunity.
+        """
+        blocker_id = self.mode_kwargs.get('blocker_id')
+        thrower_id = self.mode_kwargs.get('thrower_id')
+        trainee_id = self.mode_kwargs.get('trainee_id')
+        throw_range = self.mode_kwargs.get('throw_range', 4.5)
+        self._stop_all_except({blocker_id, thrower_id})
+        blocker = self._get_player(blocker_id)
+        post = self.mode_kwargs.get('blocker_post')
+        if blocker is not None and post is not None and not blocker.is_knocked_out:
+            self._steer(blocker, post[0], post[1], stop_distance=0.3)
+        thrower = self._get_player(thrower_id)
+        trainee = self._get_player(trainee_id)
+        if thrower is None or trainee is None:
+            return
+        self._stop(thrower)
+        if self.mode_kwargs.get('_thrown') or not thrower.has_ball or not trainee.is_claiming:
+            return
+        dx = trainee.position.x - thrower.position.x
+        dy = trainee.position.y - thrower.position.y
+        distance = (dx * dx + dy * dy) ** 0.5
+        if distance > throw_range:
+            return
+        # Lead the running trainee so the throw actually connects.
+        flight_time = distance / max(thrower.throw_velocity, 1e-3)
+        self.logic.process_action_logic.process_throw_action(thrower.id, Vector2(
+            dx + trainee.velocity.x * flight_time,
+            dy + trainee.velocity.y * flight_time,
+        ))
+        self.mode_kwargs['_thrown'] = True
+
     def _mode_free_play(self, dt: float):
         """Graduation free play: delegate to the normal rule-based AI."""
         if self._free_play_delegate is None:

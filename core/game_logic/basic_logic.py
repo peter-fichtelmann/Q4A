@@ -1,6 +1,7 @@
 import logging
 from typing import Tuple
 from core.game_logic.utility_logic import UtilityLogic
+from core.game_logic.process_action_logic import ProcessActionLogic
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
@@ -86,6 +87,14 @@ class BasicLogic:
             if player.is_knocked_out:
                 player.direction.x = self.state.hoops[f'hoop_{player.team}_center'].position.x - player.position.x
                 player.direction.y = self.state.hoops[f'hoop_{player.team}_center'].position.y - player.position.y
+            elif player.is_claiming:
+                # claiming beater runs to the third dodgeball until picked up or no third dodgeball anymore
+                third_dodgeball = self.state.balls.get(self.state.third_dodgeball) if self.state.third_dodgeball is not None else None
+                if third_dodgeball is None or player.team != self.state.third_dodgeball_team or player.has_ball:
+                    ProcessActionLogic.end_claim(player)
+                else:
+                    player.direction.x = third_dodgeball.position.x - player.position.x
+                    player.direction.y = third_dodgeball.position.y - player.position.y
             elif volleyball is not None:
                 if volleyball.is_dead:
                     if volleyball.possession_team == player.team and player.role == PlayerRole.KEEPER:

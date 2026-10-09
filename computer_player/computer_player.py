@@ -326,6 +326,8 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                     # move towards the dodgeball
                 if beater.id in self.cpu_player_id_set:
                     beater.direction = squared_distance_and_direction_to_dodgeball_dict[beater.id][1]
+                    # claim for immunity and free way (no-op if already claiming or not allowed)
+                    self.logic.process_action_logic.process_claiming(beater.id)
         else: # no third dodgeball, so no team already has two dodgeballs in possesion
             # step_ratio_dicts = {}
             sorted_interception_per_dodgeball_dict = {}

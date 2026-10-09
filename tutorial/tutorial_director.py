@@ -4,8 +4,12 @@ from typing import List, Optional
 import player_switch
 from config import Config
 from core.entities import Player, Ball, VolleyBall, Vector2, PlayerRole
+from core.game_logic.process_action_logic import ProcessActionLogic
 
 logger = logging.getLogger('quadball.tutorial')
+
+# Scenarios in which the trainee may claim the third dodgeball.
+CLAIM_SCENARIOS = ('claim_practice', 'claim_rules_demo', 'free_play')
 
 
 class TutorialDirector:
@@ -165,6 +169,7 @@ class TutorialDirector:
             player.catch_cooldown = 0.0
             player.tackling_player_ids = []
             player.flag_runner_interaction_time = 0.0
+            ProcessActionLogic.end_claim(player)
 
     def _reset_match_end_state(self):
         """Undo the match-ending side effects of a flag catch.
@@ -305,6 +310,9 @@ class TutorialDirector:
         # Switching is only for the step that teaches it and for free play; every
         # other step needs the trainee to stay on the player it staged.
         self.room.player_switch_enabled = name in ('player_switch_demo', 'free_play')
+        # Same for claiming: elsewhere a claim would spoil the staging (e.g. the
+        # trainee auto-running onto the ball in the third-dodgeball foul demo).
+        self.room.claiming_enabled = name in CLAIM_SCENARIOS
         if name in ('lineup_all_positions', 'flag_catch_practice'):
             self.flag_seeker_phase_override = True
         elif name == 'free_play':
@@ -889,6 +897,78 @@ class TutorialDirector:
             # which legally ends the third-dodgeball situation — stage it again.
             return self._retry()
         return []
+
+    def _stage_claim(self, trainee_x: float, third_spot: tuple) -> tuple:
+        """Trainee as an empty-handed beater, both enemy beaters loaded, the third dodgeball free.
+
+        Returns the two enemy beaters (either may be None). The third-dodgeball
+        assignment itself is left to game logic, which picks it up on the next update.
+        """
+        trainee = self.trainee
+        self._strip_all_balls()
+        opponent_team = 1 - trainee.team
+        first = self._cpu(opponent_team, PlayerRole.BEATER)
+        second = self._cpu(opponent_team, PlayerRole.BEATER, exclude={first.id} if first else set())
+        self._park_others({b.id for b in (first, second) if b is not None})
+        self._teleport(trainee, trainee_x, 16.5)
+        for beater, dodgeball in zip((first, second), self.state.dodgeballs[:2]):
+            if beater is not None:
+                self._give_ball(beater, dodgeball)
+        if len(self.state.dodgeballs) > 2:
+            self._free_ball(self.state.dodgeballs[2], *third_spot)
+        return first, second
+
+    def _setup_claim_practice(self):
+        """Controls: press claim and let the beater run to the third dodgeball."""
+        events = self._swap_trainee_role(PlayerRole.BEATER)
+        first, second = self._stage_claim(trainee_x=16, third_spot=(36, 16.5))
+        targets = {}
+        for beater, spot in ((first, (46, 6)), (second, (46, 27))):
+            if beater is not None:
+                self._teleport(beater, *spot)
+                targets[beater.id] = spot
+        self._set_ai('hold_positions', targets=targets)
+        return events
+
+    def _setup_claim_rules_demo(self):
+        """Rules: one enemy beater blocks the path, the other throws at the claiming trainee."""
+        events = self._swap_trainee_role(PlayerRole.BEATER)
+        blocker, thrower = self._stage_claim(trainee_x=14, third_spot=(40, 16.5))
+        blocker_post = (28, 16.5)
+        if blocker is not None:
+            self._teleport(blocker, *blocker_post)
+        if thrower is not None:
+            self._teleport(thrower, 31, 20)
+        self._set_ai(
+            'claim_challenge',
+            blocker_id=blocker.id if blocker else None,
+            blocker_post=blocker_post,
+            thrower_id=thrower.id if thrower else None,
+            trainee_id=self.trainee.id,
+        )
+        return events
+
+    def _check_claim(self):
+        """Success once the trainee holds a dodgeball they claimed; walking there instead is retried."""
+        trainee = self.trainee
+        if trainee is None:
+            return []
+        if trainee.is_knocked_out:
+            return self._retry('knocked_out')
+        if trainee.is_claiming and not self._baseline.get('claimed'):
+            self._baseline['claimed'] = True
+            return [self._progress('claiming')]
+        if trainee.has_ball:
+            if self._baseline.get('claimed'):
+                return self._success()
+            return self._retry('walked')
+        return []
+
+    def _check_claim_practice(self):
+        return self._check_claim()
+
+    def _check_claim_rules_demo(self):
+        return self._check_claim()
 
     def _setup_free_play(self):
         events = self._swap_trainee_role(PlayerRole.CHASER)

@@ -1,6 +1,7 @@
 import logging
 from core.game_state import GameState
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
+from core.game_logic.process_action_logic import ProcessActionLogic
 
 BASE_LOGGER = logging.getLogger('quadball.game_logic')
 
@@ -55,6 +56,7 @@ class DodgeballLogic:
                         if dodgeball.turnover_to_player is not None:
                             dodgeball.turnover_to_player = None
                             player.is_receiving_turnover_ball = False
+                        ProcessActionLogic.end_claim(player)
                         self.logger.info("Player %s picked up dodgeball %s", player.id, dodgeball.id)
                     return True
         return False
@@ -298,6 +300,7 @@ class DodgeballLogic:
 
 
             # -> check for other events:
+
 
 
 

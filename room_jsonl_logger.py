@@ -44,6 +44,7 @@ _PLAYER_DYNAMIC_FIELD_NAMES = [
     'tackling_player_ids',
     'is_receiving_turnover_ball',
     'flag_runner_interaction_time',
+    'is_claiming',
 ]
 
 _FLAG_RUNNER_DYNAMIC_FIELD_NAMES = [
@@ -175,6 +176,7 @@ def _decode_player_full_payload(payload) -> Player:
         tackling_player_ids=list(payload[20]) if isinstance(payload[20], list) else [],
         is_receiving_turnover_ball=bool(payload[21]),
         flag_runner_interaction_time=float(payload[22]) if len(payload) > 22 and payload[22] is not None else 0.0,
+        is_claiming=bool(payload[23]) if len(payload) > 23 else False,
     )
 
 
@@ -309,6 +311,7 @@ def _update_player_dynamic_payload(player: Player, payload) -> None:
     player.tackling_player_ids = list(payload[10]) if isinstance(payload[10], list) else []
     player.is_receiving_turnover_ball = bool(payload[11])
     player.flag_runner_interaction_time = float(payload[12]) if len(payload) > 12 and payload[12] is not None else 0.0
+    player.is_claiming = bool(payload[13]) if len(payload) > 13 else False
 
 
 def _update_flag_runner_dynamic_payload(flag_runner: FlagRunner, payload) -> None:
@@ -363,6 +366,7 @@ def _serialize_player_dynamic_payload(player: Player, default: bool = False):
             [],
             False,
             0.0,
+            False,
         ]
 
     return [
@@ -379,6 +383,7 @@ def _serialize_player_dynamic_payload(player: Player, default: bool = False):
         list(player.tackling_player_ids),
         player.is_receiving_turnover_ball,
         player.flag_runner_interaction_time,
+        player.is_claiming,
     ]
 
 

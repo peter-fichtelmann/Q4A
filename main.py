@@ -78,6 +78,8 @@ class GameRoom:
         self.player_index_by_id: Dict[str, int] = {}
         # Tutorial rooms turn this off until the switch is demonstrated.
         self.player_switch_enabled: bool = True
+        # Tutorial rooms only allow claiming the third dodgeball in the steps that teach it.
+        self.claiming_enabled: bool = True
         # CPU ids handed to the last make_move call, for the jsonl logger.
         self.last_cpu_driven_ids: List[str] = []
         # Slot layout for room lobby drag/drop. value is player_id or None.
@@ -1016,6 +1018,10 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                     success_throw = room.game_logic.process_action_logic.process_throw_action(controlled_player_id)
                     success_tackle = room.game_logic.process_action_logic.process_tackle_action(controlled_player_id)
 
+                elif message_type == "claim":
+                    if getattr(room, 'claiming_enabled', True):
+                        room.game_logic.process_action_logic.process_claiming(controlled_player_id)
+
                 elif message_type == "switch_player":
                     mode = str(message.get("mode", ""))
                     new_player_id, failure_reason = player_switch.request_switch(
@@ -1117,13 +1123,13 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         """Build a compact binary representation of dynamic entities.
 
         Format (little-endian):
-        - uint8: version (6)
+        - uint8: version (7)
         - uint8: player_count
         - uint8: ball_count
         - float16: game_time
         - uint8 score team 0, uint8 score team 1
         - for each player: float16 x, float16 y, float16 vx, float16 vy, uint8 flags
-            flags bit0 = is_knocked_out, bit1 = has_ball, bit2 = dodgeball_immunity
+            flags bit0 = is_knocked_out, bit1 = has_ball, bit2 = dodgeball_immunity, bit3 = is_claiming
         - for each ball: float16 x, float16 y, float16 vx, float16 vy, uint8 holder_flag,
             uint8 is_dead, uint8 possession (0=None, 1=team_0, 2=team_1)
         - uint8 delay-of-game bin, uint8 volleyball possession
@@ -1135,6 +1141,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         - uint8 flag_catched_team (0=None, 1=team_0, 2=team_1)
         - float16 flag_catch_continue_timer (game seconds left of the catch pause)
         - uint8 set_score (255 = None)
+        - uint8 third_dodgeball_team (0=None, 1=team_0, 2=team_1)
 
         The caller appends one more uint8 per client: the index of the player that
         client controls (255 = none). That trailing byte is the only per-client part
@@ -1151,8 +1158,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header (version 6 adds the flag-catch block after the flag runner)
-        buf += struct.pack('<B', 6)
+        # header (version 7 adds the claiming flag and the third dodgeball team)
+        buf += struct.pack('<B', 7)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -1177,7 +1184,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
             vx = float(getattr(p.velocity, 'x', 0.0))
             vy = float(getattr(p.velocity, 'y', 0.0))
             buf += struct.pack('<eeee', px, py, vx, vy)
-            flags = (1 if getattr(p, 'is_knocked_out', False) else 0) | ((1 if getattr(p, 'has_ball', False) else 0) << 1) | ((1 if getattr(p, 'dodgeball_immunity', False) else 0) << 2)
+            flags = (1 if getattr(p, 'is_knocked_out', False) else 0) | ((1 if getattr(p, 'has_ball', False) else 0) << 1) | ((1 if getattr(p, 'dodgeball_immunity', False) else 0) << 2) | ((1 if getattr(p, 'is_claiming', False) else 0) << 3)
             buf += struct.pack('<B', flags)
 
         # balls: x,y,vx,vy + holder_flag + is_dead + possession_team
@@ -1276,6 +1283,15 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         set_score = getattr(gs, 'set_score', None)
         # 255 stands for "no set score yet"; a real set score is a losing score plus 3.
         buf += struct.pack('<B', 255 if set_score is None else min(254, max(0, int(set_score))))
+        # third dodgeball team: lets the client offer the claim action to its beaters
+        third_dodgeball_team = getattr(gs, 'third_dodgeball_team', None) if getattr(gs, 'third_dodgeball', None) is not None else None
+        if third_dodgeball_team == 0:
+            third_dodgeball_team_code = 1
+        elif third_dodgeball_team == 1:
+            third_dodgeball_team_code = 2
+        else:
+            third_dodgeball_team_code = 0
+        buf += struct.pack('<B', third_dodgeball_team_code)
 
         return bytes(buf)
 

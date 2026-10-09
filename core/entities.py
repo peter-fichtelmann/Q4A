@@ -88,6 +88,7 @@ class Player:
     tackling_player_ids: list[str] = field(default_factory=list) # player ids where the player is tackling or being tackled by
     is_receiving_turnover_ball: bool = False  # True if player is currently receiving a turnover ball
     flag_runner_interaction_time: float = 0.0  #only for seekers: Time in seconds that the player has been in contact with the flag runner
+    is_claiming: bool = False  # only for beaters: True while claiming the third dodgeball (runs to it, immune, free way)
 
     def serialize(self) -> dict:
         """Convert player to JSON-serializable dict."""
@@ -101,7 +102,8 @@ class Player:
             "is_knocked_out": self.is_knocked_out,
             "has_ball": self.has_ball,
             "dodgeball_immunity": self.dodgeball_immunity,
-            "flag_runner_interaction_time": self.flag_runner_interaction_time
+            "flag_runner_interaction_time": self.flag_runner_interaction_time,
+            "is_claiming": self.is_claiming
         }
     
     def serialize_dynamic_attributes(self) -> dict:
@@ -118,7 +120,8 @@ class Player:
             "in_contact_player_ids": self.in_contact_player_ids,
             "tackling_player_ids": self.tackling_player_ids,
             "is_receiving_turnover_ball": self.is_receiving_turnover_ball,
-            "flag_runner_interaction_time": self.flag_runner_interaction_time
+            "flag_runner_interaction_time": self.flag_runner_interaction_time,
+            "is_claiming": self.is_claiming
         }
 
     def copy(self) -> 'Player':
@@ -145,7 +148,8 @@ class Player:
             in_contact_player_ids=self.in_contact_player_ids.copy(),
             tackling_player_ids=self.tackling_player_ids.copy(),
             is_receiving_turnover_ball=self.is_receiving_turnover_ball,
-            flag_runner_interaction_time=self.flag_runner_interaction_time
+            flag_runner_interaction_time=self.flag_runner_interaction_time,
+            is_claiming=self.is_claiming
         )
 
     def __copy__(self) -> 'Player':
