@@ -86,6 +86,35 @@ function drawImmunityShield(ctx, cx, cy, radiusPx, color) {
   ctx.restore();
 }
 
+const CLAIM_LINE_ALPHA = 0.45;
+
+function isBeaterRole(role) {
+  return role === 'beater' || role === 'BEATER';
+}
+
+// Glowing red line from a claiming beater to the third dodgeball they claimed.
+// Only beaters see it: it tells them which ball is taken and who has the free way.
+function drawClaimLine(ctx, gs, worldToScreen, xScale, color) {
+  if (!gs.players || !gs.balls || !gs.third_dodgeball_id) return;
+  const me = gs.players[State.localPlayerId];
+  if (!me || !isBeaterRole(me.role)) return;
+  const ball = gs.balls[gs.third_dodgeball_id];
+  if (!ball) return;
+  const bpos = ball.position || ball.pos || ball;
+  const lineWidth = Math.max(2, 0.5 * Config.PLAYER_RADIUS * xScale);
+  for (const player of Object.values(gs.players)) {
+    if (!player.is_claiming) continue;
+    const ppos = player.position || player.pos || player;
+    const from = worldToScreen(ppos.x, ppos.y); const to = worldToScreen(bpos.x, bpos.y);
+    ctx.save();
+    ctx.globalAlpha = CLAIM_LINE_ALPHA;
+    ctx.strokeStyle = color; ctx.lineWidth = lineWidth; ctx.lineCap = 'round';
+    ctx.shadowColor = color; ctx.shadowBlur = lineWidth * 1.5;
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+    ctx.restore();
+  }
+}
+
 export function drawOffScreenBallIndicators(offScreenBalls, xScale) {
   const ctx = State.ctx;
   if (!State.viewport.enabled || !State.gameState || !State.localPlayerId) return;
@@ -175,6 +204,7 @@ export function renderGame() {
   const colour_flag_runner = palette.flagRunner || '#ffff00';
   const colour_selected_player = palette.selectedPlayer || '#ffff00';
   const colour_immunity_shield = palette.immunityShield || '#808080';
+  const colour_claim_line = palette.claimLine || '#ff0000';
   const knocked_out_alpha = 0.5; const is_dead_alpha = 0.5;
 
   if (gs.hoops) {
@@ -200,6 +230,9 @@ export function renderGame() {
       ctx.beginPath(); ctx.arc(frs.x, frs.y, Math.max(2, frRadius * xScale), 0, Math.PI * 2); ctx.fill(); ctx.restore();
     }
   }
+
+  // Under players and balls, so it reads as a lane on the pitch.
+  drawClaimLine(ctx, gs, worldToScreen, xScale, colour_claim_line);
 
   if (gs.players) {
     for (const player of Object.values(gs.players)) {

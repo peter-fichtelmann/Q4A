@@ -173,6 +173,7 @@ export function handleMessage(message) {
       if (incoming.flag_catch_continue_timer !== undefined) State.gameState.flag_catch_continue_timer = incoming.flag_catch_continue_timer;
       if (incoming.set_score !== undefined) State.gameState.set_score = incoming.set_score;
       if (incoming.third_dodgeball_team !== undefined) State.gameState.third_dodgeball_team = incoming.third_dodgeball_team;
+      if (incoming.third_dodgeball_id !== undefined) State.gameState.third_dodgeball_id = incoming.third_dodgeball_id;
     }
     // Which player we steer is sent as an index into playersOrder on every update
     // (255 = none), so a switch needs no extra message and cannot get out of sync.
@@ -327,10 +328,14 @@ export function parseBinaryState(arrayBuffer) {
     }
     // Third dodgeball team (null = no third dodgeball): drives the claim button.
     let third_dodgeball_team = null;
+    let third_dodgeball_id = null;
     if (version >= 7) {
       const thirdTeamCode = dv.getUint8(off, true); off += 1;
       if (thirdTeamCode === 1) third_dodgeball_team = 0;
       else if (thirdTeamCode === 2) third_dodgeball_team = 1;
+      // Which ball is the third dodgeball (255 = none): target of the claim line.
+      const thirdIndex = dv.getUint8(off, true); off += 1;
+      if (thirdIndex !== 255) third_dodgeball_id = (State.ballsOrder && State.ballsOrder[thirdIndex]) || `b_${thirdIndex}`;
     }
     // Trailing per-client byte: index of the player this client controls (255 = none).
     let controlled_index;
@@ -341,7 +346,7 @@ export function parseBinaryState(arrayBuffer) {
       players, balls, game_time: gameTime, score, delay_bin, possession_code,
       flag_runner, flag_runner_on_pitch, seeker_on_pitch,
       is_game_live, is_game_over, is_overtime, flag_catched_team,
-      flag_catch_continue_timer, set_score, third_dodgeball_team, controlled_index,
+      flag_catch_continue_timer, set_score, third_dodgeball_team, third_dodgeball_id, controlled_index,
     };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }

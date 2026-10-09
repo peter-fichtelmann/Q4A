@@ -16,7 +16,8 @@
         },
         flagRunner: '#ffff00',
         selectedPlayer: '#ffff00',
-        immunityShield: '#808080'
+        immunityShield: '#808080',
+        claimLine: '#ff0000'
     };
 
     window.CLIENT_COLORS = CLIENT_COLORS;

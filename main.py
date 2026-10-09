@@ -1142,6 +1142,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         - float16 flag_catch_continue_timer (game seconds left of the catch pause)
         - uint8 set_score (255 = None)
         - uint8 third_dodgeball_team (0=None, 1=team_0, 2=team_1)
+        - uint8 third dodgeball index into balls_order (255 = None)
 
         The caller appends one more uint8 per client: the index of the player that
         client controls (255 = none). That trailing byte is the only per-client part
@@ -1292,6 +1293,14 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         else:
             third_dodgeball_team_code = 0
         buf += struct.pack('<B', third_dodgeball_team_code)
+        # which ball it is, for the claim line drawn to it
+        third_dodgeball_id = getattr(gs, 'third_dodgeball', None)
+        third_dodgeball_index = 255
+        for index, ball in enumerate(balls):
+            if ball.id == third_dodgeball_id:
+                third_dodgeball_index = index
+                break
+        buf += struct.pack('<B', third_dodgeball_index)
 
         return bytes(buf)
 
