@@ -86,7 +86,7 @@ function drawImmunityShield(ctx, cx, cy, radiusPx, color) {
   ctx.restore();
 }
 
-const CLAIM_LINE_ALPHA = 0.45;
+const CLAIM_LINE_ALPHA = 0.25;
 
 function isBeaterRole(role) {
   return role === 'beater' || role === 'BEATER';
@@ -101,7 +101,7 @@ function drawClaimLine(ctx, gs, worldToScreen, xScale, color) {
   const ball = gs.balls[gs.third_dodgeball_id];
   if (!ball) return;
   const bpos = ball.position || ball.pos || ball;
-  const lineWidth = Math.max(2, 0.5 * Config.PLAYER_RADIUS * xScale);
+  const lineWidth = Math.max(1, 0.25 * Config.PLAYER_RADIUS * xScale);
   for (const player of Object.values(gs.players)) {
     if (!player.is_claiming) continue;
     const ppos = player.position || player.pos || player;
