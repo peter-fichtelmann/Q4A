@@ -28,11 +28,21 @@ class Config:
     PLAYER_MIN_SPEED_REAL = 1 # m/s per real second
     PLAYER_THROW_VELOCITY_REAL = 11 # m/s per real second
     PLAYER_ACCELERATION_REAL = 3 # m/s2 per real second
-    PLAYER_DEACCELERATION_RATE = 0.5 # ratio of speed lost per second
     PLAYER_MAX_SPEED = PLAYER_MAX_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
     PLAYER_MIN_SPEED = PLAYER_MIN_SPEED_REAL / GAME_TIME_TO_REAL_TIME_RATIO
     PLAYER_THROW_VELOCITY = PLAYER_THROW_VELOCITY_REAL / GAME_TIME_TO_REAL_TIME_RATIO
     PLAYER_ACCELERATION = PLAYER_ACCELERATION_REAL / GAME_TIME_TO_REAL_TIME_RATIO
+    # Motion model for player physics and computer player trajectory estimation:
+    # "analytic": deacceleration rate = acceleration / max speed, so max speed is the terminal velocity
+    #             and the speed cap never binds; CPU estimates use the exact closed-form tick motion
+    #             (computer_player_utility/kinematics.py) incl. ball decay, acceleration and current velocity.
+    # "legacy":   deacceleration rate 0.5 with speed cap; CPU estimates assume constant velocities.
+    MOTION_MODEL = "analytic"
+    PLAYER_DEACCELERATION_RATE_LEGACY = 0.5 # ratio of speed lost per second
+    PLAYER_DEACCELERATION_RATE = PLAYER_ACCELERATION / PLAYER_MAX_SPEED if MOTION_MODEL == "analytic" else PLAYER_DEACCELERATION_RATE_LEGACY
+    MOTION_MODEL_MAX_TICKS = 400 # look-ahead horizon of analytic estimates in game ticks (60 game s, enough to cross the pitch)
+    MOTION_MODEL_SCAN_STEP = 4 # initial tick step of the analytic root scan (refined by bisection), grows for far horizons
+    THROW_CATCH_MARGIN_FACTOR = 0.9 # analytic throws: ball has to reach within this fraction of the catch distance (receiver radius + ball radius)
     PLAYER_MIN_DIR = 0.6 # of 1 
 
     BALL_DEACCELERATION_RATE = 0.15 # ratio of speed lost per second

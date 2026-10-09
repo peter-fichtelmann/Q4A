@@ -374,10 +374,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
                             assigned_dodgeball_ids.append(dodgeball_id)
                             # move towards the dodgeball
                             if beater.id in self.cpu_player_id_set:
-                                interception_position = Vector2(
-                                    dodgeball.position.x + dodgeball.velocity.x * interception_time,
-                                    dodgeball.position.y + dodgeball.velocity.y * interception_time
-                                )
+                                interception_position = self.interception_calculator.get_aim_position(beater, dodgeball, interception_time)
                                 beater.direction = Vector2(
                                         interception_position.x - beater.position.x,
                                         interception_position.y - beater.position.y
@@ -533,10 +530,7 @@ class RuleBasedComputerPlayer(ComputerPlayer):
             if assigned_player_id is not None:
                 assigned_player = self.logic.state.players[assigned_player_id]
                 attacking_team = assigned_player.team
-                interception_position = Vector2(
-                volleyball.position.x + volleyball.velocity.x * lowest_interception_time,
-                volleyball.position.y + volleyball.velocity.y * lowest_interception_time
-            )
+                interception_position = self.interception_calculator.get_aim_position(assigned_player, volleyball, lowest_interception_time)
                 return attacking_team, assigned_player_id, interception_position
             # # elif volleyball.velocity.x > 0 or volleyball.velocity.y > 0:
             # potential_intercepting_players_0 = [player.id for player in self.logic.state.players.values() if player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and player.team == 0]

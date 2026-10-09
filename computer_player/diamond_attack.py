@@ -328,6 +328,8 @@ class DiamondAttack:
                 return
             best_player = self.logic.state.players[best_player_id]
             throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, best_player)
+            if throw_direction is None:
+                continue # ball cannot reach this player, look for next best player
             # check that the throw would not go through own hoops
             own_hoops = [hoop for hoop in self.logic.state.hoops.values() if hoop.team == self.attack_team]
             scoring_own_hoops = InterceptionCalculator.intercepting_hoop_before_target(volleyball, predicted_receiver_position, own_hoops)

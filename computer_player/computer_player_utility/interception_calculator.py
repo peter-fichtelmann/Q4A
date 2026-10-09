@@ -1,9 +1,13 @@
 import math
 from typing import Dict, Optional, List, Tuple
 
+from config import Config
 from core.entities import Hoop, Vector2
 from core.game_logic.utility_logic import UtilityLogic
 from core.game_logic.game_logic import GameLogic
+from computer_player.computer_player_utility.kinematics import (
+    TICK_DT, decay_table, first_interception_tick, terminal_speed
+)
 
 class InterceptionCalculator:
     """
@@ -26,10 +30,13 @@ class InterceptionCalculator:
         In contrast to 1), the players can be faster.
         Sympy solved a linear equation system to find the player's velocity direction to intercept optimally and the time needed.
         It resulted in a long term, but is still quite fast to solve.
+        With motion_model "analytic", the exact closed-form tick motion (kinematics.py) replaces the
+        constant-velocity assumptions: ball decay, player acceleration and current player velocity.
     """
-    def __init__(self, logic: GameLogic):
-        """Keep a reference to game state for player kinematics and lookups."""
+    def __init__(self, logic: GameLogic, motion_model: Optional[str] = None):
+        """Keep a reference to game state for player kinematics and lookups (motion_model defaults to Config.MOTION_MODEL)."""
         self.logic = logic
+        self.motion_model = Config.MOTION_MODEL if motion_model is None else motion_model
     
     def beam_cosine_angle(self,
                 moving_entity: object,
@@ -146,6 +153,8 @@ class InterceptionCalculator:
         Returns the lowest interception time, the selected player id, and a
         dictionary of per-player interception times.
         """
+        if self.motion_model == "analytic":
+            return self._line_interception_analytic(moving_entity, intercepting_player_ids)
         lowest_interception_dt = float('inf')
         lowest_interception_dt_player_id = None
         interception_info_dict = {}
@@ -192,6 +201,87 @@ class InterceptionCalculator:
         # )
         # self.logger.debug(f"Lowest interception time is {lowest_interception_dt} by player {lowest_interception_dt_player_id} at position ({interception_position.x}, {interception_position.y})")
         return lowest_interception_dt, lowest_interception_dt_player_id, interception_info_dict
+
+    def _line_interception_analytic(self,
+                                    moving_entity: object,
+                                    intercepting_player_ids: List[str],
+                                    ) -> Tuple[float, str, Dict[str, float]]:
+        """
+        Analytic counterpart of line_interception (same return values, times in game seconds).
+
+        The moving entity decays exactly as in BasicLogic; players start from their current velocity and
+        accelerate to their terminal speed (see kinematics.first_interception_tick). Knocked out players
+        first have to reach their own center hoop, from where the second phase starts.
+        """
+        lowest_interception_dt = float('inf')
+        lowest_interception_dt_player_id = None
+        interception_info_dict = {}
+        entity_table = decay_table(moving_entity.deacceleration_rate)
+        entity_x, entity_y = moving_entity.position.x, moving_entity.position.y
+        entity_vx, entity_vy = moving_entity.velocity.x, moving_entity.velocity.y
+        for player_id in intercepting_player_ids:
+            player = self.logic.state.players[player_id]
+            player_table = decay_table(player.deacceleration_rate)
+            run_speed = terminal_speed(player)
+            start_x, start_y = player.position.x, player.position.y
+            start_vx, start_vy = player.velocity.x, player.velocity.y
+            tick_offset = 0
+            if player.is_knocked_out:
+                hoop = self.logic.state.hoops[f'hoop_{player.team}_center']
+                hoop_result = first_interception_tick(
+                    start_x, start_y, start_vx, start_vy, run_speed, player_table,
+                    hoop.position.x, hoop.position.y, 0.0, 0.0, entity_table,
+                    reach_distance=player.radius + hoop.thickness,
+                )
+                if hoop_result is None:
+                    continue
+                tick_offset, steer_x, steer_y = hoop_result
+                # restart at the hoop with the velocity reached while running there
+                steer_mag = math.hypot(steer_x, steer_y)
+                decay = player_table.q ** tick_offset
+                start_x, start_y = hoop.position.x, hoop.position.y
+                if steer_mag > 0:
+                    start_vx = run_speed * steer_x / steer_mag * (1 - decay) + start_vx * decay
+                    start_vy = run_speed * steer_y / steer_mag * (1 - decay) + start_vy * decay
+            result = first_interception_tick(
+                start_x, start_y, start_vx, start_vy, run_speed, player_table,
+                entity_x, entity_y, entity_vx, entity_vy, entity_table,
+                reach_distance=player.radius + moving_entity.radius,
+                target_tick_offset=tick_offset,
+            )
+            if result is None:
+                continue
+            interception_time = (result[0] + tick_offset) * TICK_DT
+            if interception_time < lowest_interception_dt:
+                lowest_interception_dt = interception_time
+                lowest_interception_dt_player_id = player_id
+            interception_info_dict[player_id] = interception_time
+        return lowest_interception_dt, lowest_interception_dt_player_id, interception_info_dict
+
+    def predict_entity_position(self, moving_entity: object, time: float) -> Vector2:
+        """Position of a free moving entity (ball) after time game seconds according to the motion model."""
+        if self.motion_model == "analytic":
+            tau = decay_table(moving_entity.deacceleration_rate).tau_at(time / TICK_DT)
+        else:
+            tau = time
+        return Vector2(
+            moving_entity.position.x + moving_entity.velocity.x * tau,
+            moving_entity.position.y + moving_entity.velocity.y * tau
+        )
+
+    def get_aim_position(self, player, moving_entity: object, interception_time: float) -> Vector2:
+        """
+        Position the player should steer at to intercept moving_entity at interception_time.
+
+        Analytic model: the player's own drift v_0 * tau_p(n) is subtracted from the predicted
+        entity position, so that the direction aim - player.position is the constant optimal input.
+        """
+        aim = self.predict_entity_position(moving_entity, interception_time)
+        if self.motion_model == "analytic":
+            tau_player = decay_table(player.deacceleration_rate).tau_at(interception_time / TICK_DT)
+            aim.x -= player.velocity.x * tau_player
+            aim.y -= player.velocity.y * tau_player
+        return aim
 
 
     @staticmethod
