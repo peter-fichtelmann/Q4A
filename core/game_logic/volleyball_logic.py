@@ -129,6 +129,7 @@ class VolleyballLogic:
                             if volleyball.turnover_to_player is not None:
                                 volleyball.turnover_to_player = None
                                 player.is_receiving_turnover_ball = False
+                                self.state.block_turnover_throw(player.id)
                             self.logger.info("Player %s picked up the volleyball", player.id)
                             break
                     else:

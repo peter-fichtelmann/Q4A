@@ -60,6 +60,8 @@ class Config:
     STALLED_VOLLEYBALL_TIME_LIMIT = 10  # game seconds a tackled volleyball carrier keeps the ball before it goes to the closest opponent chaser/keeper
     STALLED_VOLLEYBALL_COUNTDOWN = 5  # last game seconds of the stalled volleyball limit that are counted down next to the ball
     STALLED_VOLLEYBALL_TACKLE_GRACE = 2  # game seconds without a new tackle after which the carrier counts as free again (tackles are single actions)
+    TURNOVER_THROW_BLOCK_TIME_REAL = 1  # real seconds a player receiving a turnover ball cannot throw (the tackle button is also the throw button)
+    TURNOVER_THROW_BLOCK_TIME = TURNOVER_THROW_BLOCK_TIME_REAL * GAME_TIME_TO_REAL_TIME_RATIO
 
     # should be at least NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD
     MIN_SQUARED_DISTANCE_PLAYER_PLAYER_CALCULATION = 4 # only calculate and store distances for player pairs that are within this squared distance to save on calculations and memory, since distant players won't interact with each other

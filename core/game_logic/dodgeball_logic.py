@@ -56,6 +56,7 @@ class DodgeballLogic:
                         if dodgeball.turnover_to_player is not None:
                             dodgeball.turnover_to_player = None
                             player.is_receiving_turnover_ball = False
+                            self.state.block_turnover_throw(player.id)
                         ProcessActionLogic.end_claim(player)
                         self.logger.info("Player %s picked up dodgeball %s", player.id, dodgeball.id)
                     return True

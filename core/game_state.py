@@ -41,6 +41,8 @@ class GameState:
     stalled_volleyball_time_limit: float = 10.0                # Game seconds a tackled carrier keeps the volleyball before it goes to the closest opponent chaser/keeper
     stalled_volleyball_countdown: float = 5.0                  # Last game seconds of the stalled volleyball limit counted down on the client
     stalled_volleyball_tackle_grace: float = 2.0               # Game seconds without a new tackle after which the carrier counts as no longer tackled
+    turnover_throw_block_time: float = 3.0                     # Game seconds a player receiving a turnover ball cannot throw it
+    throw_blocked_until: Dict[str, float] = field(default_factory=dict)  # player id -> game time until which throwing is blocked
     third_dodgeball: str = None # third dodgeball id if third dodgeball
     third_dodgeball_team: str = None # team which is assigned the third dodgeball
     potential_third_dodgeball_interference_kwargs: Dict[str, str] = field(default_factory=lambda: {'player_id': None, 'dodgeball_id': None}) # third dodgeball id and player id if potential interferenece if not beat attempt
@@ -119,6 +121,10 @@ class GameState:
             self.is_game_over = True
             self.is_game_live = False
     
+    def block_turnover_throw(self, player_id: str) -> None:
+        """Block throwing for a player who just picked up a turnover ball."""
+        self.throw_blocked_until[player_id] = self.game_time + self.turnover_throw_block_time
+
     def update_game_time(self, dt: float) -> None:
         """Update elapsed game time."""
         self.game_time += dt
@@ -172,6 +178,8 @@ class GameState:
             stalled_volleyball_time_limit=self.stalled_volleyball_time_limit,
             stalled_volleyball_countdown=self.stalled_volleyball_countdown,
             stalled_volleyball_tackle_grace=self.stalled_volleyball_tackle_grace,
+            turnover_throw_block_time=self.turnover_throw_block_time,
+            throw_blocked_until=self.throw_blocked_until.copy(),
             third_dodgeball=self.third_dodgeball,
             third_dodgeball_team=self.third_dodgeball_team,
             potential_third_dodgeball_interference_kwargs=(

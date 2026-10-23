@@ -48,6 +48,10 @@ class ProcessActionLogic:
         if not ball:
             return False
         
+        if self.state.game_time < self.state.throw_blocked_until.get(player.id, float('-inf')):
+            # just received a turnover ball: a tackler still pressing the tackle (= throw) button must not throw it away
+            return False
+
         if ball.ball_type == BallType.VOLLEYBALL:
             if ball.is_dead:
                 # throwing dead volleyball is not allowed
