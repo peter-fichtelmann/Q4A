@@ -154,6 +154,7 @@ class Config:
                 'marking_distance': 1.5, # m from the marked opponent towards the volleyball (passing lane)
                 'marking_max_distance': 10, # m, only opponent chasers/keepers this close to the volleyball are marked
                 'hoop_clearance_x': 1.0, # m, box players stay at least this far in front of the hoops
+                'max_y_offset': 7.0, # m, pressers/markers stay within this y distance of the centre hoop; opponents further to the sides are not marked
             },
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
