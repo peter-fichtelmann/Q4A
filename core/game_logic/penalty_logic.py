@@ -159,10 +159,7 @@ class PenaltyLogic:
                     if player.role == PlayerRole.CHASER or player.role == PlayerRole.KEEPER:
                         if not player.has_ball:
                             ball.turnover_to_player = player.id
-                            if ball.holder_id is not None:
-                                holder = self.state.players.get(ball.holder_id)
-                                holder.has_ball = False
-                                ball.holder_id = None
+                            self._release_turnover_ball(ball)
                             break
                 elif ball.ball_type == BallType.DODGEBALL:
                     if player.role == PlayerRole.BEATER:
@@ -170,12 +167,25 @@ class PenaltyLogic:
                             if not player.is_receiving_turnover_ball: # prevent multiple turnover balls to same player
                                 ball.turnover_to_player = player.id
                                 player.is_receiving_turnover_ball = True
-                                if ball.holder_id is not None:
-                                    holder = self.state.players.get(ball.holder_id)
-                                    holder.has_ball = False
-                                    ball.holder_id = None
+                                self._release_turnover_ball(ball)
                                 break
         # if no eligible player: no turnover
+
+    def _release_turnover_ball(self, ball: Ball) -> None:
+        """
+        Take a turned over ball away from its holder.
+
+        The former holder gets the same catch cooldown as after a throw, so a holder
+        still in contact with the receiver (e.g. after being tackled) cannot recatch it.
+        """
+        if ball.holder_id is None:
+            return
+        holder = self.state.players.get(ball.holder_id)
+        if holder is not None:
+            holder.has_ball = False
+            if holder.throw_velocity > 1e-2:
+                holder.catch_cooldown = 2 * holder.radius / holder.throw_velocity * holder.max_speed * 2.5
+        ball.holder_id = None
 
     def _third_dodgeball_interference(self, player, dodgeball):
         """
