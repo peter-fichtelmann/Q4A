@@ -18,7 +18,13 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
         Both stay between the hoops and the keeper zone line.
         Pressers and markers stay within `max_y_offset` of the centre hoop; opponents further out to the
         sides are less dangerous and not marked.
+        The marker keeps at least `min_defender_distance` from the presser.
         The two other chasers defend the hoops like in the hoop defence.
+
+    Knocked out box players:
+        If the box chaser or the keeper is knocked out, the hoop chaser closest to them at that moment takes
+        their box role. The keeper gets it back once they are no longer knocked out; a replaced box chaser
+        becomes a hoop chaser.
 
     Volleyball behind the own hoops:
         The two hoop chasers move around the hoops towards the volleyball; the closer one presses it,
@@ -31,6 +37,7 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
                  marking_max_distance: float = 10, # m, only opponents this close to the volleyball are marked
                  hoop_clearance_x: float = 1.0, # m, minimum x distance in front of the hoops for the box players
                  max_y_offset: float = 7.0, # m, pressers and markers stay within this y distance of the centre hoop
+                 min_defender_distance: float = 3.0, # m, the marker keeps at least this distance from the presser
                  logger: Optional[logging.Logger] = None
                  ):
         """Store the hoop blockage helpers and marking parameters."""
@@ -39,11 +46,14 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
         self.marking_max_distance = marking_max_distance
         self.hoop_clearance_x = hoop_clearance_x
         self.max_y_offset = max_y_offset
+        self.min_defender_distance = min_defender_distance
         self._box_chaser_ids: Dict[int, Optional[str]] = {}
+        self._keeper_substitute_ids: Dict[int, Optional[str]] = {} # chaser taking the knocked out keeper's box role
 
     def reset(self, team: int):
-        """Forget the box chaser so a new one is chosen when this team starts box defending."""
+        """Forget the box chaser and keeper substitute so new ones are chosen when this team starts box defending."""
         self._box_chaser_ids.pop(team, None)
+        self._keeper_substitute_ids.pop(team, None)
 
     def __call__(self,
                  ctx: StepContext,
@@ -63,11 +73,15 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
                 continue
             if player.role == PlayerRole.KEEPER:
                 keeper = player
-            elif player.role == PlayerRole.CHASER and not player.is_knocked_out:
+            elif player.role == PlayerRole.CHASER:
                 chasers.append(player)
         box_chaser = self._box_chaser(team, chasers, volleyball)
-        hoop_chasers = [chaser for chaser in chasers if chaser is not box_chaser]
-        box_players = [player for player in (keeper, box_chaser) if player is not None and not player.is_knocked_out]
+        keeper_substitute = self._keeper_substitute(team, keeper, chasers, box_chaser)
+        box_players = [
+            player for player in (keeper, keeper_substitute, box_chaser)
+            if player is not None and not player.is_knocked_out
+        ]
+        hoop_chasers = [chaser for chaser in chasers if not chaser.is_knocked_out and chaser not in box_players]
 
         sorted_hoop_distances = sorted(
             ((hoop.id, (volleyball.position.x - hoop.position.x) ** 2 + (volleyball.position.y - hoop.position.y) ** 2) for hoop in defence_hoops),
@@ -100,16 +114,35 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
             self.logic.process_action_logic.process_tackle_action(keeper.id)
 
     def _box_chaser(self, team: int, chasers: List[Player], volleyball: VolleyBall) -> Optional[Player]:
-        """Keep the box chaser of the team; choose the chaser closest to the volleyball if there is none (anymore)."""
-        box_chaser_id = self._box_chaser_ids.get(team)
-        for chaser in chasers:
-            if chaser.id == box_chaser_id:
-                return chaser
-        if not chasers:
+        """
+        Keep the box chaser of the team. If it is knocked out, the chaser closest to it takes over;
+        if there is none yet, the chaser closest to the volleyball.
+        """
+        box_chaser = next((chaser for chaser in chasers if chaser.id == self._box_chaser_ids.get(team)), None)
+        if box_chaser is not None and not box_chaser.is_knocked_out:
+            return box_chaser
+        reference_position = box_chaser.position if box_chaser is not None else volleyball.position
+        available = [
+            chaser for chaser in chasers
+            if not chaser.is_knocked_out and chaser.id != self._keeper_substitute_ids.get(team)
+        ]
+        if not available:
             return None
-        box_chaser = min(chasers, key=lambda chaser: self._squared_distance(chaser.position, volleyball.position))
+        box_chaser = min(available, key=lambda chaser: self._squared_distance(chaser.position, reference_position))
         self._box_chaser_ids[team] = box_chaser.id
         return box_chaser
+
+    def _keeper_substitute(self, team: int, keeper: Optional[Player], chasers: List[Player], box_chaser: Optional[Player]) -> Optional[Player]:
+        """While the keeper is knocked out, the chaser closest to the keeper at the knockout takes the keeper's box role."""
+        if keeper is None or not keeper.is_knocked_out:
+            self._keeper_substitute_ids.pop(team, None)
+            return None
+        available = [chaser for chaser in chasers if not chaser.is_knocked_out and chaser is not box_chaser]
+        substitute = next((chaser for chaser in available if chaser.id == self._keeper_substitute_ids.get(team)), None)
+        if substitute is None and available:
+            substitute = min(available, key=lambda chaser: self._squared_distance(chaser.position, keeper.position))
+        self._keeper_substitute_ids[team] = substitute.id if substitute is not None else None
+        return substitute
 
     def press_and_mark_action(self,
                               players: List[Player],
@@ -151,7 +184,7 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
                     (volleyball.position.x + closest_hoop.position.x) / 2,
                     (volleyball.position.y + closest_hoop.position.y) / 2
                 )
-            target_position = self._clamp(target_position, x_limits, y_limits)
+            target_position = self._keep_away_from(target_position, presser.position, x_limits, y_limits)
             marker.direction = move_around_hoop_blockage(marker, target_position, target_hoop=closest_hoop)
 
     def _marking_position(self, opponent: Player, volleyball: VolleyBall) -> Vector2:
@@ -163,6 +196,38 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
             return Vector2(opponent.position.x, opponent.position.y)
         fraction = min(1.0, self.marking_distance / distance)
         return Vector2(opponent.position.x + fraction * dx, opponent.position.y + fraction * dy)
+
+    def _keep_away_from(self,
+                        target_position: Vector2,
+                        other_position: Vector2,
+                        x_limits: Optional[Tuple[float, float]],
+                        y_limits: Tuple[float, float]) -> Vector2:
+        """
+        Clamp `target_position` into the limits and keep it at least `min_defender_distance` from `other_position`:
+        first pushed radially away, and if the limits pull it back too close (e.g. both at the keeper zone line),
+        moved sideways in y next to `other_position`.
+        """
+        target_position = self._clamp(target_position, x_limits, y_limits)
+        if self._squared_distance(target_position, other_position) >= self.min_defender_distance ** 2:
+            return target_position
+        dx = target_position.x - other_position.x
+        dy = target_position.y - other_position.y
+        distance = (dx ** 2 + dy ** 2) ** 0.5
+        if distance == 0:
+            dx, dy, distance = 0.0, 1.0, 1.0
+        factor = self.min_defender_distance / distance
+        pushed = self._clamp(Vector2(other_position.x + dx * factor, other_position.y + dy * factor), x_limits, y_limits)
+        if self._squared_distance(pushed, other_position) >= self.min_defender_distance ** 2:
+            return pushed
+        # sidestep in y, on the side of the original target if it fits within the y limits
+        x_offset = pushed.x - other_position.x
+        y_offset = max(0.0, self.min_defender_distance ** 2 - x_offset ** 2) ** 0.5
+        side = 1 if dy >= 0 else -1
+        for sign in (side, -side):
+            y = other_position.y + sign * y_offset
+            if y_limits[0] <= y <= y_limits[1]:
+                return Vector2(pushed.x, y)
+        return pushed
 
     @staticmethod
     def _clamp(position: Vector2, x_limits: Optional[Tuple[float, float]], y_limits: Tuple[float, float]) -> Vector2:
