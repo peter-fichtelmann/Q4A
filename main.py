@@ -101,6 +101,9 @@ class GameRoom:
         self.game_state.max_delay_of_game_warnings = Config.MAX_DELAY_OF_GAME_WARNINGS
         self.game_state.no_delay_of_game_opponent_chaser_squared_distance_threshold = Config.NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD
         self.game_state.no_delay_of_game_opponent_beater_squared_distance_threshold = Config.NO_DELAY_OF_GAME_OPPONENT_BEATER_SQUARED_DISTANCE_THRESHOLD
+        self.game_state.stalled_volleyball_time_limit = Config.STALLED_VOLLEYBALL_TIME_LIMIT
+        self.game_state.stalled_volleyball_countdown = Config.STALLED_VOLLEYBALL_COUNTDOWN
+        self.game_state.stalled_volleyball_tackle_grace = Config.STALLED_VOLLEYBALL_TACKLE_GRACE
         self.game_state.beat_attempt_time_limit = Config.BEAT_ATTEMPT_TIME_LIMIT
         self.game_state.flag_catch_continue_timer = Config.FLAG_CATCH_CONTINUE_TIMER
         self.game_state.flag_catch_continue_timer_total = Config.FLAG_CATCH_CONTINUE_TIMER
@@ -1124,7 +1127,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         """Build a compact binary representation of dynamic entities.
 
         Format (little-endian):
-        - uint8: version (7)
+        - uint8: version (8)
         - uint8: player_count
         - uint8: ball_count
         - float16: game_time
@@ -1144,6 +1147,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         - uint8 set_score (255 = None)
         - uint8 third_dodgeball_team (0=None, 1=team_0, 2=team_1)
         - uint8 third dodgeball index into balls_order (255 = None)
+        - uint8 stalled volleyball countdown (whole game seconds left, 0 = no countdown)
 
         The caller appends one more uint8 per client: the index of the player that
         client controls (255 = none). That trailing byte is the only per-client part
@@ -1160,8 +1164,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header (version 7 adds the claiming flag and the third dodgeball team)
-        buf += struct.pack('<B', 7)
+        # header (version 8 adds the stalled volleyball countdown)
+        buf += struct.pack('<B', 8)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -1302,6 +1306,10 @@ async def broadcast_to_room(room: GameRoom, message: dict):
                 third_dodgeball_index = index
                 break
         buf += struct.pack('<B', third_dodgeball_index)
+        # stalled volleyball: seconds counted down next to the volleyball of a tackled carrier
+        game_logic = getattr(r, 'game_logic', None)
+        stalled_countdown = game_logic.volleyball_logic.stalled_volleyball_countdown() if game_logic is not None else 0
+        buf += struct.pack('<B', min(255, stalled_countdown))
 
         return bytes(buf)
 

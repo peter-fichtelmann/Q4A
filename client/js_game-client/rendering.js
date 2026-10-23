@@ -94,6 +94,22 @@ function isBeaterRole(role) {
 
 // Glowing red line from a claiming beater to the third dodgeball they claimed.
 // Only beaters see it: it tells them which ball is taken and who has the free way.
+// Number counted down above the stalled volleyball (see VolleyballLogic._check_stalled_volleyball).
+function drawStalledCountdown(ctx, bx, by, seconds, xScale) {
+  const fontPx = Math.max(12, xScale * 1.1);
+  const cy = by - Math.max(10, Config.VOLLEYBALL_RADIUS * xScale * 4) - fontPx * 0.5;
+  ctx.save();
+  ctx.font = `bold ${fontPx}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(2, fontPx * 0.15);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeText(String(seconds), bx, cy);
+  ctx.fillText(String(seconds), bx, cy);
+  ctx.restore();
+}
+
 function drawClaimLine(ctx, gs, worldToScreen, xScale, color) {
   if (!gs.players || !gs.balls || !gs.third_dodgeball_id) return;
   const me = gs.players[State.localPlayerId];
@@ -437,6 +453,10 @@ export function renderGame() {
           ctx.restore();
         }
       }
+
+      // stalled volleyball: count down the last seconds above the ball of a tackled carrier
+      const stalledCountdown = (State.gameState && State.gameState.stalled_countdown) || 0;
+      if (isVolley && stalledCountdown > 0) drawStalledCountdown(ctx, bx, by, stalledCountdown, xScale);
     }
   }
 

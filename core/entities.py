@@ -233,6 +233,8 @@ class VolleyBall(Ball):
                 inbounder: None|str = None,       # if ball is inbounded, if true then id of player
                 is_dead: Optional[bool] = False,
                 delay_of_game_timer: float = 0.0,
+                stalled_timer: float = 0.0,
+                time_since_carrier_tackled: float = float('inf'),
                 **ball_kwargs
                 ):
         super().__init__(
@@ -246,6 +248,8 @@ class VolleyBall(Ball):
         self.inbounder = inbounder
         self.is_dead = is_dead
         self.delay_of_game_timer = delay_of_game_timer
+        self.stalled_timer = stalled_timer  # game seconds the current carrier has been held in tackles
+        self.time_since_carrier_tackled = time_since_carrier_tackled  # game seconds since the carrier was last tackled
 
     def copy(self) -> 'VolleyBall':
         return VolleyBall(
@@ -256,6 +260,8 @@ class VolleyBall(Ball):
             inbounder=self.inbounder,
             is_dead=self.is_dead,
             delay_of_game_timer=self.delay_of_game_timer,
+            stalled_timer=self.stalled_timer,
+            time_since_carrier_tackled=self.time_since_carrier_tackled,
             previous_position=self.previous_position.copy(),
             velocity=self.velocity.copy(),
             deacceleration_rate=self.deacceleration_rate,

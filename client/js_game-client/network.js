@@ -173,6 +173,7 @@ export function handleMessage(message) {
       if (incoming.flag_catch_continue_timer !== undefined) State.gameState.flag_catch_continue_timer = incoming.flag_catch_continue_timer;
       if (incoming.set_score !== undefined) State.gameState.set_score = incoming.set_score;
       if (incoming.third_dodgeball_team !== undefined) State.gameState.third_dodgeball_team = incoming.third_dodgeball_team;
+      if (incoming.stalled_countdown !== undefined) State.gameState.stalled_countdown = incoming.stalled_countdown;
       if (incoming.third_dodgeball_id !== undefined) State.gameState.third_dodgeball_id = incoming.third_dodgeball_id;
     }
     // Which player we steer is sent as an index into playersOrder on every update
@@ -234,7 +235,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version < 1 || version > 7) { console.warn('Unknown binary state version', version); return null; }
+    if (version < 1 || version > 8) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -337,6 +338,11 @@ export function parseBinaryState(arrayBuffer) {
       const thirdIndex = dv.getUint8(off, true); off += 1;
       if (thirdIndex !== 255) third_dodgeball_id = (State.ballsOrder && State.ballsOrder[thirdIndex]) || `b_${thirdIndex}`;
     }
+    // Stalled volleyball countdown (0 = none): whole game seconds before the turnover.
+    let stalled_countdown = 0;
+    if (version >= 8) {
+      stalled_countdown = dv.getUint8(off, true); off += 1;
+    }
     // Trailing per-client byte: index of the player this client controls (255 = none).
     let controlled_index;
     if (version >= 5 && off < dv.byteLength) {
@@ -346,7 +352,7 @@ export function parseBinaryState(arrayBuffer) {
       players, balls, game_time: gameTime, score, delay_bin, possession_code,
       flag_runner, flag_runner_on_pitch, seeker_on_pitch,
       is_game_live, is_game_over, is_overtime, flag_catched_team,
-      flag_catch_continue_timer, set_score, third_dodgeball_team, third_dodgeball_id, controlled_index,
+      flag_catch_continue_timer, set_score, third_dodgeball_team, third_dodgeball_id, stalled_countdown, controlled_index,
     };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }

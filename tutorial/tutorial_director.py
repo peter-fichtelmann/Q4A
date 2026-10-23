@@ -124,6 +124,8 @@ class TutorialDirector:
             ball.crossed_hoop = None
             ball.inbounder = None
             ball.delay_of_game_timer = 0.0
+            ball.stalled_timer = 0.0
+            ball.time_since_carrier_tackled = float('inf')
 
     def _free_ball(self, ball: Ball, x: float, y: float):
         self._strip_ball(ball)
@@ -584,6 +586,33 @@ class TutorialDirector:
         # next game_logic.update; this tick runs before the update so it is visible.
         if carrier_id in trainee.tackling_player_ids:
             return self._success()
+        return []
+
+    def _setup_stalled_demo(self):
+        """A standing opponent carrier the trainee keeps tackling until the ball stalls."""
+        trainee = self.trainee
+        events = self._swap_trainee_role(PlayerRole.CHASER)
+        self._strip_all_balls()
+        carrier = self._cpu(1 - trainee.team, PlayerRole.CHASER)
+        # only the carrier on pitch, so the trainee is the closest opponent chaser/keeper
+        self._park_others({carrier.id} if carrier else ())
+        self._teleport(trainee, 31.5, 16.5)
+        if carrier is not None:
+            self._teleport(carrier, 34, 16.5)
+            self._give_ball(carrier, self.state.volleyball)
+        self._set_ai('idle')
+        return events
+
+    def _check_stalled_demo(self):
+        trainee = self.trainee
+        volleyball = self.state.volleyball
+        if trainee is None or volleyball is None:
+            return []
+        if trainee.has_ball == volleyball.id:
+            return self._success()
+        if self._phase == 0 and self.room.game_logic.volleyball_logic.stalled_volleyball_countdown() > 0:
+            self._phase = 1
+            return [self._progress('countdown')]
         return []
 
     def _setup_lineup(self, include_seekers: bool = False):

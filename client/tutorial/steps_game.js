@@ -327,6 +327,32 @@ const sections = [
                 },
             },
             {
+                id: 'stalled_volleyball',
+                scenario: 'stalled_demo',
+                anchor: () => {
+                    const carrier = opponent((p) => p.has_ball);
+                    return carrier ? A.playerRect(carrier.id, 1.2) : volleyballRect();
+                },
+                quip: QUIPS.must,
+                text: (ctx) => ctx.isTouch
+                    ? ['Now do not let go: touch the carrier and', 'keep tapping the right side to tackle.']
+                    : ['Now do not let go: touch the carrier and', 'hold space to keep tackling.'],
+                interaction: 'server',
+                hint: { afterMs: 20000, text: (ctx) => (ctx.isTouch
+                    ? 'Stay in contact and keep tapping, or the count resets.'
+                    : 'Stay in contact and hold space, or the count resets.') },
+                progressUpdates: {
+                    countdown: {
+                        text: ['See the countdown? At zero the stalled ball goes', 'to the closest opponent chaser or keeper: you!'],
+                        anchor: () => volleyballRect(),
+                    },
+                },
+                success: {
+                    text: ['Stalled ball! Tackled for 10 seconds,', 'the carrier has to give it up.'],
+                    quip: QUIPS.meow,
+                },
+            },
+            {
                 id: 'claim',
                 scenario: 'claim_practice',
                 anchor: (ctx) => claimButtonRect(ctx),

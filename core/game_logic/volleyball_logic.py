@@ -11,17 +11,76 @@ class VolleyballLogic:
 
     Attributes:
         state: Shared GameState instance for volleyball and hoops.
+        penalty_logic: Optional PenaltyLogic for stalled volleyball turnovers.
     """
 
-    def __init__(self, game_state: GameState, logger: logging.Logger | None = None):
+    def __init__(self, game_state: GameState, penalty_logic=None, logger: logging.Logger | None = None):
         """
         Initialize volleyball rule handling.
 
         Args:
             game_state: The active GameState instance.
+            penalty_logic: Optional PenaltyLogic dependency for stalled volleyball turnovers.
         """
         self.state = game_state
+        self.penalty_logic = penalty_logic
         self.logger = logger or BASE_LOGGER
+
+    def _check_stalled_volleyball(self, dt: float) -> None:
+        """
+        Turn a stalled volleyball over to the closest opponent chaser/keeper.
+
+        The volleyball is stalled while its carrier is being tackled. A tackle is a
+        single action, so the carrier counts as still tackled until
+        `stalled_volleyball_tackle_grace` game seconds pass without a new one.
+        After `stalled_volleyball_time_limit` game seconds of continuous tackling
+        the volleyball goes to the closest opponent chaser/keeper.
+
+        Must run before `_enforce_tackle`, which clears `tackling_player_ids`.
+
+        Args:
+            dt: Delta game time since last frame in seconds
+        """
+        volleyball = self.state.volleyball
+        if volleyball is None:
+            return
+        holder = self.state.players.get(volleyball.holder_id) if volleyball.holder_id is not None else None
+        # any release (pass, shot, beat, turnover) ends the stall; dead and inbounded volleyballs never stall
+        if holder is None or volleyball.is_dead or volleyball.inbounder is not None:
+            self._reset_stalled_volleyball(volleyball)
+            return
+        if holder.tackling_player_ids:
+            volleyball.time_since_carrier_tackled = 0.0
+        else:
+            volleyball.time_since_carrier_tackled += dt
+        if volleyball.time_since_carrier_tackled > self.state.stalled_volleyball_tackle_grace:
+            volleyball.stalled_timer = 0.0 # carrier broke free
+            return
+        volleyball.stalled_timer += dt
+        if volleyball.stalled_timer >= self.state.stalled_volleyball_time_limit:
+            self.logger.info("Stalled volleyball of player %s goes to the opponents", holder.id)
+            volleyball.possession_team = holder.team # turnover goes to the other team
+            if self.penalty_logic is not None:
+                self.penalty_logic._designate_turnover(volleyball)
+            self._reset_stalled_volleyball(volleyball)
+
+    @staticmethod
+    def _reset_stalled_volleyball(volleyball: VolleyBall) -> None:
+        volleyball.stalled_timer = 0.0
+        volleyball.time_since_carrier_tackled = float('inf')
+
+    def stalled_volleyball_countdown(self) -> int:
+        """
+        Whole game seconds left before the stalled volleyball turnover, while within
+        the last `stalled_volleyball_countdown` seconds; 0 otherwise.
+        """
+        volleyball = self.state.volleyball
+        if volleyball is None or volleyball.stalled_timer <= 0.0:
+            return 0
+        remaining = self.state.stalled_volleyball_time_limit - volleyball.stalled_timer
+        if remaining > self.state.stalled_volleyball_countdown:
+            return 0
+        return max(1, math.ceil(remaining))
 
     def _check_volleyball_possessions(self) -> None:
         """

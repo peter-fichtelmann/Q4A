@@ -38,6 +38,9 @@ class GameState:
     delay_of_game_warnings: Dict[int|str, int] = field(default_factory=lambda: {0: 0, 1: 0})  # Track warnings for each team
     no_delay_of_game_opponent_chaser_squared_distance_threshold: float = 4
     no_delay_of_game_opponent_beater_squared_distance_threshold: float = 16
+    stalled_volleyball_time_limit: float = 10.0                # Game seconds a tackled carrier keeps the volleyball before it goes to the closest opponent chaser/keeper
+    stalled_volleyball_countdown: float = 5.0                  # Last game seconds of the stalled volleyball limit counted down on the client
+    stalled_volleyball_tackle_grace: float = 2.0               # Game seconds without a new tackle after which the carrier counts as no longer tackled
     third_dodgeball: str = None # third dodgeball id if third dodgeball
     third_dodgeball_team: str = None # team which is assigned the third dodgeball
     potential_third_dodgeball_interference_kwargs: Dict[str, str] = field(default_factory=lambda: {'player_id': None, 'dodgeball_id': None}) # third dodgeball id and player id if potential interferenece if not beat attempt
@@ -166,6 +169,9 @@ class GameState:
             delay_of_game_velocity_x_threshold=self.delay_of_game_velocity_x_threshold,
             max_delay_of_game_warnings=self.max_delay_of_game_warnings,
             delay_of_game_warnings=self.delay_of_game_warnings.copy(),
+            stalled_volleyball_time_limit=self.stalled_volleyball_time_limit,
+            stalled_volleyball_countdown=self.stalled_volleyball_countdown,
+            stalled_volleyball_tackle_grace=self.stalled_volleyball_tackle_grace,
             third_dodgeball=self.third_dodgeball,
             third_dodgeball_team=self.third_dodgeball_team,
             potential_third_dodgeball_interference_kwargs=(

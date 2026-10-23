@@ -91,8 +91,9 @@ class GameLogic:
         self.basic_logic = BasicLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
         self.dodgeball_logic = DodgeballLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
         
+        self.volleyball_logic = VolleyballLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
+
         # Other classes have no cross-dependencies
-        self.volleyball_logic = VolleyballLogic(self.state, logger=self.logger)
         self.physical_contact_logic = PhysicalContactLogic(self.state, logger=self.logger)
         self.boundary_logic = BoundaryLogic(self.state, logger=self.logger)
         self.process_action_logic = ProcessActionLogic(self.state, logger=self.logger)
@@ -125,6 +126,8 @@ class GameLogic:
 
             # Check player collisions and enforce tackle effects before updating positions and after updating player velocities
             self.physical_contact_logic._check_player_collisions()
+            # stalled volleyball reads the tackles of this frame, so before _enforce_tackle clears them
+            self.volleyball_logic._check_stalled_volleyball(dt)
             # after collisions before updating positions so setting velocity to 0 when tackling takes effect before position updates and after velocity updates
             self.physical_contact_logic._enforce_tackle()
 
@@ -202,6 +205,7 @@ class GameLogic:
             ('basic.update_player_velocities', self.basic_logic, 'update_player_velocities'),
             ('physical._check_player_collisions', self.physical_contact_logic, '_check_player_collisions'),
             ('flag_runner._check_seeker_flag_runner_interaction', self.flag_runner_logic, '_check_seeker_flag_runner_interaction'),
+            ('volleyball._check_stalled_volleyball', self.volleyball_logic, '_check_stalled_volleyball'),
             ('physical._enforce_tackle', self.physical_contact_logic, '_enforce_tackle'),
             ('basic.update_ball_velocities', self.basic_logic, 'update_ball_velocities'),
             ('flag_runner.update_flag_runner_position', self.flag_runner_logic, 'update_flag_runner_position'),
