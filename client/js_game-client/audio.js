@@ -209,6 +209,46 @@ export function noteKnockouts(players) {
   if (beaten && performance.now() - interferenceAtMs > INTERFERENCE_SUPPRESS_MS) swellAtmosphere();
 }
 
+// Referee voice (penalty turnovers, inbounding, flag catch verdict).
+
+// Speech voices carry no gender, so it is guessed from the voice name.
+const FEMALE_VOICE_HINTS = ['female', 'woman', 'zira', 'samantha', 'victoria', 'karen', 'moira', 'tessa', 'fiona', 'hazel', 'susan', 'catherine', 'jenny', 'aria', 'libby', 'sonia', 'natasha', 'emma', 'serena', 'allison', 'ava', 'kate', 'linda', 'heather', 'michelle', 'clara', 'eva', 'katja', 'hedda', 'anna', 'amy', 'joanna', 'salli', 'kimberly', 'ivy', 'kendra'];
+const MALE_VOICE_HINTS = ['male', 'man', 'david', 'mark', 'daniel', 'alex', 'fred', 'george', 'guy', 'ryan', 'james', 'thomas', 'oliver', 'arthur', 'aaron', 'rishi', 'tom', 'stefan', 'conrad', 'christopher', 'eric', 'brian', 'matthew', 'justin', 'joey', 'william', 'gordon', 'lee', 'richard', 'paul'];
+// Pitch used to tell the genders apart when no matching voice is installed.
+const FALLBACK_PITCH = { female: 1.35, male: 0.75 };
+
+function nameMatches(name, hints) {
+  const words = name.toLowerCase().split(/[^a-z]+/);
+  return hints.some((hint) => words.includes(hint));
+}
+
+function pickVoice(gender) {
+  const synth = window.speechSynthesis;
+  const voices = synth.getVoices().filter((voice) => /^en/i.test(voice.lang));
+  const hints = gender === 'female' ? FEMALE_VOICE_HINTS : MALE_VOICE_HINTS;
+  // 'female' contains 'male', so whole words are compared and female names are excluded for men.
+  const matching = voices.filter((voice) => nameMatches(voice.name, hints)
+    && (gender === 'female' || !nameMatches(voice.name, FEMALE_VOICE_HINTS)));
+  if (matching.length > 0) return { voice: matching[Math.floor(Math.random() * matching.length)], pitch: 1 };
+  return { voice: voices[0] || null, pitch: FALLBACK_PITCH[gender] };
+}
+
+/** Say `text` in a randomly chosen male or female voice, unless muted. */
+export function speak(text) {
+  if (muted || typeof window === 'undefined' || !window.speechSynthesis) return;
+  const gender = Math.random() < 0.5 ? 'female' : 'male';
+  const { voice, pitch } = pickVoice(gender);
+  const utterance = new SpeechSynthesisUtterance(text);
+  if (voice) { utterance.voice = voice; utterance.lang = voice.lang; } else { utterance.lang = 'en-US'; }
+  utterance.pitch = pitch;
+  window.speechSynthesis.speak(utterance);
+}
+
+// Some browsers load the voice list asynchronously; touching it early starts that load.
+if (typeof window !== 'undefined' && window.speechSynthesis) {
+  try { window.speechSynthesis.getVoices(); } catch (e) {}
+}
+
 export function isMuted() { return muted; }
 
 export function setMuted(nextMuted) {

@@ -92,10 +92,10 @@ class GameLogic:
         self.dodgeball_logic = DodgeballLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
         
         self.volleyball_logic = VolleyballLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
+        self.boundary_logic = BoundaryLogic(self.state, penalty_logic=self.penalty_logic, logger=self.logger)
 
         # Other classes have no cross-dependencies
         self.physical_contact_logic = PhysicalContactLogic(self.state, logger=self.logger)
-        self.boundary_logic = BoundaryLogic(self.state, logger=self.logger)
         self.process_action_logic = ProcessActionLogic(self.state, logger=self.logger)
         self.utility_logic = UtilityLogic(self.state)
         self.flag_runner_logic = FlagRunnerLogic(self.state, logger=self.logger)

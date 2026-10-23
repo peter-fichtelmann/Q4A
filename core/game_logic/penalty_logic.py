@@ -22,10 +22,10 @@ class PenaltyLogic:
         """
         self.state = game_state
         self.logger = logger or BASE_LOGGER
-        # Penalty turnovers since the last pop, broadcast to clients by the game loop
-        self.turnover_announcements: list[dict] = []
+        # Referee calls since the last pop (penalty turnovers, inbounding), broadcast to clients by the game loop
+        self.announcements: list[dict] = []
 
-    def announce_turnover(self, rule: str, position: Vector2, balls: list[Ball]) -> None:
+    def announce_turnover(self, rule: str, position: Vector2, balls: list[Ball], back_to_hoops: list[Player] | None = None) -> None:
         """
         Queue a penalty turnover for the clients to show and announce.
 
@@ -33,18 +33,30 @@ class PenaltyLogic:
             rule: Key of the rule that caused the turnover (e.g. 'delay_of_game').
             position: Where the infringement happened.
             balls: Balls designated for turnover; balls without a receiver are left out.
+            back_to_hoops: Players sent back to hoops by the penalty.
         """
-        self.turnover_announcements.append({
+        self.announcements.append({
+            'type': 'penalty_turnover',
             'rule': rule,
             'x': float(position.x),
             'y': float(position.y),
             'balls': [ball.ball_type.value for ball in balls if ball is not None and ball.turnover_to_player is not None],
+            'back_to_hoops': [player.role.value for player in back_to_hoops or []],
         })
 
-    def pop_turnover_announcements(self) -> list[dict]:
-        """Return and clear the queued penalty turnovers."""
-        announcements = self.turnover_announcements
-        self.turnover_announcements = []
+    def announce_inbounding(self, team: int) -> None:
+        """
+        Queue the call of the team inbounding an out-of-bounds volleyball.
+
+        Args:
+            team: The inbounding team.
+        """
+        self.announcements.append({'type': 'inbounding', 'team': team})
+
+    def pop_announcements(self) -> list[dict]:
+        """Return and clear the queued referee calls."""
+        announcements = self.announcements
+        self.announcements = []
         return announcements
 
     def _check_delay_of_game(self, dt: float) -> None:
@@ -246,7 +258,7 @@ class PenaltyLogic:
             dodgeball_to_turnover.possession_team = player.team # turnover dodgeball to other team
             self._designate_turnover(dodgeball)
             self._designate_turnover(dodgeball_to_turnover)
-            self.announce_turnover('third_dodgeball_interference', player.position, [volleyball, dodgeball, dodgeball_to_turnover])
+            self.announce_turnover('third_dodgeball_interference', player.position, [volleyball, dodgeball, dodgeball_to_turnover], back_to_hoops=[player])
             self.logger.info("Back to hoops, volleyball, and double dodgeball turnover")
             self.state.third_dodgeball = None
             self.state.third_dodgeball_team = None

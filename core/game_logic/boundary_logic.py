@@ -15,14 +15,16 @@ class BoundaryLogic:
         state: Shared GameState instance used for boundary checks and entities.
     """
 
-    def __init__(self, game_state: GameState, logger: logging.Logger | None = None):
+    def __init__(self, game_state: GameState, penalty_logic=None, logger: logging.Logger | None = None):
         """
         Initialize boundary rule handling.
 
         Args:
             game_state: The active GameState instance.
+            penalty_logic: Optional PenaltyLogic dependency that announces the inbounding team.
         """
         self.state = game_state
+        self.penalty_logic = penalty_logic
         self.logger = logger or BASE_LOGGER
 
     def _enforce_hoop_blockage(self) -> None:
@@ -165,6 +167,8 @@ class BoundaryLogic:
                 keeper.inbounding = volleyball.id
                 volleyball.inbounder = keeper.id
                 keeper.dodgeball_immunity = True
+                if self.penalty_logic is not None:
+                    self.penalty_logic.announce_inbounding(keeper.team)
             return
         # for other_id, distance in self._get_sorted_distances(volleyball.id).items():
         for other_id, distance in self.state.squared_distances_ball_player.get(volleyball.id, []):
@@ -179,6 +183,8 @@ class BoundaryLogic:
                                 player.dodgeball_immunity = True # chaser/keeper immune while inbounding
                                 volleyball.inbounder = player.id
                                 volleyball.holder_id = None
+                                if self.penalty_logic is not None:
+                                    self.penalty_logic.announce_inbounding(player.team)
                                 break
 
     def _inbounding_free_way(self, dt: float) -> None:

@@ -13,17 +13,21 @@
 //
 // Built in JS with inline styles like the rest of the game-page chrome (fullscreen,
 // player switch, mute buttons). The match state arrives as an argument; the only
-// imports are Config (to convert the overtime countdown to real seconds) and network.js's
-// returnToLobby for the game over box's button — neither reaches back here, so no cycle.
+// imports are Config (to convert the overtime countdown to real seconds), network.js's
+// returnToLobby for the game over box's button and audio.js's speak for the spoken
+// verdict — none of them reaches back here, so no cycle.
 
 import { Config } from './config.js';
 import { returnToLobby } from './network.js';
 import { onActivate } from './utils.js';
+import { speak } from './audio.js';
 
 const TEAM_LABELS = ['Team A', 'Team B'];
 
 let reviewBox = null;
 let gameOverBox = null;
+// The verdict is spoken once per catch review.
+let verdictSpoken = false;
 
 // Slightly transparent white, centred over the pitch. It only ever shows while
 // play is stopped, so covering the middle costs nothing.
@@ -139,6 +143,7 @@ export function updateMatchPopups(gameState) {
   // game over box takes over once the countdown has run out.
   if (!hasCatch || gameState.is_game_live !== false || isGameOver) {
     reviewBox.hidden = true;
+    verdictSpoken = false;
     return;
   }
 
@@ -152,6 +157,10 @@ export function updateMatchPopups(gameState) {
   let countdownSeconds = null;
   if (total > 0 && remaining <= half) {
     lines.push('The catch is good!');
+    if (!verdictSpoken) {
+      verdictSpoken = true;
+      speak(gameState.is_overtime ? 'The catch is good! Continuing to overtime.' : 'The catch is good!');
+    }
     if (gameState.is_overtime) {
       const setScore = (gameState.set_score === null || gameState.set_score === undefined)
         ? '-' : gameState.set_score;

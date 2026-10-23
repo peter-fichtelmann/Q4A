@@ -6,7 +6,7 @@ import { showPrompt } from './fullscreen.js';
 import { ensureButtons, showForbidden } from './player_switch.js';
 import { ensureClaimButton, updateClaimButton } from './claim.js';
 import * as Audio from './audio.js';
-import { handlePenaltyTurnover } from './penalty_announcements.js';
+import { handlePenaltyTurnover, handleInbounding } from './penalty_announcements.js';
 
 function getNowMs() {
   return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -117,6 +117,8 @@ export function handleMessage(message) {
   } else if (message.type === 'penalty_turnover') {
     Audio.notePenaltyTurnover(message.rule);
     handlePenaltyTurnover(message);
+  } else if (message.type === 'inbounding') {
+    handleInbounding(message);
   } else if (message.type === 'switch_player_failed') {
     showForbidden(message.mode, message.reason);
   } else if (message.type === 'state_update') {

@@ -1499,9 +1499,9 @@ async def game_loop_manager():
                 room.game_logic.update(clock_tick_game)
                 room.game_tick_count += 1
                 logic_update_times.append(time.monotonic() - game_logic_start)
-                # Penalty turnovers: clients show the rule at the spot and announce it
-                for announcement in room.game_logic.penalty_logic.pop_turnover_announcements():
-                    await broadcast_to_room(room, {"type": "penalty_turnover", **announcement})
+                # Referee calls: penalty turnovers (shown at the spot and announced) and the inbounding team
+                for announcement in room.game_logic.penalty_logic.pop_announcements():
+                    await broadcast_to_room(room, announcement)
                 if room.computer_player is not None and (tick_counter % Config.COMPUTER_PLAYER_TICK_RATE == 0):
                     if Config.COMPUTER_PLAYER_STEP_PROFILING_ENABLED and not room.cpu_step_profile_finished:
                         profile_start_move = max(0, int(Config.COMPUTER_PLAYER_STEP_PROFILE_START_MOVE))
