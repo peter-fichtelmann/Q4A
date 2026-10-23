@@ -1,9 +1,12 @@
+import logging
 import math
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 from config import Config
-from core.entities import Player, Vector2
+from core.entities import Hoop, Player, Vector2, VolleyBall
 from core.game_logic.utility_logic import UtilityLogic
 from computer_player.computer_player_utility.kinematics import decay_table, first_throw_tick
+from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 
 
 class MoveUtility:
@@ -206,3 +209,148 @@ class ThrowDirector:
             mag_throw = math.hypot(throw_x, throw_y) or 1.0
         return (Vector2(throw_x / mag_throw * player.throw_velocity, throw_y / mag_throw * player.throw_velocity),
                 Vector2(receiver_x, receiver_y))
+
+
+class ScoreAttempter:
+    """
+    Decide whether the volleyball holder shoots and at which hoop.
+
+    Shared by the base attack and the moves, so a player scores the same way
+    no matter which of them currently steers it.
+    """
+    def __init__(self,
+                 interception_calculator: InterceptionCalculator,
+                 process_action_logic,
+                 score_squared_max_distance: float,
+                 scoring_threshold: float,
+                 logger: Optional[logging.Logger] = None):
+        """Store the interception model and the shot thresholds."""
+        self.interception_calculator = interception_calculator
+        self.process_action_logic = process_action_logic
+        # only consider scoring on hoops within this squared distance from the volleyball, since far shots are unlikely to be good opportunities
+        self.score_squared_max_distance = score_squared_max_distance
+        self.scoring_threshold = scoring_threshold
+        self.logger = logger or logging.getLogger("computer_player")
+
+    def get_intercepting_scores_for_hoops(self,
+                                          volleyball: VolleyBall,
+                                          volleyball_holder: Player,
+                                          attack_hoops: List[Hoop],
+                                          defending_chaser_keeper_ids: List[str]) -> Dict[str, float]:
+        """Compute interception-risk scores for shots toward each attack hoop."""
+        intercepting_scores_dict = {}
+        for hoop in attack_hoops:
+            volleyball_hoop_vector = Vector2(
+                hoop.position.x - volleyball.position.x,
+                hoop.position.y - volleyball.position.y
+            )
+            squared_volleyball_hoop_distance = volleyball_hoop_vector.x**2 + volleyball_hoop_vector.y**2
+            if squared_volleyball_hoop_distance > self.score_squared_max_distance:
+                continue
+            copy_volleyball = volleyball.copy()
+            mag_volleyball_hoop_vector = math.sqrt(squared_volleyball_hoop_distance)
+            copy_volleyball.velocity.x = volleyball_holder.throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector
+            copy_volleyball.velocity.y = volleyball_holder.throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
+            beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator.beam_cosine_angle(
+                moving_entity=copy_volleyball,
+                intercepting_player_ids=defending_chaser_keeper_ids,
+                target_position=hoop.position,
+                moving_entity_target_vector=volleyball_hoop_vector)
+            intercepting_score = self.interception_calculator.interception_score_from_beam_cosine_angle(
+                beam_cosine_angle=beam_cosine_angle,
+                beam_angle_player_id=beam_cosine_angle_player_id,
+                mag_moving_entity_velocity=volleyball_holder.throw_velocity,
+            )
+            intercepting_scores_dict[hoop.id] = intercepting_score
+        return intercepting_scores_dict
+
+    def attempt(self,
+                volleyball: VolleyBall,
+                volleyball_holder: Player,
+                attack_hoops: List[Hoop],
+                defending_chaser_keeper_ids: List[str]) -> bool:
+        """Shoot when interception risk for a hoop is below threshold. Returns True if a shot was taken."""
+        intercepting_scores_dict = self.get_intercepting_scores_for_hoops(volleyball, volleyball_holder, attack_hoops, defending_chaser_keeper_ids)
+        # if no intercepting_scores, then probably to far away to score
+        if len(intercepting_scores_dict) == 0:
+            return False
+        # get hoop with highest interception score (lowest chance of being intercepted)
+        best_hoop_id = min(intercepting_scores_dict, key=intercepting_scores_dict.get)
+        best_score = intercepting_scores_dict[best_hoop_id]
+        if best_score > self.scoring_threshold:
+            self.logger.info("Scoring on hoop %s with interception score %s", best_hoop_id, best_score)
+            best_hoop = next(hoop for hoop in attack_hoops if hoop.id == best_hoop_id)
+            volleyball_holder.direction = Vector2(
+                best_hoop.position.x - volleyball_holder.position.x,
+                best_hoop.position.y - volleyball_holder.position.y
+            )
+            self.process_action_logic.process_throw_action(volleyball_holder.id)
+            return True
+        return False
+
+
+@dataclass
+class PassOption:
+    """A pass that reaches its receiver without crossing the passer's own hoops."""
+    receiver_id: str
+    throw_direction: Vector2
+    predicted_receiver_position: Vector2
+    interception_score: float # the larger, the less likely the pass is intercepted (>= 1 outside the interception cone)
+
+
+class PassEvaluator:
+    """
+    Rate pass receivers and check single passes.
+
+    Shared by the base attack and the moves, so both use the same pass-to-player
+    score (position penalty) and the same interception model.
+    """
+    def __init__(self,
+                 interception_calculator: InterceptionCalculator,
+                 passing_evade_vector_position_penalty_weight: float):
+        """Store the interception model and the evade weight of the position penalty."""
+        self.interception_calculator = interception_calculator
+        self.passing_evade_vector_position_penalty_weight = passing_evade_vector_position_penalty_weight
+
+    def position_penalty(self, player: Player, attack_hoops: List[Hoop], evade_vector: Vector2) -> float:
+        """
+        Pass-to-player score, the lower the better.
+
+        Squared distance to the closest attack hoop (closer players have a better chance to score)
+        plus the weighted squared magnitude of the player's evade vector (pressure on that player).
+        """
+        closest_attack_hoop_squared_distance = min([
+            UtilityLogic._squared_distance(player.position, hoop.position) for hoop in attack_hoops
+        ])
+        squared_mag_evade_vector = evade_vector.x**2 + evade_vector.y**2
+        return closest_attack_hoop_squared_distance + self.passing_evade_vector_position_penalty_weight * squared_mag_evade_vector
+
+    def evaluate(self,
+                 volleyball: VolleyBall,
+                 volleyball_holder: Player,
+                 receiver: Player,
+                 own_hoops: List[Hoop],
+                 defending_chaser_keeper_ids: List[str]) -> Optional[PassOption]:
+        """
+        Throw direction, predicted receiver position and interception score of a pass.
+
+        Returns None if the ball cannot reach the receiver or the throw would go through own hoops.
+        """
+        throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, receiver)
+        if throw_direction is None:
+            return None # ball cannot reach this player
+        if InterceptionCalculator.intercepting_hoop_before_target(volleyball, predicted_receiver_position, own_hoops):
+            return None
+        # beam_cosine_angle normalizes throw_direction in place, which is then thrown as is
+        beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator.beam_cosine_angle(
+            moving_entity=volleyball,
+            intercepting_player_ids=defending_chaser_keeper_ids,
+            target_position=predicted_receiver_position,
+            moving_entity_target_vector=throw_direction
+        )
+        interception_score = self.interception_calculator.interception_score_from_beam_cosine_angle(
+            beam_cosine_angle=beam_cosine_angle,
+            beam_angle_player_id=beam_cosine_angle_player_id,
+            mag_moving_entity_velocity=volleyball_holder.throw_velocity,
+        )
+        return PassOption(receiver.id, throw_direction, predicted_receiver_position, interception_score)

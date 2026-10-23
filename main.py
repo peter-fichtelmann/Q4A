@@ -22,7 +22,8 @@ from collections import deque
 from core.game_state import GameState
 from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType, Hoop, FlagRunner
 from core.game_logic.game_logic import GameLogic
-from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer, RuleBasedComputerPlayer
+from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer
+from computer_player.computer_player_orchestrator import ComputerPlayerOrchestrator
 from config import Config
 from room_jsonl_logger import RoomJsonlLogger
 from tutorial import setup_tutorial_room, mark_tutorial_room_abandoned, sweep_abandoned_tutorial_rooms
@@ -130,7 +131,7 @@ class GameRoom:
         self._initialize_pitch()
         self._initialize_flag_seeker_entities()
         # self.computer_player_class: ComputerPlayer = RandomComputerPlayer # initializing computer player later
-        self.computer_player_class: ComputerPlayer = RuleBasedComputerPlayer
+        self.computer_player_class: ComputerPlayer = ComputerPlayerOrchestrator
         self.computer_player: ComputerPlayer = None # initialized later
         # Tutorial rooms use a scripted computer player driven by a TutorialDirector
         self.is_tutorial: bool = False

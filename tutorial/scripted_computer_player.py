@@ -3,7 +3,8 @@ from typing import List
 
 from core.game_logic.game_logic import GameLogic
 from core.entities import Vector2, BallType
-from computer_player.computer_player import ComputerPlayer, RuleBasedComputerPlayer
+from computer_player.computer_player import ComputerPlayer
+from computer_player.computer_player_orchestrator import ComputerPlayerOrchestrator
 from config import Config
 
 
@@ -328,9 +329,9 @@ class ScriptedComputerPlayer(ComputerPlayer):
         self.mode_kwargs['_thrown'] = True
 
     def _mode_free_play(self, dt: float):
-        """Graduation free play: delegate to the normal rule-based AI."""
+        """Graduation free play: delegate to the normal computer player orchestrator."""
         if self._free_play_delegate is None:
-            self._free_play_delegate = RuleBasedComputerPlayer(
+            self._free_play_delegate = ComputerPlayerOrchestrator(
                 self.logic,
                 computer_player_log_level=self.logger.level,
                 **Config.COMPUTER_PLAYER_KWARGS

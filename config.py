@@ -108,41 +108,58 @@ class Config:
     COMPUTER_PLAYER_LOG_LEVEL = logging.DEBUG
     COMPUTER_PLAYER_KWARGS = {
         # 'throwing_probability': 0.3, # for RandomComputerPlayer, probability of throwing each tick
-        'move_buffer_factor_x': 1.4, # for RuleBasedComputerPlayer move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
-        'move_buffer_factor_y': 1.4, # for RuleBasedComputerPlayer move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
-        'determine_attacking_team_max_dt_steps': 10, # for RuleBasedComputerPlayer, how many dt steps to look ahead when determining attacking team based on interception ratio
-        'determine_attacking_team_max_distance_per_step': 2 * PLAYER_RADIUS, # for RuleBasedComputerPlayer, max distance to move per step when determining attacking team based on interception ratio
-        'determine_attacking_team_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for RuleBasedComputerPlayer, max dt per step when determining attacking team based on interception ratio in s GAME_TIME
+        'move_buffer_factor_x': 1.4, # for ComputerPlayerOrchestrator move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
+        'move_buffer_factor_y': 1.4, # for ComputerPlayerOrchestrator move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
+        'scoring_kwargs': { # ScoreAttempter, shared by the base attack and the moves
+            'score_squared_max_distance': 8**2, # maximum squared distance from volleyball to consider scoring
+            'scoring_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a score
+        },
+        'passing_kwargs': { # PassEvaluator, shared by the base attack and the moves
+            'passing_evade_vector_position_penalty_weight': 100, # pass-to-player score = squared distance to closest attack hoop + weight * squared evade vector magnitude
+        },
         'diamond_attack_kwargs': {
-            'score_interception_max_dt_steps': 20, # for DiamondAttack, how many dt steps to look ahead when scoring
-            'score_interception_max_distance_per_step': 2 * PLAYER_RADIUS, # for DiamondAttack, max distance to move per step when scoring so that no intercepting player is skipped
-            'score_interception_max_dt_per_step': 0.5 * GAME_TIME_TO_REAL_TIME_RATIO, # for DiamondAttack, max dt per step when scoring in s GAME_TIME
-            'score_squared_max_distance': 8**2, # for DiamondAttack, maximum  squared distance from volleyball to consider scoring
-            'scoring_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a score
-            'chaser_evade_beater_weight': 3.5,
-            'chaser_evade_chaser_keeper_weight': 1.0,
-            'chaser_evade_teamate_chaser_keeper_weight': 1.5,
-            'volleyball_holder_evade_own_hoop_weight': (1.0, 2.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
-            'unloaded_beater_evade_loaded_opponent_beater_weight': -20, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
-            'loaded_beater_evade_loaded_opponent_beater_weight': -15,
-            'loaded_beater_evade_unloaded_opponent_beater_weight': 4.0,
-            'positioning_boundary_buffer_distance': 3, # for DiamondAttack, distance from boundary at which to start evading boundary
-            'passing_evade_vector_position_penalty_weight': 100,
-            'passing_threshold': 0.95, # for DiamondAttack, minimum interception score (chance of not being intercepted) to attempt a pass
-            'passing_squared_max_distance': 17**2, # for DiamondAttack, maximum squared distance from volleyball to consider passing
+            'chaser_keeper': {
+                'chaser_evade_beater_weight': 3.5,
+                'chaser_evade_chaser_keeper_weight': 1.0,
+                'chaser_evade_teamate_chaser_keeper_weight': 1.5,
+                'volleyball_holder_evade_own_hoop_weight': (1.0, 2.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
+                'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
+                'passing_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a pass
+                'passing_squared_max_distance': 17**2, # maximum squared distance from volleyball to consider passing (also used by moves)
+            },
+            'beater': {
+                'unloaded_beater_evade_loaded_opponent_beater_weight': -20, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
+                'loaded_beater_evade_loaded_opponent_beater_weight': -15,
+                'loaded_beater_evade_unloaded_opponent_beater_weight': 4.0,
+            },
         },
         'hoop_defence_kwargs': {
-            'beater_evade_beater_buddy_weight': 3,
-            'beater_evade_volleyball_weight': -3.5, # negative for anti-evade
-            'beater_evade_chaser_keeper_weight': -0.5, # negative for anti-evade
-            'loaded_beater_evade_beater_weight': 2, # loaded beaters evade other beaters
-            'unloaded_beater_evade_beater_weight': -2, # unloaded beaters try to make contact with other close opponent beaters
-            'unloaded_beater_max_x_to_midline': 8, # 11 would be stick to keeper zone, 0 would be got up to midline
-            'positioning_boundary_buffer_distance': 3, # for HoopDefence, distance from boundary at which to start evading boundary
+            'chaser_keeper': {},
+            'beater': {
+                'beater_evade_beater_buddy_weight': 3,
+                'beater_evade_volleyball_weight': -3.5, # negative for anti-evade
+                'beater_evade_chaser_keeper_weight': -0.5, # negative for anti-evade
+                'loaded_beater_evade_beater_weight': 2, # loaded beaters evade other beaters
+                'unloaded_beater_evade_beater_weight': -2, # unloaded beaters try to make contact with other close opponent beaters
+                'unloaded_beater_max_x_to_midline': 8, # 11 would be stick to keeper zone, 0 would be got up to midline
+                'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
+            },
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
         'beater_throw_threshold_loaded_beater': 4, # distance in m for beater to throw at loaded opponent beater
-        'simulation_game_logic_log_level': logging.ERROR # for RuleBasedComputerPlayer, log level to use for the simulated game logic when determining attacking team (set higher than logging.INFO to reduce output)
+        'moves': { # sampled by the ComputerPlayerOrchestrator; times in game seconds
+            'volleyball_shift': {
+                'start_probability_per_second': 0.9, # high for testing; probability that the move is tried within one game second
+                'cooldown': 3, # after the move ended, before the same team may start it again
+                'max_duration': 12, # timeout
+                'attack_line_fraction': 0.6, # participants must be past 3/5 of the pitch seen from their own end
+                'min_participants': 3, # on-stick CPU chasers/keepers past the attack line, carrier included
+                'pass_interception_threshold': 1.0, # >= 1: no opponent chaser/keeper in the interception cone
+                'loaded_beater_radius': 7, # m, no loaded opponent beater this close to the receiver
+                'max_pass_penalty_worsening': 100, # m^2, how much worse the receiver's pass-to-player score may be than the carrier's (e.g. 10 m -> 14 m from the hoops)
+                'delay_of_game_fraction': 0.5, # stop once the delay of game timer reaches this fraction of the limit
+            },
+        },
     }
 
 
