@@ -28,6 +28,8 @@ let reviewBox = null;
 let gameOverBox = null;
 // The verdict is spoken once per catch review.
 let verdictSpoken = false;
+// Game over is spoken once, either with the catch verdict or when the game over box comes up.
+let gameOverSpoken = false;
 
 // Slightly transparent white, centred over the pitch. It only ever shows while
 // play is stopped, so covering the middle costs nothing.
@@ -116,6 +118,11 @@ export function teamScoreText(gameState, teamIndex) {
   return `${score}${caughtTeam === teamIndex ? '*' : ''}`;
 }
 
+function spokenFinalScore(gameState) {
+  return `Game over! Final score: ${TEAM_LABELS[0]} ${teamScoreText(gameState, 0).replace('*', '')}, `
+    + `${TEAM_LABELS[1]} ${teamScoreText(gameState, 1).replace('*', '')}.`;
+}
+
 function scoreLine(gameState) {
   return `A ${teamScoreText(gameState, 0)} - ${teamScoreText(gameState, 1)} B`;
 }
@@ -131,6 +138,10 @@ export function updateMatchPopups(gameState) {
   const isGameOver = gameState.is_game_over === true;
 
   if (isGameOver) {
+    if (!gameOverSpoken) {
+      gameOverSpoken = true;
+      speak(spokenFinalScore(gameState));
+    }
     setLines(gameOverBox, [`Game over! The final score is ${scoreLine(gameState)}.`]);
     gameOverBox.style.opacity = '1';
     gameOverBox.hidden = false;
@@ -159,7 +170,12 @@ export function updateMatchPopups(gameState) {
     lines.push('The catch is good!');
     if (!verdictSpoken) {
       verdictSpoken = true;
-      speak(gameState.is_overtime ? 'The catch is good! Continuing to overtime.' : 'The catch is good!');
+      if (gameState.is_overtime) {
+        speak('The catch is good! Continuing to overtime.');
+      } else {
+        gameOverSpoken = true;
+        speak(`The catch is good! ${spokenFinalScore(gameState)}`);
+      }
     }
     if (gameState.is_overtime) {
       const setScore = (gameState.set_score === null || gameState.set_score === undefined)
