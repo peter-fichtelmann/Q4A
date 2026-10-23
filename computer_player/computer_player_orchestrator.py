@@ -5,9 +5,10 @@ from typing import Dict, List, Optional, Tuple
 
 from core.game_logic.game_logic import GameLogic
 from computer_player.computer_player import ComputerPlayer
-from computer_player.base_strategy import PossessionEvents, StepContext, TeamRoster
+from computer_player.base_strategy import BaseStrategy, PossessionEvents, StepContext, TeamRoster
 from computer_player.diamond_attack import DiamondAttackBeater, DiamondAttackChaserKeeper
 from computer_player.hoop_defence import HoopDefenceBeater, HoopDefenceChaserKeeper
+from computer_player.box_defence import BoxDefenceChaserKeeper
 from computer_player.dodgeball_assigner import DodgeballAssigner
 from computer_player.seeker_director import SeekerDirector
 from computer_player.volleyball_possession_calculator import VolleyballPossession, VolleyballPossessionCalculator
@@ -49,6 +50,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  move_buffer_factor_y: float = 1.2,
                  diamond_attack_kwargs: Optional[Dict] = None,
                  hoop_defence_kwargs: Optional[Dict] = None,
+                 box_defence_kwargs: Optional[Dict] = None,
+                 box_defence_probability: float = 0.5,
                  scoring_kwargs: Optional[Dict] = None,
                  passing_kwargs: Optional[Dict] = None,
                  moves: Optional[Dict[str, Dict]] = None,
@@ -60,6 +63,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
         diamond_attack_kwargs = diamond_attack_kwargs or {}
         hoop_defence_kwargs = hoop_defence_kwargs or {}
+        box_defence_kwargs = box_defence_kwargs or {}
         state = self.logic.state
 
         volleyball_radius = state.volleyball.radius if state.volleyball is not None else 0
@@ -104,8 +108,14 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         self.hoop_defence_beater = HoopDefenceBeater(
             self.logic, beater_throw_decider, logger=self.logger, **hoop_defence_kwargs.get('beater', {})
         )
+        self.box_defence_chaser_keeper = BoxDefenceChaserKeeper(
+            self.logic, move_around_hoop_blockages, logger=self.logger, **box_defence_kwargs.get('chaser_keeper', {})
+        )
         self.attack_strategies = [self.diamond_attack_chaser_keeper, self.diamond_attack_beater]
-        self.defence_strategies = [self.hoop_defence_chaser_keeper, self.hoop_defence_beater]
+        # the chaser/keeper defence strategy is chosen each time a team starts defending
+        self.box_defence_probability = box_defence_probability
+        self.defence_chaser_keeper_strategies: Dict[int, BaseStrategy] = {}
+        self._previous_defence_team: Optional[int] = None
         self.seeker_director = SeekerDirector(state)
 
         # moves
@@ -145,6 +155,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             cpu_player_id_set=self.cpu_player_id_set,
             rosters=self.rosters,
         )
+        self._select_defence_strategy(ctx)
         self._profile_call('orchestrator.update_moves', self._update_moves, ctx)
         self._profile_call('orchestrator.sample_moves', self._sample_moves, ctx)
 
@@ -156,7 +167,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
 
         assigned_beater_ids = self._profile_call('orchestrator.dodgeball_assigner', self.dodgeball_assigner, attack_team, steerable_id_set)
         defence_ids = [player_id for player_id in steerable_ids if self.logic.state.players[player_id].team != attack_team]
-        for strategy in self.defence_strategies:
+        defence_strategies = [self.defence_chaser_keeper_strategies[defence_team], self.hoop_defence_beater]
+        for strategy in defence_strategies:
             self._profile_call(f'orchestrator.{type(strategy).__name__}', strategy, ctx, defence_team, defence_ids, assigned_beater_ids)
         if attack_team is not None:
             attack_ids = [player_id for player_id in steerable_ids if self.logic.state.players[player_id].team == attack_team]
@@ -184,6 +196,24 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         if possession.team is not None:
             self._previous_attack_team = possession.team
         return events
+
+    def _select_defence_strategy(self, ctx: StepContext) -> None:
+        """Choose hoop or box defence for the chasers/keeper when a team starts defending."""
+        team = ctx.defence_team
+        if team == self._previous_defence_team and team in self.defence_chaser_keeper_strategies:
+            return
+        self._previous_defence_team = team
+        # no random draw for probability 0 or 1, so traces stay reproducible
+        if self.box_defence_probability <= 0:
+            use_box_defence = False
+        elif self.box_defence_probability >= 1:
+            use_box_defence = True
+        else:
+            use_box_defence = random.random() < self.box_defence_probability
+        strategy = self.box_defence_chaser_keeper if use_box_defence else self.hoop_defence_chaser_keeper
+        strategy.reset(team)
+        self.defence_chaser_keeper_strategies[team] = strategy
+        self.logger.info("Defence strategy: team=%s %s", team, type(strategy).__name__)
 
     def _update_moves(self, ctx: StepContext) -> None:
         """Remove moves whose stop criteria are met and start their cooldown."""

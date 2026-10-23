@@ -69,6 +69,10 @@ class BaseStrategy(ABC):
         self.logic = logic
         self.logger = logger or logging.getLogger("computer_player")
 
+    def reset(self, team: int) -> None:
+        """Called when the orchestrator selects this strategy for `team`. Clears per-team state."""
+        pass
+
     @abstractmethod
     def __call__(self,
                  ctx: StepContext,
