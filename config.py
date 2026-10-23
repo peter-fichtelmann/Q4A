@@ -127,7 +127,7 @@ class Config:
                 'chaser_evade_beater_weight': 3.5,
                 'chaser_evade_chaser_keeper_weight': 1.0,
                 'chaser_evade_teamate_chaser_keeper_weight': 1.5,
-                'volleyball_holder_evade_own_hoop_weight': (1.0, 2.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
+                'volleyball_holder_evade_own_hoop_weight': (0.5, 1.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
                 'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
                 'passing_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a pass
                 'passing_squared_max_distance': 17**2, # maximum squared distance from volleyball to consider passing (also used by moves)
