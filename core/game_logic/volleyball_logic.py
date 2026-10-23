@@ -62,6 +62,7 @@ class VolleyballLogic:
             volleyball.possession_team = holder.team # turnover goes to the other team
             if self.penalty_logic is not None:
                 self.penalty_logic._designate_turnover(volleyball)
+                self.penalty_logic.announce_turnover('stalled_volleyball', volleyball.position, [volleyball])
             self._reset_stalled_volleyball(volleyball)
 
     @staticmethod

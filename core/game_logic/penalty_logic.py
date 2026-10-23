@@ -22,6 +22,30 @@ class PenaltyLogic:
         """
         self.state = game_state
         self.logger = logger or BASE_LOGGER
+        # Penalty turnovers since the last pop, broadcast to clients by the game loop
+        self.turnover_announcements: list[dict] = []
+
+    def announce_turnover(self, rule: str, position: Vector2, balls: list[Ball]) -> None:
+        """
+        Queue a penalty turnover for the clients to show and announce.
+
+        Args:
+            rule: Key of the rule that caused the turnover (e.g. 'delay_of_game').
+            position: Where the infringement happened.
+            balls: Balls designated for turnover; balls without a receiver are left out.
+        """
+        self.turnover_announcements.append({
+            'rule': rule,
+            'x': float(position.x),
+            'y': float(position.y),
+            'balls': [ball.ball_type.value for ball in balls if ball is not None and ball.turnover_to_player is not None],
+        })
+
+    def pop_turnover_announcements(self) -> list[dict]:
+        """Return and clear the queued penalty turnovers."""
+        announcements = self.turnover_announcements
+        self.turnover_announcements = []
+        return announcements
 
     def _check_delay_of_game(self, dt: float) -> None:
         """
@@ -98,6 +122,7 @@ class PenaltyLogic:
                     self.logger.warning("Delay of game penalty on team %s", volleyball.possession_team)
                     # initiate volleyball turnover
                     self._designate_turnover(volleyball)
+                    self.announce_turnover('delay_of_game', volleyball.position, [volleyball])
                     # TODO implement blue card penalty
                 volleyball.delay_of_game_timer = 0.0
         else:
@@ -211,6 +236,7 @@ class PenaltyLogic:
             dodgeball_to_turnover.possession_team = player.team # turnover dodgeball to other team
             self._designate_turnover(dodgeball)
             self._designate_turnover(dodgeball_to_turnover)
+            self.announce_turnover('third_dodgeball_interference', player.position, [volleyball, dodgeball, dodgeball_to_turnover])
             self.logger.info("Back to hoops, volleyball, and double dodgeball turnover")
             self.state.third_dodgeball = None
             self.state.third_dodgeball_team = None

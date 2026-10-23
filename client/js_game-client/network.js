@@ -6,6 +6,7 @@ import { showPrompt } from './fullscreen.js';
 import { ensureButtons, showForbidden } from './player_switch.js';
 import { ensureClaimButton, updateClaimButton } from './claim.js';
 import * as Audio from './audio.js';
+import { handlePenaltyTurnover } from './penalty_announcements.js';
 
 function getNowMs() {
   return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -112,6 +113,8 @@ export function handleMessage(message) {
     Audio.ensureMuteButton();
     // Baseline only, so joining a running game does not replay its goals.
     Audio.noteScore(State.gameState && State.gameState.score);
+  } else if (message.type === 'penalty_turnover') {
+    handlePenaltyTurnover(message);
   } else if (message.type === 'switch_player_failed') {
     showForbidden(message.mode, message.reason);
   } else if (message.type === 'state_update') {

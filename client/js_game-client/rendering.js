@@ -2,6 +2,7 @@ import { Config } from './config.js';
 import { State } from './state.js';
 import { updateViewport } from './viewport.js';
 import { updateMatchPopups, teamScoreText } from './match_popups.js';
+import { drawPenaltyAnnouncements } from './penalty_announcements.js';
 
 function cloneGameStateForRendering(gameState) {
   if (!gameState) return null;
@@ -459,6 +460,9 @@ export function renderGame() {
       if (isVolley && stalledCountdown > 0) drawStalledCountdown(ctx, bx, by, stalledCountdown, xScale);
     }
   }
+
+  // rule of a recent penalty turnover, at the spot where it happened
+  drawPenaltyAnnouncements(ctx, worldToScreen, xScale);
 
   // The catching team's score keeps a star after it, here and in the popups.
   if (gs.score) { document.getElementById('score0').textContent = teamScoreText(gs, 0); document.getElementById('score1').textContent = teamScoreText(gs, 1); }
