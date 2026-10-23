@@ -113,7 +113,9 @@ export function handleMessage(message) {
     Audio.ensureMuteButton();
     // Baseline only, so joining a running game does not replay its goals.
     Audio.noteScore(State.gameState && State.gameState.score);
+    Audio.noteKnockouts(State.gameState && State.gameState.players);
   } else if (message.type === 'penalty_turnover') {
+    Audio.notePenaltyTurnover(message.rule);
     handlePenaltyTurnover(message);
   } else if (message.type === 'switch_player_failed') {
     showForbidden(message.mode, message.reason);
@@ -188,6 +190,8 @@ export function handleMessage(message) {
     // Cheers for a quaffle goal and for a caught flag runner; both show up here
     // as a score increase.
     Audio.noteScore(State.gameState && State.gameState.score);
+    // Crowd swell for a beat, which shows up here as a new knockout.
+    Audio.noteKnockouts(State.gameState && State.gameState.players);
     updateClaimButton();
     rememberServerUpdateTime();
   }

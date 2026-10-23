@@ -1,4 +1,5 @@
 // Crowd bed for the game page plus the cheer for a goal or a flag-runner catch.
+// A beat makes the crowd swell: the bed jumps to 1.75x and fades back over 1s.
 //
 // One atmosphere track plays at half volume; 1.5s before it ends a different one
 // starts, so the two overlap briefly and the bed never drops to silence.
@@ -25,6 +26,12 @@ const EVENT_SOUNDS = [
 const ATMOSPHERE_VOLUME = 0.5;
 const EVENT_VOLUME = 1.0;
 const CROSSFADE_LEAD_SECONDS = 1.5;
+const BEAT_SWELL_FACTOR = 1.75;
+const BEAT_SWELL_FADE_MS = 1000;
+// A third-dodgeball interference penalty also knocks a player out. Its
+// penalty_turnover message is broadcast just before the state that shows the
+// knockout, so knockouts this soon after one are not taken for a beat.
+const INTERFERENCE_SUPPRESS_MS = 500;
 
 // Browsers refuse to start audio before the user has interacted with the page,
 // so playback waits for one of these.
@@ -42,6 +49,11 @@ const liveTracks = new Set();
 let muteButton = null;
 // Running total of both teams' scores; null until the first state arrives.
 let lastScoreTotal = null;
+// is_knocked_out per player id as of the previous state, to spot new knockouts.
+const lastKnockedOut = new Map();
+let swellStartMs = null;
+let swellFrame = null;
+let interferenceAtMs = -Infinity;
 
 /** Normalize `play()` across browsers that return nothing instead of a promise. */
 function toPromise(playback) {
@@ -56,9 +68,36 @@ function pickOtherTrackIndex(excludeIndex) {
   return index;
 }
 
+/** Bed volume right now: the base level, raised while a beat swell fades out. */
+function atmosphereVolume() {
+  if (swellStartMs === null) return ATMOSPHERE_VOLUME;
+  const progress = (performance.now() - swellStartMs) / BEAT_SWELL_FADE_MS;
+  if (progress >= 1) return ATMOSPHERE_VOLUME;
+  const factor = BEAT_SWELL_FACTOR + (1 - BEAT_SWELL_FACTOR) * progress;
+  return Math.min(1, ATMOSPHERE_VOLUME * factor);
+}
+
+function applySwellFrame() {
+  const volume = atmosphereVolume();
+  for (const element of liveTracks) element.volume = volume;
+  if (volume === ATMOSPHERE_VOLUME) {
+    swellStartMs = null;
+    swellFrame = null;
+    return;
+  }
+  swellFrame = requestAnimationFrame(applySwellFrame);
+}
+
+/** Jump the bed to 1.75x and fade it back to normal over 1s; a new beat restarts it. */
+export function swellAtmosphere() {
+  swellStartMs = performance.now();
+  if (swellFrame === null) applySwellFrame();
+  else for (const element of liveTracks) element.volume = atmosphereVolume();
+}
+
 function playTrack(index) {
   const element = new Audio(ATMOSPHERE_TRACKS[index]);
-  element.volume = ATMOSPHERE_VOLUME;
+  element.volume = atmosphereVolume();
   element.muted = muted;
   element.preload = 'auto';
   liveTracks.add(element);
@@ -146,6 +185,28 @@ export function noteScore(score) {
   const total = (Number(score[0]) || 0) + (Number(score[1]) || 0);
   if (lastScoreTotal !== null && total > lastScoreTotal) playScoreSound();
   lastScoreTotal = total;
+}
+
+/** Called for every penalty turnover; see INTERFERENCE_SUPPRESS_MS. */
+export function notePenaltyTurnover(rule) {
+  if (rule === 'third_dodgeball_interference') interferenceAtMs = performance.now();
+}
+
+/**
+ * Swell the crowd whenever a player was newly knocked out, i.e. beaten.
+ *
+ * Like noteScore, a player seen for the first time only sets the baseline, so
+ * joining a running game does not swell for players already knocked out.
+ */
+export function noteKnockouts(players) {
+  if (!players) return;
+  let beaten = false;
+  for (const [id, player] of Object.entries(players)) {
+    const knockedOut = !!player.is_knocked_out;
+    if (knockedOut && lastKnockedOut.get(id) === false) beaten = true;
+    lastKnockedOut.set(id, knockedOut);
+  }
+  if (beaten && performance.now() - interferenceAtMs > INTERFERENCE_SUPPRESS_MS) swellAtmosphere();
 }
 
 export function isMuted() { return muted; }
