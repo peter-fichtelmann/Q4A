@@ -59,15 +59,18 @@ class ProcessActionLogic:
         if throw_direction is None:
             throw_direction = player.direction
         mag_dir = UtilityLogic._magnitude(throw_direction)
+        throw_velocity = player.throw_velocity
+        if player.tackling_player_ids:
+            throw_velocity *= 0.5 # tackled players throw at half velocity
         if mag_dir > 1:
             throw_direction.x /= mag_dir
             throw_direction.y /= mag_dir
-            mag_velocity = player.throw_velocity # mag velocity should be same as player throw velocity because throw direction is normalized
+            mag_velocity = throw_velocity # mag velocity should be same as player throw velocity because throw direction is normalized
         else:
-            mag_velocity = player.throw_velocity * mag_dir # if throw direction is not normalized, scale velocity by mag_dir to prevent faster throws in diagonal directions
+            mag_velocity = throw_velocity * mag_dir # if throw direction is not normalized, scale velocity by mag_dir to prevent faster throws in diagonal directions
 
-        ball.velocity.x = player.throw_velocity * throw_direction.x
-        ball.velocity.y = player.throw_velocity * throw_direction.y
+        ball.velocity.x = throw_velocity * throw_direction.x
+        ball.velocity.y = throw_velocity * throw_direction.y
         # mag_velocity = UtilityLogic._calculate_magnitude(ball.velocity)
         # Prevent divide-by-zero if mag_velocity is (unexpectedly) zero
         if mag_velocity > 1e-2:
