@@ -24,7 +24,7 @@ class Config:
     DODGEBALL_RADIUS = 1.33 * 0.70 / 2 / 3.14 # larger than in rulebook for better accessibility (rulebook: 68 centimeters and 70 centimeters in circumference (approximately 0.111 m))
     PLAYER_RADIUS = 0.4
 
-    PLAYER_MAX_SPEED_REAL = 3.5 # m/s per real second
+    PLAYER_MAX_SPEED_REAL = 4 # m/s per real second
     PLAYER_MIN_SPEED_REAL = 1 # m/s per real second
     PLAYER_THROW_VELOCITY_REAL = 11 # m/s per real second
     PLAYER_ACCELERATION_REAL = 3 # m/s2 per real second
@@ -57,6 +57,9 @@ class Config:
     MAX_DELAY_OF_GAME_WARNINGS = 1  # Number of warnings before penalty per team
     NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD = 2**2 # squared distance threshold to opponent chasers to prevent delay of game
     NO_DELAY_OF_GAME_OPPONENT_BEATER_SQUARED_DISTANCE_THRESHOLD = 4**2 # squared distance threshold to opponent beaters to prevent delay of game
+    STALLED_VOLLEYBALL_TIME_LIMIT = 10  # game seconds a tackled volleyball carrier keeps the ball before it goes to the closest opponent chaser/keeper
+    STALLED_VOLLEYBALL_COUNTDOWN = 5  # last game seconds of the stalled volleyball limit that are counted down next to the ball
+    STALLED_VOLLEYBALL_TACKLE_GRACE = 2  # game seconds without a new tackle after which the carrier counts as free again (tackles are single actions)
 
     # should be at least NO_DELAY_OF_GAME_OPPONENT_CHASER_SQUARED_DISTANCE_THRESHOLD
     MIN_SQUARED_DISTANCE_PLAYER_PLAYER_CALCULATION = 4 # only calculate and store distances for player pairs that are within this squared distance to save on calculations and memory, since distant players won't interact with each other
@@ -143,6 +146,14 @@ class Config:
                 'unloaded_beater_evade_beater_weight': -2, # unloaded beaters try to make contact with other close opponent beaters
                 'unloaded_beater_max_x_to_midline': 8, # 11 would be stick to keeper zone, 0 would be got up to midline
                 'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
+            },
+        },
+        'box_defence_probability': 0.5, # chance that a team uses the box defence instead of the hoop defence for chasers/keeper, drawn each time it starts defending
+        'box_defence_kwargs': {
+            'chaser_keeper': {
+                'marking_distance': 1.5, # m from the marked opponent towards the volleyball (passing lane)
+                'marking_max_distance': 10, # m, only opponent chasers/keepers this close to the volleyball are marked
+                'hoop_clearance_x': 1.0, # m, box players stay at least this far in front of the hoops
             },
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
