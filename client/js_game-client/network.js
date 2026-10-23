@@ -187,13 +187,15 @@ export function handleMessage(message) {
       const controlledId = State.playersOrder[incoming.controlled_index];
       if (controlledId) State.localPlayerId = controlledId;
     }
+    // Right after the merge, before the hooks below: if one of them throws, a stale
+    // time would make the renderer extrapolate the fresh positions further and further.
+    rememberServerUpdateTime();
     // Cheers for a quaffle goal and for a caught flag runner; both show up here
     // as a score increase.
     Audio.noteScore(State.gameState && State.gameState.score);
     // Crowd swell for a beat, which shows up here as a new knockout.
     Audio.noteKnockouts(State.gameState && State.gameState.players);
     updateClaimButton();
-    rememberServerUpdateTime();
   }
 }
 

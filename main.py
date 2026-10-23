@@ -34,8 +34,24 @@ logger = logging.getLogger('quadball')
 
 app = FastAPI(title="Quadball Game Server")
 
+class RevalidatedStaticFiles(StaticFiles):
+    """
+    Static files the browser must revalidate (ETag -> cheap 304) before every use.
+
+    Without Cache-Control browsers cache heuristically, by the age of Last-Modified: a module
+    unchanged for weeks is reused for days, while a just-edited module importing it is fetched
+    fresh. The mismatched pair then breaks at runtime (e.g. a new network.js calling a function
+    the cached audio.js does not export yet).
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Serve static files
-app.mount("/client", StaticFiles(directory="client"), name="client")
+app.mount("/client", RevalidatedStaticFiles(directory="client"), name="client")
 
 # ==================== DATA MODELS ====================
 

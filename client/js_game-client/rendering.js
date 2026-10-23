@@ -16,12 +16,16 @@ function cloneGameStateForRendering(gameState) {
   return JSON.parse(JSON.stringify(gameState));
 }
 
+// Real seconds the renderer predicts ahead at most, a few server ticks: when updates
+// stop (lag, or a stale update time) entities hold still instead of flying off.
+const MAX_PREDICTION_SECONDS = 0.25;
+
 function getPredictionDeltaSeconds() {
   const tickSeconds = Number(State.network?.tickSeconds) || 0;
   const lastUpdateAtMs = Number(State.network?.lastUpdateAtMs) || 0;
   if (!tickSeconds || !lastUpdateAtMs) return 0;
   const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-  return Math.max(0, (nowMs - lastUpdateAtMs) / 1000);
+  return Math.min(MAX_PREDICTION_SECONDS, Math.max(0, (nowMs - lastUpdateAtMs) / 1000));
 }
 
 function extrapolateEntities(entityMap, deltaSeconds) {
