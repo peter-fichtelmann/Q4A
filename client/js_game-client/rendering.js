@@ -239,8 +239,9 @@ export function renderGame() {
       const hs = worldToScreen(hp.x, hp.y); const hx = hs.x, hy = hs.y;
       const hoopRadiusM = (hoop.radius !== undefined) ? hoop.radius : (Config.HOOP_RADIUS / 2);
       const halfWidthPx = 0.5 * 0.5 * xScale; const halfLengthPx = hoopRadiusM * xScale;
-      ctx.fillStyle = (hoop.team === 'A' || hoop.team === 0) ? colour_hoop_A : colour_hoop_B;
-      ctx.beginPath(); ctx.ellipse(hx, hy, halfWidthPx, halfLengthPx, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = (hoop.team === 'A' || hoop.team === 0) ? colour_hoop_A : colour_hoop_B;
+      ctx.lineWidth = lineThickness;
+      ctx.beginPath(); ctx.ellipse(hx, hy, halfWidthPx, halfLengthPx, 0, 0, Math.PI * 2); ctx.stroke();
     }
   }
 
