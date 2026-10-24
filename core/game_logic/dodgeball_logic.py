@@ -77,6 +77,9 @@ class DodgeballLogic:
         if len(dodgeballs) == 0:
             return  # No dodgeballs exist
         for dodgeball in dodgeballs:
+            if dodgeball.holder_id is not None:
+                # a held dodgeball can neither be picked up (a touching teammate would take it without clearing the holder's has_ball) nor beat
+                continue
             # Distances are sorted ascending; once above this threshold no player can interact.
             max_interaction_dist_sq = (dodgeball.radius + self.state.max_player_radius) ** 2
             # for other_id, distance in self._get_sorted_distances(dodgeball.id).items():
