@@ -224,10 +224,9 @@ class GameState:
 
         This allows more efficient logging.
         """
-        # RoomJsonlLogger encodes this dict positionally. Any key added, removed or moved
-        # here must be mirrored at the same index in room_jsonl_logger's
-        # _GAME_STATE_DYNAMIC_FIELD_NAMES, _serialize_game_state_dynamic_payload() and
-        # _apply_dynamic_snapshot_to_state(), and invalidates already written state logs.
+        # RoomJsonlLogger encodes this dict positionally and RoomJsonlStateReader decodes it by
+        # these same keys. Append new keys at the end: removing or moving a key invalidates
+        # already written state logs.
         return {
             "is_game_live": self.is_game_live,
             "is_game_over": self.is_game_over,

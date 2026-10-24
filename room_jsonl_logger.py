@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import struct
-from copy import deepcopy
 from dataclasses import fields, is_dataclass
 from collections import deque
 from datetime import datetime
@@ -29,69 +28,6 @@ _STATE_RECORD_KIND_DELTA = 2
 _DYNAMIC_KEYFRAME_INTERVAL_TICKS = 200
 _SPARSE_LIST_KEY = '_'
 _OMIT = object()
-
-_PLAYER_DYNAMIC_FIELD_NAMES = [
-    'position',
-    'previous_position',
-    'direction',
-    'velocity',
-    'is_knocked_out',
-    'has_ball',
-    'catch_cooldown',
-    'dodgeball_immunity',
-    'inbounding',
-    'in_contact_player_ids',
-    'tackling_player_ids',
-    'is_receiving_turnover_ball',
-    'flag_runner_interaction_time',
-    'is_claiming',
-]
-
-_FLAG_RUNNER_DYNAMIC_FIELD_NAMES = [
-    'position',
-    'direction',
-    'velocity',
-]
-
-_BALL_DYNAMIC_FIELD_NAMES = [
-    'position',
-    'previous_position',
-    'velocity',
-    'possession_team',
-    'holder_id',
-    'previous_thrower_id',
-    'turnover_to_player',
-]
-
-_VOLLEYBALL_DYNAMIC_FIELD_NAMES = _BALL_DYNAMIC_FIELD_NAMES + [
-    'crossed_hoop',
-    'inbounder',
-    'is_dead',
-    'delay_of_game_timer',
-]
-
-_DODGEBALL_DYNAMIC_FIELD_NAMES = _BALL_DYNAMIC_FIELD_NAMES + [
-    'beat_attempt_time',
-]
-
-_GAME_STATE_DYNAMIC_FIELD_NAMES = [
-    'is_game_active',
-    'players',
-    'balls',
-    'volleyball',
-    'dodgeballs',
-    'score',
-    'game_time',
-    'delay_of_game_warnings',
-    'third_dodgeball',
-    'third_dodgeball_team',
-    'potential_third_dodgeball_interference_kwargs',
-    'seeker_on_pitch',
-    'set_score',
-    'flag_runner',
-    'flag_runner_on_pitch',
-]
-
 
 def _object_field_names(value) -> list[str]:
     """Ordered attribute names used to encode an object positionally.
@@ -162,7 +98,7 @@ def _decode_player_full_payload(payload) -> Player:
         velocity=_decode_vector2_payload(payload[6]),
         radius=float(payload[7]),
         is_knocked_out=bool(payload[8]),
-        has_ball=bool(payload[9]),
+        has_ball=payload[9], # id of the held ball, or False/None
         max_speed=float(payload[10]),
         min_speed=float(payload[11]),
         acceleration=float(payload[12]),
@@ -239,6 +175,9 @@ def _decode_ball_full_payload(payload) -> Ball:
             inbounder=payload[13] if len(payload) > 13 else None,
             is_dead=bool(payload[14]) if len(payload) > 14 else False,
             delay_of_game_timer=float(payload[15]) if len(payload) > 15 else 0.0,
+            stalled_timer=float(payload[16]) if len(payload) > 16 and payload[16] is not None else 0.0,
+            # infinity (never tackled) reaches the log as null with orjson
+            time_since_carrier_tackled=float(payload[17]) if len(payload) > 17 and payload[17] is not None else float('inf'),
             previous_position=base_kwargs['previous_position'],
             velocity=base_kwargs['velocity'],
             deacceleration_rate=base_kwargs['deacceleration_rate'],
@@ -285,221 +224,118 @@ def _decode_hoop_full_payload(payload) -> Hoop:
     )
 
 
-def _update_vector2(target: Vector2 | None, payload) -> Vector2:
-    updated = _decode_vector2_payload(payload)
-    if target is None:
-        return updated
-    target.x = updated.x
-    target.y = updated.y
-    return target
+def _serialize_scalar(value):
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, int):
+        return _quantize_int16(value)
+    if isinstance(value, float):
+        return _quantize_float16(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return _serialize_scalar(value.value)
+    return str(value)
 
 
-def _update_player_dynamic_payload(player: Player, payload) -> None:
-    if not isinstance(payload, list):
-        return
+def _serialize_value(value, dynamic_only: bool = False):
+    """Positional encoding of every state record; the reader uses it too, to rebuild its snapshots."""
+    if value is None or isinstance(value, (str, bool, int, float, datetime, Enum)):
+        return _serialize_scalar(value)
 
-    player.position = _update_vector2(player.position, payload[0])
-    player.previous_position = _update_vector2(player.previous_position, payload[1])
-    player.direction = _update_vector2(player.direction, payload[2])
-    player.velocity = _update_vector2(player.velocity, payload[3])
-    player.is_knocked_out = bool(payload[4])
-    player.has_ball = bool(payload[5])
-    player.catch_cooldown = float(payload[6]) if payload[6] is not None else 0.0
-    player.dodgeball_immunity = bool(payload[7])
-    player.inbounding = payload[8]
-    player.in_contact_player_ids = list(payload[9]) if isinstance(payload[9], list) else []
-    player.tackling_player_ids = list(payload[10]) if isinstance(payload[10], list) else []
-    player.is_receiving_turnover_ball = bool(payload[11])
-    player.flag_runner_interaction_time = float(payload[12]) if len(payload) > 12 and payload[12] is not None else 0.0
-    player.is_claiming = bool(payload[13]) if len(payload) > 13 else False
+    # For incremental game logs, prefer explicit dynamic serialization when available.
+    if dynamic_only and hasattr(value, 'serialize_dynamic_attributes'):
+        value = value.serialize_dynamic_attributes()
+
+    if isinstance(value, dict):
+        return [_serialize_value(item, dynamic_only=dynamic_only) for item in value.values()]
+    if isinstance(value, (list, tuple, set, deque)):
+        return [_serialize_value(item, dynamic_only=dynamic_only) for item in value]
+    if is_dataclass(value) or hasattr(value, '__dict__'):
+        return [_serialize_value(getattr(value, key, None), dynamic_only=dynamic_only) for key in _object_field_names(value)]
+    return _serialize_scalar(value)
 
 
-def _update_flag_runner_dynamic_payload(flag_runner: FlagRunner, payload) -> None:
-    if not isinstance(payload, list) or flag_runner is None:
-        return
+def _keyframe_template(snapshot, legacy: bool = False):
+    """
+    Values a keyframe leaves out, shaped like `snapshot` (the previous dynamic snapshot).
 
-    flag_runner.position = _update_vector2(flag_runner.position, payload[0])
-    flag_runner.direction = _update_vector2(flag_runner.direction, payload[1])
-    flag_runner.velocity = _update_vector2(flag_runner.velocity, payload[2])
-
-
-def _update_ball_dynamic_payload(ball: Ball, payload) -> None:
-    if not isinstance(payload, list):
-        return
-
-    ball.position = _update_vector2(ball.position, payload[0])
-    ball.previous_position = _update_vector2(ball.previous_position, payload[1])
-    ball.velocity = _update_vector2(ball.velocity, payload[2])
-    ball.possession_team = payload[3]
-    ball.holder_id = payload[4]
-    ball.previous_thrower_id = payload[5]
-    ball.turnover_to_player = payload[6]
-
-    if isinstance(ball, VolleyBall):
-        ball.crossed_hoop = payload[7] if len(payload) > 7 else None
-        ball.inbounder = payload[8] if len(payload) > 8 else None
-        ball.is_dead = bool(payload[9]) if len(payload) > 9 else False
-        ball.delay_of_game_timer = float(payload[10]) if len(payload) > 10 else 0.0
-    elif isinstance(ball, DodgeBall):
-        ball.beat_attempt_time = float(payload[7]) if len(payload) > 7 else 0.0
+    Keyframes omit None scalars and all-default leaf lists (empty id lists, zero vectors, unset id pairs).
+    `legacy` logs (header without 'dynamic_keyframe_omits') also omitted False and 0 scalars: those come
+    back as False/0.0 for bool and float fields, but a nullable int (e.g. possession_team 0) reads as None.
+    """
+    if isinstance(snapshot, list):
+        if _is_leaf_list_template(snapshot):
+            if any(isinstance(item, str) for item in snapshot):
+                return [] # id list
+            if snapshot and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in snapshot):
+                return [0.0 if isinstance(item, float) else 0 for item in snapshot]
+            return [None] * len(snapshot)
+        return [_keyframe_template(item, legacy) for item in snapshot]
+    if legacy and isinstance(snapshot, bool):
+        return False
+    if legacy and isinstance(snapshot, float):
+        return 0.0
+    return None
 
 
-def _serialize_vector2_payload(value: Vector2 | None, default: bool = False):
-    if default or value is None:
-        return [0.0, 0.0]
-    return [value.x, value.y]
+def _apply_dynamic_value(current, payload):
+    """
+    Write a dynamic payload back into `current` and return the updated value.
 
-
-def _serialize_player_dynamic_payload(player: Player, default: bool = False):
-    if default:
-        return [
-            _serialize_vector2_payload(None, default=True),
-            _serialize_vector2_payload(None, default=True),
-            _serialize_vector2_payload(None, default=True),
-            _serialize_vector2_payload(None, default=True),
-            False,
-            False,
-            0.0,
-            False,
-            None,
-            [],
-            [],
-            False,
-            0.0,
-            False,
-        ]
-
-    return [
-        _serialize_vector2_payload(player.position),
-        _serialize_vector2_payload(player.previous_position),
-        _serialize_vector2_payload(player.direction),
-        _serialize_vector2_payload(player.velocity),
-        player.is_knocked_out,
-        player.has_ball,
-        player.catch_cooldown,
-        player.dodgeball_immunity,
-        player.inbounding,
-        list(player.in_contact_player_ids),
-        list(player.tackling_player_ids),
-        player.is_receiving_turnover_ball,
-        player.flag_runner_interaction_time,
-        player.is_claiming,
-    ]
-
-
-def _serialize_flag_runner_dynamic_payload(flag_runner: FlagRunner | None, default: bool = False):
-    if default or flag_runner is None:
-        return [
-            _serialize_vector2_payload(None, default=True),
-            _serialize_vector2_payload(None, default=True),
-            _serialize_vector2_payload(None, default=True),
-        ]
-
-    return [
-        _serialize_vector2_payload(flag_runner.position),
-        _serialize_vector2_payload(flag_runner.direction),
-        _serialize_vector2_payload(flag_runner.velocity),
-    ]
-
-
-def _serialize_ball_dynamic_payload(ball: Ball, default: bool = False):
-    if default:
-        base_payload = [
-            _serialize_vector2_payload(None, default=True),
-            _serialize_vector2_payload(None, default=True),
-            _serialize_vector2_payload(None, default=True),
-            None,
-            None,
-            None,
-            None,
-        ]
-    else:
-        base_payload = [
-            _serialize_vector2_payload(ball.position),
-            _serialize_vector2_payload(ball.previous_position),
-            _serialize_vector2_payload(ball.velocity),
-            ball.possession_team,
-            ball.holder_id,
-            ball.previous_thrower_id,
-            ball.turnover_to_player,
-        ]
-
-    if isinstance(ball, VolleyBall):
-        base_payload.extend([
-            None if default else ball.crossed_hoop,
-            None if default else ball.inbounder,
-            False if default else ball.is_dead,
-            0.0 if default else ball.delay_of_game_timer,
-        ])
-    elif isinstance(ball, DodgeBall):
-        base_payload.append(0.0 if default else ball.beat_attempt_time)
-
-    return base_payload
-
-
-def _serialize_game_state_dynamic_payload(state: GameState, default: bool = False):
-    players_payload = [
-        _serialize_player_dynamic_payload(player, default=default)
-        for player in state.players.values()
-    ]
-    balls_payload = [
-        _serialize_ball_dynamic_payload(ball, default=default)
-        for ball in state.balls.values()
-    ]
-    volleyball_payload = None if state.volleyball is None else _serialize_ball_dynamic_payload(state.volleyball, default=default)
-    dodgeballs_payload = [
-        _serialize_ball_dynamic_payload(dodgeball, default=default)
-        for dodgeball in state.dodgeballs
-    ]
-
-    # Order must match GameState.serialize_dynamic_attributes() exactly: the records are
-    # positional, so any key inserted there has to be mirrored at the same index here,
-    # in _GAME_STATE_DYNAMIC_FIELD_NAMES and in _apply_dynamic_snapshot_to_state.
-    return [
-        False if default else state.is_game_active,
-        players_payload,
-        balls_payload,
-        volleyball_payload,
-        dodgeballs_payload,
-        [0, 0] if default else list(state.score),
-        0.0 if default else state.game_time,
-        [0, 0] if default else [state.delay_of_game_warnings.get(0, 0), state.delay_of_game_warnings.get(1, 0)],
-        None,
-        None,
-        [None, None] if default else [
-            state.potential_third_dodgeball_interference_kwargs.get('player_id') if state.potential_third_dodgeball_interference_kwargs else None,
-            state.potential_third_dodgeball_interference_kwargs.get('dodgeball_id') if state.potential_third_dodgeball_interference_kwargs else None,
-        ],
-        False if default else state.seeker_on_pitch,
-        None if default else state.set_score,
-        _serialize_flag_runner_dynamic_payload(state.flag_runner, default=default),
-        False if default else state.flag_runner_on_pitch,
-    ]
+    Mirrors _serialize_value(dynamic_only=True): objects follow the key order of their
+    serialize_dynamic_attributes(), dicts their key order. Shorter payloads written before
+    a key was appended leave the remaining attributes untouched.
+    """
+    if hasattr(current, 'serialize_dynamic_attributes'):
+        if isinstance(payload, list):
+            for key, item in zip(current.serialize_dynamic_attributes().keys(), payload):
+                setattr(current, key, _apply_dynamic_value(getattr(current, key, None), item))
+        return current
+    if isinstance(current, Vector2):
+        if isinstance(payload, list) and len(payload) >= 2:
+            current.x = float(payload[0])
+            current.y = float(payload[1])
+        return current
+    if isinstance(current, dict):
+        if not isinstance(payload, list):
+            return payload
+        for index, key in enumerate(list(current.keys())):
+            # a keyframe template cannot tell an unset id pair from an empty id list, so missing values are None
+            current[key] = _apply_dynamic_value(current[key], payload[index] if index < len(payload) else None)
+        return current
+    if isinstance(current, list):
+        if not isinstance(payload, list):
+            return payload
+        if current and all(hasattr(item, 'serialize_dynamic_attributes') for item in current):
+            for item, item_payload in zip(current, payload):
+                _apply_dynamic_value(item, item_payload)
+            return current
+        return list(payload)
+    return payload
 
 
 def _apply_sparse_snapshot(template, sparse):
+    """
+    Apply a sparse record to `template` and return the new snapshot.
+
+    Only the lists along changed paths are copied; unchanged branches are shared with `template`,
+    so snapshots must be treated as immutable. Any value that is not a sparse list replaces the
+    old one, e.g. None replacing a former leaf list.
+    """
     if sparse is _OMIT:
-        return deepcopy(template)
+        return template
 
-    if isinstance(template, list):
-        if _is_leaf_list_template(template):
-            if isinstance(sparse, list):
-                return deepcopy(sparse)
-            return deepcopy(template)
+    if isinstance(sparse, dict) and _SPARSE_LIST_KEY in sparse:
+        result = list(template) if isinstance(template, list) else []
+        for index, item in sparse[_SPARSE_LIST_KEY]:
+            index = int(index)
+            while len(result) <= index: # the list grew (e.g. a player joined)
+                result.append(None)
+            result[index] = _apply_sparse_snapshot(result[index], item)
+        return result
 
-        if isinstance(sparse, dict) and _SPARSE_LIST_KEY in sparse:
-            result = deepcopy(template)
-            for index, item in sparse[_SPARSE_LIST_KEY]:
-                index = int(index)
-                if 0 <= index < len(result):
-                    result[index] = _apply_sparse_snapshot(result[index], item)
-            return result
-
-        if isinstance(sparse, list):
-            return deepcopy(sparse)
-
-    # Scalars (and non-list payloads) should be replaced directly when present.
-    return deepcopy(sparse)
+    return sparse
 
 def _serialize_for_jsonl(obj, _seen: Optional[set[int]] = None):
     """Serialize recursively while compacting all numeric values to 16-bit precision."""
@@ -622,7 +458,8 @@ class RoomJsonlLogger:
                 return _OMIT if omit_defaults else {_SPARSE_LIST_KEY: []}
             return {_SPARSE_LIST_KEY: entries}
 
-        if omit_defaults and self._is_default_scalar(value):
+        # only None: a left out False or 0 could not be told apart from None (e.g. possession_team 0) when reading
+        if omit_defaults and value is None:
             return _OMIT
         return value
 
@@ -751,44 +588,13 @@ class RoomJsonlLogger:
 
         return _schema
 
-    def _serialize_scalar(self, value):
-        if value is None or isinstance(value, (str, bool)):
-            return value
-        if isinstance(value, int):
-            return _quantize_int16(value)
-        if isinstance(value, float):
-            return _quantize_float16(value)
-        if isinstance(value, datetime):
-            return value.isoformat()
-        if isinstance(value, Enum):
-            return self._serialize_scalar(value.value)
-        return str(value)
-
-    def _serialize_value(self, value, path: str, dynamic_only: bool = False):
-        if value is None or isinstance(value, (str, bool, int, float, datetime, Enum)):
-            return self._serialize_scalar(value)
-
-        # For incremental game logs, prefer explicit dynamic serialization when available.
-        if dynamic_only and hasattr(value, 'serialize_dynamic_attributes'):
-            value = value.serialize_dynamic_attributes()
-
-        if isinstance(value, dict):
-            keys = list(value.keys())
-            return [self._serialize_value(value[key], f"{path}.{index}", dynamic_only=dynamic_only) for index, key in enumerate(keys)]
-        if isinstance(value, (list, tuple, set, deque)):
-            return [self._serialize_value(item, f"{path}.{index}", dynamic_only=dynamic_only) for index, item in enumerate(value)]
-        if is_dataclass(value) or hasattr(value, '__dict__'):
-            field_names = _object_field_names(value)
-            return [self._serialize_value(getattr(value, key, None), f"{path}.{key}", dynamic_only=dynamic_only) for key in field_names]
-        return self._serialize_scalar(value)
-
     def _ensure_header_written(self, room) -> None:
         if self._header_written or not self.enabled:
             return
 
         # Build snapshots and extract structures with type registry before writing metadata.
-        _ = self._serialize_value(room.game_state, 'game_state', dynamic_only=False)
-        _ = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
+        _ = _serialize_value(room.game_state, dynamic_only=False)
+        _ = _serialize_value(room.game_state, dynamic_only=True)
         full_structure, full_type_registry = self._build_structure_with_registry(room.game_state, dynamic_only=False)
         dynamic_structure, dynamic_type_registry = self._build_structure_with_registry(room.game_state, dynamic_only=True)
         full_ordered_key_schema = self._collect_ordered_key_schema(room.game_state, 'game_state', dynamic_only=False)
@@ -817,6 +623,7 @@ class RoomJsonlLogger:
             },
             'dynamic_keyframe_interval_ticks': _DYNAMIC_KEYFRAME_INTERVAL_TICKS,
             'dynamic_sparse_list_key': _SPARSE_LIST_KEY,
+            'dynamic_keyframe_omits': 'null', # older logs also omitted false and 0
             'game_state_structure': full_structure,
             'game_state_types': full_type_registry,
             'game_state_ordered_key_schema': full_ordered_key_schema,
@@ -848,9 +655,9 @@ class RoomJsonlLogger:
             return
         self._ensure_header_written(room)
         if not self._initial_state_snapshot_written:
-            game_state_payload = self._serialize_value(room.game_state, 'game_state', dynamic_only=False)
+            game_state_payload = _serialize_value(room.game_state, dynamic_only=False)
             self._initial_state_snapshot_written = True
-            dynamic_snapshot = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
+            dynamic_snapshot = _serialize_value(room.game_state, dynamic_only=True)
             self._previous_dynamic_snapshot = dynamic_snapshot
             self._last_dynamic_keyframe_tick = int(_serialize_for_jsonl(room.game_tick_count))
             payload = [
@@ -860,7 +667,7 @@ class RoomJsonlLogger:
             ]
         else:
             tick = int(_serialize_for_jsonl(room.game_tick_count))
-            dynamic_snapshot = self._serialize_value(room.game_state, 'game_state', dynamic_only=True)
+            dynamic_snapshot = _serialize_value(room.game_state, dynamic_only=True)
 
             # Prefer stable interval boundaries (e.g. 200, 400, 600, ...) and
             # fall back to elapsed-distance emission if boundaries are skipped.
@@ -947,6 +754,7 @@ class RoomJsonlStateReader:
 
     def __init__(self, state_file_path):
         self.state_file_path = Path(state_file_path)
+        self.metadata: Optional[dict] = None
 
     @staticmethod
     def _loads(line: str):
@@ -954,12 +762,34 @@ class RoomJsonlStateReader:
             return _orjson.loads(line)
         return json.loads(line)
 
+    def _iter_records(self):
+        """Yield (tick, kind, payload) of the state records; the room metadata goes to self.metadata."""
+        with self.state_file_path.open('r', encoding='utf-8') as handle:
+            for line in handle:
+                stripped_line = line.strip()
+                if not stripped_line:
+                    continue
+                record = self._loads(stripped_line)
+                if isinstance(record, dict) and record.get('event') == 'room_metadata':
+                    self.metadata = record
+                    continue
+                if not isinstance(record, list) or len(record) < 3:
+                    continue
+                yield int(record[0]), int(record[1]), record[2]
+
+    def _game_state_field_names(self) -> list[str]:
+        """GameState field order of the full record: the one in the header, else the current dataclass."""
+        try:
+            return list(self.metadata['game_state_types']['core.game_state.GameState']['fields'])
+        except (TypeError, KeyError):
+            return [field.name for field in fields(GameState)]
+
     def _decode_game_state_full_payload(self, payload) -> GameState:
         state = GameState()
         if not isinstance(payload, list):
             return state
 
-        field_names = [field.name for field in fields(GameState)]
+        field_names = self._game_state_field_names()
         for index, field_name in enumerate(field_names):
             if index >= len(payload):
                 break
@@ -1067,179 +897,63 @@ class RoomJsonlStateReader:
 
         return state
 
-    def _apply_dynamic_snapshot_to_state(self, state: GameState, snapshot) -> None:
-        # Every field below is length-guarded, so shorter snapshots written before a
-        # field was appended still replay (they just keep the decoded default).
-        if not isinstance(snapshot, list):
-            return
-
-        is_game_active_payload = snapshot[0] if len(snapshot) > 0 else None
-        player_payloads = snapshot[1] if len(snapshot) > 1 else []
-        ball_payloads = snapshot[2] if len(snapshot) > 2 else []
-        volleyball_payload = snapshot[3] if len(snapshot) > 3 else None
-        dodgeball_payloads = snapshot[4] if len(snapshot) > 4 else []
-        score_payload = snapshot[5] if len(snapshot) > 5 else None
-        game_time_payload = snapshot[6] if len(snapshot) > 6 else None
-        warnings_payload = snapshot[7] if len(snapshot) > 7 else None
-        third_dodgeball_payload = snapshot[8] if len(snapshot) > 8 else None
-        third_dodgeball_team_payload = snapshot[9] if len(snapshot) > 9 else None
-        interference_payload = snapshot[10] if len(snapshot) > 10 else None
-        seeker_on_pitch_payload = snapshot[11] if len(snapshot) > 11 else None
-        set_score_payload = snapshot[12] if len(snapshot) > 12 else None
-        flag_runner_payload = snapshot[13] if len(snapshot) > 13 else None
-        flag_runner_on_pitch_payload = snapshot[14] if len(snapshot) > 14 else None
-
-        if is_game_active_payload is not None:
-            state.is_game_active = bool(is_game_active_payload)
-
-        if isinstance(player_payloads, list):
-            current_player_ids = list(state.players.keys())
-            for index, player_id in enumerate(current_player_ids):
-                if index >= len(player_payloads):
-                    break
-                _update_player_dynamic_payload(state.players[player_id], player_payloads[index])
-
-        if isinstance(ball_payloads, list):
-            current_ball_ids = list(state.balls.keys())
-            for index, ball_id in enumerate(current_ball_ids):
-                if index >= len(ball_payloads):
-                    break
-                _update_ball_dynamic_payload(state.balls[ball_id], ball_payloads[index])
-
-        if state.volleyball is not None and volleyball_payload is not None:
-            _update_ball_dynamic_payload(state.volleyball, volleyball_payload)
-
-        if isinstance(dodgeball_payloads, list):
-            for index, dodgeball in enumerate(state.dodgeballs):
-                if index >= len(dodgeball_payloads):
-                    break
-                _update_ball_dynamic_payload(dodgeball, dodgeball_payloads[index])
-
-        if isinstance(score_payload, list):
-            state.score = list(score_payload)
-        if game_time_payload is not None:
-            state.game_time = game_time_payload
-        if isinstance(warnings_payload, list):
-            warning_keys = list(state.delay_of_game_warnings.keys()) or [0, 1]
-            for index, warning_key in enumerate(warning_keys):
-                if index >= len(warnings_payload):
-                    break
-                state.delay_of_game_warnings[warning_key] = warnings_payload[index]
-        # Nullable fields must accept explicit None from snapshots so resets are preserved.
-        state.third_dodgeball = third_dodgeball_payload
-        state.third_dodgeball_team = third_dodgeball_team_payload
-        if isinstance(interference_payload, list):
-            state.potential_third_dodgeball_interference_kwargs = {
-                'player_id': interference_payload[0] if len(interference_payload) > 0 else None,
-                'dodgeball_id': interference_payload[1] if len(interference_payload) > 1 else None,
-            }
-        elif interference_payload is None:
-            state.potential_third_dodgeball_interference_kwargs = {
-                'player_id': None,
-                'dodgeball_id': None,
-            }
-        if seeker_on_pitch_payload is not None:
-            state.seeker_on_pitch = bool(seeker_on_pitch_payload)
-        state.set_score = set_score_payload
-        if state.flag_runner is not None and flag_runner_payload is not None:
-            _update_flag_runner_dynamic_payload(state.flag_runner, flag_runner_payload)
-        if flag_runner_on_pitch_payload is not None:
-            state.flag_runner_on_pitch = bool(flag_runner_on_pitch_payload)
-
-    def _find_replay_start_tick(self, tick: int) -> Optional[int]:
-        """Find the best replay start record at or before target tick.
-
-        Returns the latest keyframe tick <= target tick when available,
-        otherwise falls back to the initial full snapshot tick.
+    def _replay(self, start_tick: int = 0):
         """
-        full_tick: Optional[int] = None
-        keyframe_tick: Optional[int] = None
+        Yield (tick, state, dynamic_snapshot) per record, starting at the latest keyframe at or before
+        `start_tick`. `state` is the decoded full record and is not updated here: apply the snapshot with
+        _apply_dynamic_value(state, dynamic_snapshot) when a state is needed.
+        """
+        replay_start_tick = None
+        for record_tick, record_kind, _ in self._iter_records():
+            if record_tick > start_tick:
+                break
+            if record_kind == _STATE_RECORD_KIND_KEYFRAME:
+                replay_start_tick = record_tick
 
-        try:
-            with self.state_file_path.open('r', encoding='utf-8') as handle:
-                for line in handle:
-                    stripped_line = line.strip()
-                    if not stripped_line:
-                        continue
-
-                    record = self._loads(stripped_line)
-                    if isinstance(record, dict) and record.get('event') == 'room_metadata':
-                        continue
-                    if not isinstance(record, list) or len(record) < 3:
-                        continue
-
-                    record_tick = int(record[0])
-                    record_kind = int(record[1])
-
-                    if record_kind == _STATE_RECORD_KIND_FULL:
-                        if full_tick is None:
-                            full_tick = record_tick
-                    elif record_kind == _STATE_RECORD_KIND_KEYFRAME and record_tick <= tick:
-                        keyframe_tick = record_tick
-
-                    if record_tick > tick:
-                        break
-        except Exception:
-            logger.exception('Failed to scan replay start in JSONL state log from %s', self.state_file_path)
-            return None
-
-        if keyframe_tick is not None:
-            return keyframe_tick
-        return full_tick
+        state: Optional[GameState] = None
+        snapshot = None
+        for record_tick, record_kind, payload in self._iter_records():
+            if record_kind == _STATE_RECORD_KIND_FULL:
+                state = self._decode_game_state_full_payload(payload)
+                snapshot = _serialize_value(state, dynamic_only=True)
+            elif state is None or (replay_start_tick is not None and record_tick < replay_start_tick):
+                continue
+            elif record_kind == _STATE_RECORD_KIND_KEYFRAME:
+                legacy = (self.metadata or {}).get('dynamic_keyframe_omits') != 'null'
+                snapshot = _apply_sparse_snapshot(_keyframe_template(snapshot, legacy), payload)
+            elif record_kind == _STATE_RECORD_KIND_DELTA:
+                snapshot = _apply_sparse_snapshot(snapshot, payload)
+            else:
+                continue
+            yield record_tick, state, snapshot
 
     def get_game_state_at_tick(self, tick: int) -> Optional[GameState]:
+        """State of the latest record at or before `tick`, or None."""
         if tick < 0 or not self.state_file_path.exists():
             return None
 
-        replay_start_tick = self._find_replay_start_tick(tick)
-        current_state: Optional[GameState] = None
-        current_dynamic_snapshot = None
-
+        state = None
+        snapshot = None
         try:
-            with self.state_file_path.open('r', encoding='utf-8') as handle:
-                for line in handle:
-                    stripped_line = line.strip()
-                    if not stripped_line:
-                        continue
-
-                    record = self._loads(stripped_line)
-                    if isinstance(record, dict) and record.get('event') == 'room_metadata':
-                        continue
-                    if not isinstance(record, list) or len(record) < 3:
-                        continue
-
-                    record_tick = int(record[0])
-                    record_kind = int(record[1])
-                    payload = record[2]
-
-                    # Replay records only up to the requested tick and return
-                    # the latest reconstructed state at-or-before that tick.
-                    if record_tick > tick:
-                        break
-
-                    if record_kind == _STATE_RECORD_KIND_FULL:
-                        current_state = self._decode_game_state_full_payload(payload)
-                        current_dynamic_snapshot = _serialize_game_state_dynamic_payload(current_state, default=False)
-                        continue
-
-                    # Skip historical dynamic records before the best replay start.
-                    if replay_start_tick is not None and record_tick < replay_start_tick:
-                        continue
-
-                    if current_state is None or current_dynamic_snapshot is None:
-                        continue
-
-                    if record_kind == _STATE_RECORD_KIND_KEYFRAME:
-                        template = _serialize_game_state_dynamic_payload(current_state, default=True)
-                        current_dynamic_snapshot = _apply_sparse_snapshot(template, payload)
-                    elif record_kind == _STATE_RECORD_KIND_DELTA:
-                        current_dynamic_snapshot = _apply_sparse_snapshot(current_dynamic_snapshot, payload)
-                    else:
-                        continue
-
-                    self._apply_dynamic_snapshot_to_state(current_state, current_dynamic_snapshot)
+            for record_tick, record_state, record_snapshot in self._replay(tick):
+                if record_tick > tick:
+                    break
+                state, snapshot = record_state, record_snapshot
+            if state is not None:
+                _apply_dynamic_value(state, snapshot)
         except Exception:
             logger.exception('Failed to read JSONL state log from %s', self.state_file_path)
             return None
+        return state
 
-        return current_state
+    def iter_game_states(self, start_tick: int = 0, end_tick: Optional[int] = None, every: int = 1):
+        """
+        Yield (tick, state) for the records from `start_tick` to `end_tick` (inclusive), keeping every
+        `every`-th tick. A single GameState is updated in place, so copy whatever must outlive a step.
+        """
+        for record_tick, state, snapshot in self._replay(start_tick):
+            if end_tick is not None and record_tick > end_tick:
+                break
+            if record_tick < start_tick or (record_tick - start_tick) % every:
+                continue
+            yield record_tick, _apply_dynamic_value(state, snapshot)
