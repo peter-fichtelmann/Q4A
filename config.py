@@ -165,7 +165,7 @@ class Config:
         'beater_throw_threshold_loaded_beater': 4, # distance in m for beater to throw at loaded opponent beater
         'moves': { # sampled by the ComputerPlayerOrchestrator; times in game seconds
             'volleyball_shift': {
-                'start_probability_per_second': 0.9, # high for testing; probability that the move is tried within one game second
+                'start_probability_per_second': 0.0, # probability that the move is tried within one game second
                 'cooldown': 3, # after the move ended, before the same team may start it again
                 'max_duration': 12, # timeout
                 'attack_line_fraction': 0.6, # participants must be past 3/5 of the pitch seen from their own end
@@ -176,7 +176,7 @@ class Config:
                 'delay_of_game_fraction': 0.5, # stop once the delay of game timer reaches this fraction of the limit
             },
             'volleyball_drive': {
-                'start_probability_per_second': 0.3, # probability that the move is tried within one game second
+                'start_probability_per_second': 0.0, # probability that the move is tried within one game second
                 'cooldown': 3, # after the move ended, before the same team may start it again
                 'max_duration': 5 * GAME_TIME_TO_REAL_TIME_RATIO, # timeout, 5 real seconds
                 'min_chaser_keepers': 3, # chasers/keepers of the team not knocked out
@@ -214,7 +214,7 @@ class Config:
                     'teammate_max_distance': 20, # m, receiver at most this far from the carrier (max passing distance)
                     'teammate_min_lateral': 2, # m, receiver at least this far to the side (y) of the carrier, so the paths cross
                     'opponent_max_distance': 10, # m, defender at most this far from the midpoint of carrier and receiver
-                    'crossing_distance': 1.0, # m, crossing point in front of the defender (towards the attackers)
+                    'crossing_distance': 1.6, # m, crossing point in front of the defender (towards the attackers)
                     'min_approach_distance': 1.5, # m, both runners at least this far behind the crossing point at the start
                     'hoop_clearance': 2.0, # m, crossing point at least this far in front of the opponent hoop line
                     'receiver_behind_distance': 1.0, # m, the receiver crosses this far behind the carrier's crossing point (no contact)
@@ -227,6 +227,29 @@ class Config:
                     'pass_interception_threshold': 0.95, # minimum interception score of the pass at the crossing
                     'max_pass_distance': 4, # m, carrier-receiver distance at the crossing above which the move fails (out of sync)
                     'exit_duration': 2.0, # game s the holder runs its exit line before the drive starts
+                    'tackle_window': 1.0, # carrier counts as tackled this long after a tackle
+                },
+                'drive': {
+                    'max_duration': 5 * GAME_TIME_TO_REAL_TIME_RATIO,
+                    'min_chaser_keepers': 3,
+                    'dodgeball_pass_distance': 3,
+                    'tackle_window': 1.0,
+                    'pass_interception_threshold': 0.95,
+                    'hoop_switch_margin': 0.2,
+                },
+            },
+            'volleyball_block_drive': { # volleyball_block (a teammate screens the one defender who could intercept the drive), then volleyball_drive once the defender is passed
+                'start_probability_per_second': 0.3,
+                'cooldown': 3,
+                'block': {
+                    'max_duration': 10, # timeout of the block phase
+                    'blocker_max_distance': 15, # m, blocker at most this far from the carrier
+                    'block_offset': 0.9, # m, the block point is at least this far in front of the defender on its interception line (about body contact)
+                    'block_set_width': 0.6, # m, block counts as set once the blocker is this close to the defender's interception line
+                    'block_sample_step': 0.5, # m, step along the interception line when searching the first point the blocker reaches before the defender
+                    'unset_stick_input': 0.5, # carrier stick input until the block is set
+                    'screen_clearance': 1.5, # m, the carrier passes the blocker this far on the side away from the defender
+                    'loaded_beater_path_distance': 4, # m, no loaded opponent beater this close to the carrier's run at the start
                     'tackle_window': 1.0, # carrier counts as tackled this long after a tackle
                 },
                 'drive': {
