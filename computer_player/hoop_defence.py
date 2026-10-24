@@ -4,7 +4,7 @@ from core.entities import Hoop, Player, VolleyBall, Vector2, PlayerRole
 from core.game_logic.game_logic import GameLogic
 from computer_player.base_strategy import BaseStrategy, StepContext
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
-from computer_player.computer_player_utility.computer_player_utility import MoveUtility, BeaterThrowDecider, ThrowDirector
+from computer_player.computer_player_utility.computer_player_utility import MoveUtility, BeaterThrowDecider
 
 from core.game_logic.utility_logic import UtilityLogic
 
@@ -13,6 +13,7 @@ class HoopDefenceChaserKeeper(BaseStrategy):
     """
     Chaser/keeper part of the hoop defence where all chasers stand in front the hoops.
     The position (in front or behind hoops) changes when the volleyball moves over the hoop baseline.
+    Hoop chasers tackle a carrier they get in contact with.
 
     The keeper is moving towards the volleyball, but stays within the keeper zone.
     """
@@ -93,6 +94,8 @@ class HoopDefenceChaserKeeper(BaseStrategy):
                             lookahead_to_target=next_direction_to_hoop,
                             add_target_x_buffer=True
                         )
+                        # tackle a carrier running into the hoop defender (no-op without contact)
+                        self.logic.process_action_logic.process_tackle_action(chaser_id)
                     break
 
     def _is_volleyball_in_keeper_zone(self, volleyball: VolleyBall, team: int) -> bool:
@@ -239,5 +242,4 @@ class HoopDefenceBeater(BaseStrategy):
         if volleyball.holder_id is not None:
             volleyball_holder = self.logic.state.players[volleyball.holder_id]
             if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
-                throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, volleyball_holder)
-                self.logic.process_action_logic.process_throw_action(beater.id, throw_direction)
+                self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, volleyball_holder)

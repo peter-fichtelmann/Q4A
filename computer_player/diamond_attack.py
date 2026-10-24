@@ -4,7 +4,7 @@ from typing import Dict, Optional, List, Tuple
 
 from computer_player.base_strategy import BaseStrategy, StepContext, TeamRoster
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
-from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, MoveUtility, PassEvaluator, ScoreAttempter, ThrowDirector
+from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, MoveUtility, PassEvaluator, ScoreAttempter
 from core.entities import Player, PlayerRole, Vector2, VolleyBall
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
@@ -228,8 +228,8 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             if pass_option is None:
                 continue # unreachable or through own hoops, look for next best player
             if pass_option.interception_score > self.passing_threshold:
-                self.logger.info("Passing from player %s to player %s with position penalty %s and interception score %s", volleyball_holder.id, best_player_id, best_position_penalty, pass_option.interception_score)
-                self.logic.process_action_logic.process_throw_action(volleyball_holder.id, throw_direction=pass_option.throw_direction)
+                if self.logic.process_action_logic.process_throw_action(volleyball_holder.id, throw_direction=pass_option.throw_direction):
+                    self.logger.info("Passing from player %s to player %s with position penalty %s and interception score %s", volleyball_holder.id, best_player_id, best_position_penalty, pass_option.interception_score)
                 return
 
     def solve_assignment_problem(self, player_positions: List[Vector2], target_positions: List[Vector2]):
@@ -352,8 +352,7 @@ class DiamondAttackBeater(BaseStrategy):
                 continue
             if opponent_beater.has_ball:
                 if self.beater_throw_decider.should_throw_at_loaded_beater(beater, opponent_beater):
-                    throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, opponent_beater)
-                    self.logic.process_action_logic.process_throw_action(beater.id, throw_direction=throw_direction)
+                    self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, opponent_beater)
                     # throw at first egligble loaded opponent beater
                     break
 

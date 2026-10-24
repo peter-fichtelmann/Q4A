@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from config import Config
 from core.entities import Hoop, Player, Vector2, VolleyBall
 from core.game_logic.utility_logic import UtilityLogic
+from core.game_logic.process_action_logic import ProcessActionLogic
 from computer_player.computer_player_utility.kinematics import decay_table, first_throw_tick
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 
@@ -74,7 +75,10 @@ class BeaterThrowDecider:
     
     Idea 1: just hard distance threshold
     Idea 2: hard threshold and probability per second of 1/(distance + value) where value is aggressiveness
-    
+
+    Shared by all beater strategies and the dodgeball assigner. A target that a dodgeball of the
+    thrower's team is already flying at is not thrown at again, so a second beater keeps its
+    dodgeball as backup instead of wasting it on the same player.
     """
     def __init__(
             self,
@@ -84,10 +88,33 @@ class BeaterThrowDecider:
         """Store squared distance thresholds used by beater throw checks."""
         self.squared_throw_threshold_volleyball_holder = throw_threshold_volleyball_holder**2
         self.squared_throw_threshold_loaded_beater = throw_threshold_loaded_beater**2
+        self.pending_throws: Dict[str, Tuple[str, int]] = {} # target id -> (dodgeball id, thrower team) of a throw in flight
+
+    def update_pending_throws(self, state) -> None:
+        """Forget throws that are over: dodgeball picked up, slowed down or reflected (possession lost), or target knocked out."""
+        for target_id, (dodgeball_id, team) in list(self.pending_throws.items()):
+            dodgeball = state.balls.get(dodgeball_id)
+            target = state.players.get(target_id)
+            if (dodgeball is None or target is None or target.is_knocked_out
+                    or dodgeball.holder_id is not None or dodgeball.possession_team != team):
+                del self.pending_throws[target_id]
+
+    def throw_at(self, process_action_logic, beater: Player, target: Player) -> bool:
+        """Throw `beater`'s dodgeball at the moving `target` and remember the throw. Returns whether the throw happened."""
+        dodgeball_id = beater.has_ball
+        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target)
+        if not process_action_logic.process_throw_action(beater.id, throw_direction):
+            return False
+        self.pending_throws[target.id] = (dodgeball_id, beater.team)
+        return True
+
+    def _is_targeted(self, target: Player) -> bool:
+        """Whether a dodgeball is already flying at `target`."""
+        return target.id in self.pending_throws
 
     def should_throw_at_volleyball_holder(self, beater: Player, volleyball_holder: Player) -> bool:
-        """Return True when holder is throwable and inside holder range threshold."""
-        if volleyball_holder.dodgeball_immunity:
+        """Return True when holder is throwable, not already thrown at and inside holder range threshold."""
+        if volleyball_holder.dodgeball_immunity or self._is_targeted(volleyball_holder):
             return False
         squared_distance = UtilityLogic._squared_distance(beater.position, volleyball_holder.position)
         if squared_distance <= self.squared_throw_threshold_volleyball_holder:
@@ -95,7 +122,9 @@ class BeaterThrowDecider:
         return False
     
     def should_throw_at_loaded_beater(self, beater: Player, loaded_beater: Player) -> bool:
-        """Return True when a loaded opposing beater is within throw range."""
+        """Return True when a loaded opposing beater is not already thrown at and within throw range."""
+        if self._is_targeted(loaded_beater):
+            return False
         squared_distance = UtilityLogic._squared_distance(beater.position, loaded_beater.position)
         if squared_distance <= self.squared_throw_threshold_loaded_beater:
             return True
@@ -122,7 +151,7 @@ class ThrowDirector:
         s_p_y = receiver.position.y
         v_p_x = receiver.velocity.x
         v_p_y = receiver.velocity.y
-        v_b_value_sq = player.throw_velocity**2
+        v_b_value_sq = ProcessActionLogic.effective_throw_velocity(player)**2
         root = math.sqrt(s_b_x**2*v_b_value_sq - s_b_x**2*v_p_y**2 + 2*s_b_x*s_b_y*v_p_x*v_p_y - 2*s_b_x*s_p_x*v_b_value_sq + 2*s_b_x*s_p_x*v_p_y**2 - 2*s_b_x*s_p_y*v_p_x*v_p_y + s_b_y**2*v_b_value_sq - s_b_y**2*v_p_x**2 - 2*s_b_y*s_p_x*v_p_x*v_p_y - 2*s_b_y*s_p_y*v_b_value_sq + 2*s_b_y*s_p_y*v_p_x**2 + s_p_x**2*v_b_value_sq - s_p_x**2*v_p_y**2 + 2*s_p_x*s_p_y*v_p_x*v_p_y + s_p_y**2*v_b_value_sq - s_p_y**2*v_p_x**2)
 
         return s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root
@@ -203,10 +232,11 @@ class ThrowDirector:
     @staticmethod
     def _throw_analytic(player: Player, receiver: Player) -> Tuple[Optional[Vector2], Optional[Vector2]]:
         """Throw vector (magnitude throw_velocity) and predicted receiver position via kinematics.first_throw_tick."""
+        throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
         result = first_throw_tick(
             thrower_x=player.position.x,
             thrower_y=player.position.y,
-            throw_velocity=player.throw_velocity,
+            throw_velocity=throw_velocity,
             ball_table=decay_table(Config.BALL_DEACCELERATION_RATE),
             receiver=receiver,
             reach_distance=Config.THROW_CATCH_MARGIN_FACTOR * (receiver.radius + Config.VOLLEYBALL_RADIUS),
@@ -220,7 +250,7 @@ class ThrowDirector:
         if mag_throw == 0:
             throw_x, throw_y = receiver.position.x - player.position.x, receiver.position.y - player.position.y
             mag_throw = math.hypot(throw_x, throw_y) or 1.0
-        return (Vector2(throw_x / mag_throw * player.throw_velocity, throw_y / mag_throw * player.throw_velocity),
+        return (Vector2(throw_x / mag_throw * throw_velocity, throw_y / mag_throw * throw_velocity),
                 Vector2(receiver_x, receiver_y))
 
 
@@ -252,6 +282,7 @@ class ScoreAttempter:
                                           defending_chaser_keeper_ids: List[str]) -> Dict[str, float]:
         """Compute interception-risk scores for shots toward each attack hoop."""
         intercepting_scores_dict = {}
+        throw_velocity = ProcessActionLogic.effective_throw_velocity(volleyball_holder)
         for hoop in attack_hoops:
             volleyball_hoop_vector = Vector2(
                 hoop.position.x - volleyball.position.x,
@@ -262,8 +293,8 @@ class ScoreAttempter:
                 continue
             copy_volleyball = volleyball.copy()
             mag_volleyball_hoop_vector = math.sqrt(squared_volleyball_hoop_distance)
-            copy_volleyball.velocity.x = volleyball_holder.throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector
-            copy_volleyball.velocity.y = volleyball_holder.throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
+            copy_volleyball.velocity.x = throw_velocity * volleyball_hoop_vector.x / mag_volleyball_hoop_vector
+            copy_volleyball.velocity.y = throw_velocity * volleyball_hoop_vector.y / mag_volleyball_hoop_vector
             beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator.beam_cosine_angle(
                 moving_entity=copy_volleyball,
                 intercepting_player_ids=defending_chaser_keeper_ids,
@@ -272,7 +303,7 @@ class ScoreAttempter:
             intercepting_score = self.interception_calculator.interception_score_from_beam_cosine_angle(
                 beam_cosine_angle=beam_cosine_angle,
                 beam_angle_player_id=beam_cosine_angle_player_id,
-                mag_moving_entity_velocity=volleyball_holder.throw_velocity,
+                mag_moving_entity_velocity=throw_velocity,
             )
             intercepting_scores_dict[hoop.id] = intercepting_score
         return intercepting_scores_dict
@@ -282,23 +313,24 @@ class ScoreAttempter:
                 volleyball_holder: Player,
                 attack_hoops: List[Hoop],
                 defending_chaser_keeper_ids: List[str]) -> bool:
-        """Shoot when interception risk for a hoop is below threshold. Returns True if a shot was taken."""
+        """Shoot at the safest hoop when its interception score is above threshold. Returns True if a shot was taken."""
         intercepting_scores_dict = self.get_intercepting_scores_for_hoops(volleyball, volleyball_holder, attack_hoops, defending_chaser_keeper_ids)
         # if no intercepting_scores, then probably to far away to score
         if len(intercepting_scores_dict) == 0:
             return False
         # get hoop with highest interception score (lowest chance of being intercepted)
-        best_hoop_id = min(intercepting_scores_dict, key=intercepting_scores_dict.get)
+        best_hoop_id = max(intercepting_scores_dict, key=intercepting_scores_dict.get)
         best_score = intercepting_scores_dict[best_hoop_id]
         if best_score > self.scoring_threshold:
-            self.logger.info("Scoring on hoop %s with interception score %s", best_hoop_id, best_score)
             best_hoop = next(hoop for hoop in attack_hoops if hoop.id == best_hoop_id)
             volleyball_holder.direction = Vector2(
                 best_hoop.position.x - volleyball_holder.position.x,
                 best_hoop.position.y - volleyball_holder.position.y
             )
-            self.process_action_logic.process_throw_action(volleyball_holder.id)
-            return True
+            # the throw is refused e.g. right after receiving a turnover ball
+            if self.process_action_logic.process_throw_action(volleyball_holder.id):
+                self.logger.info("Scoring on hoop %s with interception score %s", best_hoop_id, best_score)
+                return True
         return False
 
 
@@ -364,6 +396,6 @@ class PassEvaluator:
         interception_score = self.interception_calculator.interception_score_from_beam_cosine_angle(
             beam_cosine_angle=beam_cosine_angle,
             beam_angle_player_id=beam_cosine_angle_player_id,
-            mag_moving_entity_velocity=volleyball_holder.throw_velocity,
+            mag_moving_entity_velocity=ProcessActionLogic.effective_throw_velocity(volleyball_holder),
         )
         return PassOption(receiver.id, throw_direction, predicted_receiver_position, interception_score)

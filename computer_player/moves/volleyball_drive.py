@@ -184,7 +184,7 @@ class VolleyballDrive(Move):
         if ctx.events.goal_scored_by == self.team:
             self.end(MoveStatus.SUCCESS, "goal")
             return
-        if ctx.events.turnover_from == self.team or ctx.attack_team != self.team:
+        if ctx.events.turnover_from == self.team: # actual possession, a predicted interception of a pass in flight is no turnover
             self.end(MoveStatus.FAILURE, "turnover")
             return
         if volleyball.is_dead or volleyball.inbounder is not None or volleyball.turnover_to_player is not None:
@@ -247,11 +247,12 @@ class VolleyballDrive(Move):
         if best is None:
             return # keep driving (or standing in the tackle) and look again next step
         pass_option, receiver_penalty = best
+        if not self.logic.process_action_logic.process_throw_action(carrier.id, throw_direction=pass_option.throw_direction):
+            return # refused e.g. right after receiving a turnover ball, try again next step
         self.logger.info(
             "VolleyballDrive pass (%s) from player %s to player %s, position penalty %.1f, interception score %.2f",
             trigger, carrier.id, pass_option.receiver_id, receiver_penalty, pass_option.interception_score,
         )
-        self.logic.process_action_logic.process_throw_action(carrier.id, throw_direction=pass_option.throw_direction)
         self.released_by_pass = True
         self.intended_receiver_id = pass_option.receiver_id
         self.pass_reason = trigger

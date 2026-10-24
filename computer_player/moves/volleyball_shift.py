@@ -167,7 +167,7 @@ class VolleyballShift(Move):
         if ctx.events.goal_scored_by == self.team:
             self.end(MoveStatus.SUCCESS, "goal")
             return
-        if ctx.events.turnover_from == self.team or ctx.attack_team != self.team:
+        if ctx.events.turnover_from == self.team: # actual possession, a predicted interception of a pass in flight is no turnover
             self.end(MoveStatus.FAILURE, "turnover")
             return
         if volleyball.is_dead or volleyball.inbounder is not None or volleyball.turnover_to_player is not None:
@@ -235,11 +235,12 @@ class VolleyballShift(Move):
             self.end(MoveStatus.FAILURE, "no_good_pass_option")
             return
         pass_option, receiver_penalty, carrier_penalty = best
+        if not self.logic.process_action_logic.process_throw_action(carrier.id, throw_direction=pass_option.throw_direction):
+            return # refused e.g. right after receiving a turnover ball, try again next step
         self.logger.info(
             "VolleyballShift pass %s from player %s to player %s, position penalty %.1f -> %.1f, interception score %.2f",
             self.passes + 1, carrier.id, pass_option.receiver_id, carrier_penalty, receiver_penalty, pass_option.interception_score,
         )
-        self.logic.process_action_logic.process_throw_action(carrier.id, throw_direction=pass_option.throw_direction)
         self.passes += 1
         self.released_by_pass = True
         self.intended_receiver_id = pass_option.receiver_id

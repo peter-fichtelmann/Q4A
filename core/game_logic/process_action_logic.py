@@ -63,9 +63,7 @@ class ProcessActionLogic:
         if throw_direction is None:
             throw_direction = player.direction
         mag_dir = UtilityLogic._magnitude(throw_direction)
-        throw_velocity = player.throw_velocity
-        if player.tackling_player_ids:
-            throw_velocity *= 0.5 # tackled players throw at half velocity
+        throw_velocity = self.effective_throw_velocity(player)
         if mag_dir > 1:
             throw_direction.x /= mag_dir
             throw_direction.y /= mag_dir
@@ -86,6 +84,13 @@ class ProcessActionLogic:
         self.logger.info("Player %s threw %s", player_id, ball.id)
         return True
     
+    @staticmethod
+    def effective_throw_velocity(player: Player) -> float:
+        """Throw velocity of `player` right now: tackled players throw at half velocity."""
+        if player.tackling_player_ids:
+            return 0.5 * player.throw_velocity
+        return player.throw_velocity
+
     def process_tackle_action(self, player_id: str) -> bool:
         """
         Attempt a tackle against an opposing in-contact ball carrier.

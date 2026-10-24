@@ -11,7 +11,7 @@ from computer_player.hoop_defence import HoopDefenceBeater, HoopDefenceChaserKee
 from computer_player.box_defence import BoxDefenceChaserKeeper
 from computer_player.dodgeball_assigner import DodgeballAssigner
 from computer_player.seeker_director import SeekerDirector
-from computer_player.volleyball_possession_calculator import VolleyballPossession, VolleyballPossessionCalculator
+from computer_player.volleyball_possession_calculator import VolleyballPossessionCalculator
 from computer_player.moves.move import Move, MoveStatus
 from computer_player.moves.volleyball_shift import VolleyballShift
 from computer_player.moves.volleyball_drive import VolleyballDrive
@@ -36,7 +36,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
 
     Every step it
         1. asks the VolleyballPossessionCalculator which team possesses the volleyball (attack) and derives
-           possession events (goal, turnover),
+           events (goal, turnover) of the actual possession,
         2. ends moves whose stop criteria are met and samples new moves for the attack and defence team,
         3. runs the base strategies (chasers+keeper and beaters, for attack and defence) for all CPU players
            that no move controls,
@@ -85,7 +85,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         self.rosters = {team: TeamRoster.build(state, team) for team in (0, 1)}
         self.interception_calculator = InterceptionCalculator(logic=self.logic)
         self.possession_calculator = VolleyballPossessionCalculator(self.logic, self.interception_calculator)
-        beater_throw_decider = BeaterThrowDecider(
+        self.beater_throw_decider = beater_throw_decider = BeaterThrowDecider(
             throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
             throw_threshold_loaded_beater=beater_throw_threshold_loaded_beater
         )
@@ -96,7 +96,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             **(scoring_kwargs or {})
         )
         self.pass_evaluator = PassEvaluator(self.interception_calculator, **(passing_kwargs or {}))
-        self.dodgeball_assigner = DodgeballAssigner(self.logic, self.interception_calculator, beater_throw_decider, logger=self.logger)
+        self.dodgeball_assigner = DodgeballAssigner(self.logic, self.interception_calculator, logger=self.logger)
 
         # base strategies
         self.diamond_attack_chaser_keeper = DiamondAttackChaserKeeper(
@@ -119,7 +119,6 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         # the chaser/keeper defence strategy is chosen each time a team starts defending
         self.box_defence_probability = box_defence_probability
         self.defence_chaser_keeper_strategies: Dict[int, BaseStrategy] = {}
-        self._previous_defence_team: Optional[int] = None
         self.seeker_director = SeekerDirector(state)
 
         # moves
@@ -137,15 +136,17 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
 
         # possession tracking for events
         self.game_time = 0.0 # accumulated dt of the computer player steps
-        self._previous_attack_team: Optional[int] = None
+        self._previous_possession_team: Optional[int] = None # actual possession, not the prediction for a loose volleyball
         self._previous_score: List[int] = list(state.score)
 
     def make_move(self, dt: float, cpu_player_ids: List[str]):
         """Run one decision cycle for all controlled players."""
         self._bind_cpu_players(cpu_player_ids)
         self.game_time += dt
+        self.beater_throw_decider.update_pending_throws(self.logic.state)
         possession = self._profile_call('orchestrator.possession_calculator', self.possession_calculator, dt)
-        events = self._possession_events(possession)
+        possession_team = self._actual_possession_team()
+        events = self._possession_events(possession_team)
         attack_team = possession.team
         # with no attacking team (all chasers/keepers knocked out) team 0 defends
         defence_team = 1 - attack_team if attack_team is not None else 0
@@ -169,7 +170,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         steerable_ids = [player.id for player in self.cpu_players if player.id not in move_controlled_ids]
         steerable_id_set = set(steerable_ids)
 
-        assigned_beater_ids = self._profile_call('orchestrator.dodgeball_assigner', self.dodgeball_assigner, attack_team, steerable_id_set)
+        assigned_beater_ids = self._profile_call('orchestrator.dodgeball_assigner', self.dodgeball_assigner, steerable_id_set)
         defence_ids = [player_id for player_id in steerable_ids if self.logic.state.players[player_id].team != attack_team]
         defence_strategies = [self.defence_chaser_keeper_strategies[defence_team], self.hoop_defence_beater]
         for strategy in defence_strategies:
@@ -184,29 +185,49 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
         self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
 
-    def _possession_events(self, possession: VolleyballPossession) -> PossessionEvents:
-        """Goal and turnover since the previous step. A goal flips possession too, so it is checked first."""
+    def _actual_possession_team(self) -> Optional[int]:
+        """
+        Team actually in volleyball possession: the holder's team, kept while the volleyball is in flight,
+        or the team the volleyball is turned over or inbounded to. None for a loose volleyball (e.g. after a beat).
+        Unlike the possession calculator, it does not follow the predicted interceptor of a pass.
+        """
+        state = self.logic.state
+        volleyball = state.volleyball
+        for player_id in (volleyball.turnover_to_player, volleyball.inbounder):
+            if player_id is not None:
+                return state.players[player_id].team
+        return volleyball.possession_team
+
+    def _possession_events(self, possession_team: Optional[int]) -> PossessionEvents:
+        """Goal and turnover of the actual possession since the previous step. A goal flips possession too, so it is checked first."""
         events = PossessionEvents()
         score = self.logic.state.score
         for team in (0, 1):
             if score[team] > self._previous_score[team]:
                 events.goal_scored_by = team
         if (events.goal_scored_by is None
-                and possession.team is not None
-                and self._previous_attack_team is not None
-                and possession.team != self._previous_attack_team):
-            events.turnover_from = self._previous_attack_team
+                and possession_team is not None
+                and self._previous_possession_team is not None
+                and possession_team != self._previous_possession_team):
+            events.turnover_from = self._previous_possession_team
         self._previous_score = list(score)
-        if possession.team is not None:
-            self._previous_attack_team = possession.team
+        if possession_team is not None:
+            self._previous_possession_team = possession_team
         return events
 
     def _select_defence_strategy(self, ctx: StepContext) -> None:
-        """Choose hoop or box defence for the chasers/keeper when a team starts defending."""
-        team = ctx.defence_team
-        if team == self._previous_defence_team and team in self.defence_chaser_keeper_strategies:
+        """
+        Choose hoop or box defence for the chasers/keeper each time a team actually starts defending
+        (goal or turnover), not when the predicted interceptor of a pass flips.
+        """
+        if ctx.events.goal_scored_by is not None:
+            team = ctx.events.goal_scored_by # the scoring team defends the restart
+        elif ctx.events.turnover_from is not None:
+            team = ctx.events.turnover_from
+        elif ctx.defence_team not in self.defence_chaser_keeper_strategies:
+            team = ctx.defence_team # first time this team defends
+        else:
             return
-        self._previous_defence_team = team
         # no random draw for probability 0 or 1, so traces stay reproducible
         if self.box_defence_probability <= 0:
             use_box_defence = False
