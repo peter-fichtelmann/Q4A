@@ -134,8 +134,9 @@ class Config:
         },
         'diamond_attack_kwargs': {
             'chaser_keeper': {
-                'chaser_evade_beater_weight': 3.5,
-                'chaser_evade_chaser_keeper_weight': 1.0,
+                'chaser_evade_beater_weight': 12, # opponent evade vectors have magnitude weight / distance^2
+                'chaser_evade_chaser_keeper_weight': 4,
+                'chaser_evade_opponent_max_magnitude': 2, # cap of each opponent's evade vector after the weight
                 'chaser_evade_teamate_chaser_keeper_weight': 1.5,
                 'chaser_pull_teammate_chaser_keeper_distance': 20, # m, beyond this the quadratic pull to a teammate outweighs the teammate evasion (max passing distance)
                 'volleyball_holder_evade_own_hoop_weight': (0.5, 1.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius

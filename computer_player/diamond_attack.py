@@ -45,8 +45,9 @@ class DiamondAttackChaserKeeper(BaseStrategy):
                 move_around_hoop_blockages: Dict[int, MoveAroundHoopBlockage], # per team, around the team's own hoops
                 score_attempter: ScoreAttempter,
                 pass_evaluator: PassEvaluator,
-                chaser_evade_beater_weight: float = 4,
-                chaser_evade_chaser_keeper_weight: float = 2,
+                chaser_evade_beater_weight: float = 12, # opponent evade vectors have magnitude weight / distance^2
+                chaser_evade_chaser_keeper_weight: float = 4,
+                chaser_evade_opponent_max_magnitude: Optional[float] = 2, # cap of each opponent's evade vector after the weight, None: no cap
                 chaser_evade_teamate_chaser_keeper_weight: float = 1,
                 chaser_pull_teammate_chaser_keeper_distance: Optional[float] = None, # distance at which the quadratic pull to a teammate cancels the teammate evasion, default max passing distance
                 volleyball_holder_evade_own_hoop_weight: float|Tuple[float, float] = (1, 2),
@@ -65,6 +66,7 @@ class DiamondAttackChaserKeeper(BaseStrategy):
         self.pass_evaluator = pass_evaluator
         self.chaser_evade_beater_weight = chaser_evade_beater_weight
         self.chaser_evade_chaser_keeper_weight = chaser_evade_chaser_keeper_weight
+        self.chaser_evade_opponent_max_magnitude = chaser_evade_opponent_max_magnitude
         self.chaser_evade_teamate_chaser_keeper_weight = chaser_evade_teamate_chaser_keeper_weight
         self.volleyball_holder_evade_own_hoop_weight = volleyball_holder_evade_own_hoop_weight
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
@@ -230,11 +232,11 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             for other_player in self.logic.state.players.values():
                 if other_player.team != team:
                     if other_player.role == PlayerRole.BEATER and other_player.has_ball:
-                        evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_beater_weight)
+                        evade_vector = MoveUtility.evade_squared(player.position, other_player.position, weight=self.chaser_evade_beater_weight, max_magnitude=self.chaser_evade_opponent_max_magnitude)
                         total_evade_vector.x += evade_vector.x
                         total_evade_vector.y += evade_vector.y
                     elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER]: # if chaser or keeper, also check distance and evade if too close
-                        evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_chaser_keeper_weight)
+                        evade_vector = MoveUtility.evade_squared(player.position, other_player.position, weight=self.chaser_evade_chaser_keeper_weight, max_magnitude=self.chaser_evade_opponent_max_magnitude)
                         total_evade_vector.x += evade_vector.x
                         total_evade_vector.y += evade_vector.y
                 elif other_player.role in [PlayerRole.CHASER, PlayerRole.KEEPER] and other_player.id != player.id: # also evade teammates who are chasers or keepers to avoid clustering

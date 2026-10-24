@@ -35,6 +35,25 @@ class MoveUtility:
         return evade_vector
 
     @staticmethod
+    def evade_squared(player_position: Vector2, entity_to_evade_position: Vector2, weight: float = 1.0, max_magnitude: Optional[float] = None) -> Vector2:
+        """Return a vector away from another entity with magnitude weight / distance^2, capped at `max_magnitude`."""
+        player_to_entity_vector = Vector2(
+            entity_to_evade_position.x - player_position.x,
+            entity_to_evade_position.y - player_position.y
+        )
+        squared_distance = UtilityLogic._squared_sum(player_to_entity_vector.x, player_to_entity_vector.y)
+        if squared_distance == 0:
+            return Vector2(0, 0)
+        distance = math.sqrt(squared_distance)
+        magnitude = weight / squared_distance
+        if max_magnitude is not None:
+            magnitude = min(magnitude, max_magnitude)
+        return Vector2(
+            -player_to_entity_vector.x / distance * magnitude,
+            -player_to_entity_vector.y / distance * magnitude
+        )
+
+    @staticmethod
     def attract_quadratic(player_position: Vector2, entity_to_attract_position: Vector2, weight: float = 1.0) -> Vector2:
         """Return a vector towards another entity whose magnitude grows with the squared distance (weight * distance^2)."""
         player_to_entity_vector = Vector2(
