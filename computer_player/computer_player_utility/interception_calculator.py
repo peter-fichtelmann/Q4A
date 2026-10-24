@@ -386,44 +386,30 @@ class InterceptionCalculator:
         # print('v_b_y', v_b_y)
 
     @staticmethod
-    def intercepting_hoop_before_target(moving_entity: object, target_position: Vector2, hoops: List[Hoop]) -> bool:
+    def throw_through_hoop(ball: object, throw_velocity: Vector2, hoops: List[Hoop]) -> bool:
         """
-        Check if any of the moving entity's trajectory intersects with the hoops before reaching the target.
+        Whether a ball thrown with `throw_velocity` passes through any of `hoops` before it stops.
 
-        Assumes the moving entity moves in a straight line from its current position to the target position with a constant velocity.
+        Follows the ball's real flight, not the line to the receiver:
+        - it starts at the ball's own position, as a held ball is offset from its holder, who aims the throw
+        - it rolls on to its stopping distance, as the receiver may miss the catch
+        - each hoop is widened by the sideways distance the ball moves within one tick, as the goal check
+          tests the ball's y at the end of the tick in which it crossed the hoop line
 
-        Assume the hoops have their radius on the x-axis.
-
-        Follows the following steps:
-        1. Calculate the trajectory vector from the moving entity's current position to the target position.
-        2. For each hoop, check if the moving entity and the target are on opposite sides of the hoop's x-coordinate. If they are not, skip to the next hoop.
-        3. Calculate the y-coordinate where the trajectory intersects the hoop's x-coordinate.
-        4. Check if this y-coordinate is within the hoop's y-range (i.e., between the hoop's y-position minus its radius and the hoop's y-position plus its radius).
-        5. If any hoop is intersected before reaching the target, return True. If no hoops are intersected, return False.
-
-        Returns True if any hoop is intersected before reaching the target, False otherwise.
+        Assumes the hoops have their radius on the y-axis.
         """
-        trajectory_vector = Vector2(
-            target_position.x - moving_entity.position.x,
-            target_position.y - moving_entity.position.y
-        )
-        if trajectory_vector.x == 0:
-            return False  # Avoid division by zero; vertical trajectory won't intersect hoops in this context
-        # check if moving_entity and target on opposite sides of the hoop x-line
-        position_check = False
+        v_x, v_y = throw_velocity.x, throw_velocity.y
+        if v_x == 0:
+            return False # parallel to the hoop line
+        table = decay_table(ball.deacceleration_rate)
+        # rolling distance in units of the throw velocity (ball position = start + throw_velocity * line_parameter)
+        max_line_parameter = table.c if table.c is not None else float('inf')
         for hoop in hoops:
-            if (
-                (moving_entity.position.x < hoop.position.x) and (target_position.x > hoop.position.x)
-             ) or (
-                (moving_entity.position.x > hoop.position.x) and (target_position.x < hoop.position.x)
-                ):
-                position_check = True
-        if not position_check:
-            return False
-        # calculate the crossing y coordinate for each hoop and check if it is within the hoop's y-range
-        for hoop in hoops:
-            line_parameter = (hoop.position.x - moving_entity.position.x) / trajectory_vector.x
-            crossing_y = moving_entity.position.y + trajectory_vector.y * line_parameter
-            if (crossing_y >= hoop.position.y - hoop.radius) and (crossing_y <= hoop.position.y + hoop.radius):
+            line_parameter = (hoop.position.x - ball.position.x) / v_x
+            if line_parameter <= 0 or line_parameter > max_line_parameter:
+                continue # hoop line behind the ball or beyond its stopping point
+            crossing_y = ball.position.y + v_y * line_parameter
+            # the ball is checked up to one tick of sideways movement after the crossing
+            if hoop.position.y - hoop.radius - max(v_y, 0) * TICK_DT <= crossing_y <= hoop.position.y + hoop.radius - min(v_y, 0) * TICK_DT:
                 return True
         return False
