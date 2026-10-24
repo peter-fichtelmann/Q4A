@@ -238,7 +238,7 @@ export function renderGame() {
       if (!isVisible(hp.x, hp.y)) continue;
       const hs = worldToScreen(hp.x, hp.y); const hx = hs.x, hy = hs.y;
       const hoopRadiusM = (hoop.radius !== undefined) ? hoop.radius : (Config.HOOP_RADIUS / 2);
-      const halfWidthPx = 0.5 * 0.4 * xScale; const halfLengthPx = hoopRadiusM * xScale;
+      const halfWidthPx = 0.5 * 0.3 * xScale; const halfLengthPx = hoopRadiusM * xScale;
       ctx.strokeStyle = (hoop.team === 'A' || hoop.team === 0) ? colour_hoop_A : colour_hoop_B;
       ctx.lineWidth = lineThickness;
       ctx.beginPath(); ctx.ellipse(hx, hy, halfWidthPx, halfLengthPx, 0, 0, Math.PI * 2); ctx.stroke();
