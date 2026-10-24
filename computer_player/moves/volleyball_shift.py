@@ -156,7 +156,7 @@ class VolleyballShift(Move):
         candidates.sort()
         for penalty, player_id in candidates:
             pass_option = pass_evaluator.evaluate(volleyball, carrier, state.players[player_id], roster.own_hoops, roster.opponent_chaser_keeper_ids)
-            if pass_option is not None and pass_option.interception_score >= self.pass_interception_threshold:
+            if pass_option is not None and pass_evaluator.is_safe(pass_option, self.pass_interception_threshold):
                 return pass_option, penalty, carrier_penalty
         return None
 

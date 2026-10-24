@@ -227,7 +227,7 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             pass_option = self.pass_evaluator.evaluate(volleyball, volleyball_holder, best_player, self.roster.own_hoops, self.roster.opponent_chaser_keeper_ids)
             if pass_option is None:
                 continue # unreachable or through own hoops, look for next best player
-            if pass_option.interception_score > self.passing_threshold:
+            if self.pass_evaluator.is_safe(pass_option, self.passing_threshold, strict=True):
                 if self.logic.process_action_logic.process_throw_action(volleyball_holder.id, throw_direction=pass_option.throw_direction):
                     self.logger.info("Passing from player %s to player %s with position penalty %s and interception score %s", volleyball_holder.id, best_player_id, best_position_penalty, pass_option.interception_score)
                 return

@@ -205,6 +205,7 @@ class InterceptionCalculator:
     def _line_interception_analytic(self,
                                     moving_entity: object,
                                     intercepting_player_ids: List[str],
+                                    max_ticks: int = Config.MOTION_MODEL_MAX_TICKS,
                                     ) -> Tuple[float, str, Dict[str, float]]:
         """
         Analytic counterpart of line_interception (same return values, times in game seconds).
@@ -212,6 +213,7 @@ class InterceptionCalculator:
         The moving entity decays exactly as in BasicLogic; players start from their current velocity and
         accelerate to their terminal speed (see kinematics.first_interception_tick). Knocked out players
         first have to reach their own center hoop, from where the second phase starts.
+        Interceptions later than `max_ticks` (after the hoop phase) are not searched for.
         """
         lowest_interception_dt = float('inf')
         lowest_interception_dt_player_id = None
@@ -248,6 +250,7 @@ class InterceptionCalculator:
                 entity_x, entity_y, entity_vx, entity_vy, entity_table,
                 reach_distance=player.radius + moving_entity.radius,
                 target_tick_offset=tick_offset,
+                max_ticks=max_ticks,
             )
             if result is None:
                 continue
@@ -257,6 +260,39 @@ class InterceptionCalculator:
                 lowest_interception_dt_player_id = player_id
             interception_info_dict[player_id] = interception_time
         return lowest_interception_dt, lowest_interception_dt_player_id, interception_info_dict
+
+    def throw_time_margin(self,
+                          ball: object,
+                          throw_velocity: Vector2,
+                          arrival_time: float,
+                          intercepting_player_ids: List[str],
+                          margin_cap: float) -> float:
+        """
+        Time margin of a throw (analytic motion model): game seconds the fastest intercepting player needs
+        longer to reach the thrown ball than the ball needs to its target (`arrival_time`).
+
+        The ball starts at `ball`'s position with `throw_velocity` and decays like `ball`. Positive: the ball
+        arrives first; negative: it is intercepted on the way. Capped at `margin_cap`, which also bounds the search.
+        """
+        thrown_ball = ball.copy()
+        thrown_ball.velocity.x = throw_velocity.x
+        thrown_ball.velocity.y = throw_velocity.y
+        max_ticks = math.ceil((arrival_time + margin_cap) / TICK_DT)
+        interception_time, _, _ = self._line_interception_analytic(thrown_ball, intercepting_player_ids, max_ticks=max_ticks)
+        return min(margin_cap, interception_time - arrival_time)
+
+    @staticmethod
+    def arrival_time(ball: object, speed: float, distance: float) -> float:
+        """Game seconds a ball thrown with `speed` needs to travel `distance` (analytic decay), inf if it stops before."""
+        table = decay_table(ball.deacceleration_rate)
+        if speed <= 0:
+            return float('inf')
+        if table.c is None:
+            return distance / speed
+        fraction = distance / (speed * table.c)
+        if fraction >= 1:
+            return float('inf')
+        return math.log(1 - fraction) / math.log(table.q) * TICK_DT
 
     def predict_entity_position(self, moving_entity: object, time: float) -> Vector2:
         """Position of a free moving entity (ball) after time game seconds according to the motion model."""

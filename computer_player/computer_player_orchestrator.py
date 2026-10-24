@@ -3,6 +3,7 @@ import logging
 import random
 from typing import Dict, List, Optional, Tuple
 
+from core.entities import Vector2
 from core.game_logic.game_logic import GameLogic
 from computer_player.computer_player import ComputerPlayer
 from computer_player.base_strategy import BaseStrategy, PossessionEvents, StepContext, TeamRoster
@@ -11,7 +12,7 @@ from computer_player.hoop_defence import HoopDefenceBeater, HoopDefenceChaserKee
 from computer_player.box_defence import BoxDefenceChaserKeeper
 from computer_player.dodgeball_assigner import DodgeballAssigner
 from computer_player.seeker_director import SeekerDirector
-from computer_player.volleyball_possession_calculator import VolleyballPossessionCalculator
+from computer_player.volleyball_possession_calculator import VolleyballPossession, VolleyballPossessionCalculator
 from computer_player.moves.move import Move, MoveStatus
 from computer_player.moves.volleyball_shift import VolleyballShift
 from computer_player.moves.volleyball_drive import VolleyballDrive
@@ -39,7 +40,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
            events (goal, turnover) of the actual possession,
         2. ends moves whose stop criteria are met and samples new moves for the attack and defence team,
         3. runs the base strategies (chasers+keeper and beaters, for attack and defence) for all CPU players
-           that no move controls,
+           that no move controls, and sends the contester of a loose volleyball after it,
         4. runs the moves for their players, and the seeker director.
     """
     MOVE_CLASSES: Dict[str, type] = {
@@ -58,6 +59,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  box_defence_probability: float = 0.5,
                  scoring_kwargs: Optional[Dict] = None,
                  passing_kwargs: Optional[Dict] = None,
+                 possession_kwargs: Optional[Dict] = None,
                  moves: Optional[Dict[str, Dict]] = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
                  beater_throw_threshold_loaded_beater: float = 4,
@@ -84,7 +86,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         }
         self.rosters = {team: TeamRoster.build(state, team) for team in (0, 1)}
         self.interception_calculator = InterceptionCalculator(logic=self.logic)
-        self.possession_calculator = VolleyballPossessionCalculator(self.logic, self.interception_calculator)
+        self.possession_calculator = VolleyballPossessionCalculator(self.logic, self.interception_calculator, **(possession_kwargs or {}))
         self.beater_throw_decider = beater_throw_decider = BeaterThrowDecider(
             throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
             throw_threshold_loaded_beater=beater_throw_threshold_loaded_beater
@@ -180,10 +182,22 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             for strategy in self.attack_strategies:
                 self._profile_call(f'orchestrator.{type(strategy).__name__}', strategy, ctx, attack_team, attack_ids, assigned_beater_ids)
         # TODO: with no attacking team (all chasers/keepers knocked out), only team 0 defends
+        self._steer_contester(possession, steerable_id_set)
 
         for move in self.active_moves:
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
         self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
+
+    def _steer_contester(self, possession: VolleyballPossession, steerable_id_set: set) -> None:
+        """The other team's fastest player races for a loose volleyball it can nearly reach first, overriding its base strategy."""
+        contester_id = possession.contester_id
+        if contester_id is None or contester_id not in steerable_id_set:
+            return
+        contester = self.logic.state.players[contester_id]
+        if contester.is_knocked_out:
+            return
+        aim = possession.contester_intercepting_position
+        contester.direction = Vector2(aim.x - contester.position.x, aim.y - contester.position.y)
 
     def _actual_possession_team(self) -> Optional[int]:
         """

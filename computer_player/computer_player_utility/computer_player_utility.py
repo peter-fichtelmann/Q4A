@@ -6,7 +6,7 @@ from config import Config
 from core.entities import Hoop, Player, Vector2, VolleyBall
 from core.game_logic.utility_logic import UtilityLogic
 from core.game_logic.process_action_logic import ProcessActionLogic
-from computer_player.computer_player_utility.kinematics import decay_table, first_throw_tick
+from computer_player.computer_player_utility.kinematics import TICK_DT, decay_table, first_throw_tick
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 
 
@@ -232,6 +232,12 @@ class ThrowDirector:
     @staticmethod
     def _throw_analytic(player: Player, receiver: Player) -> Tuple[Optional[Vector2], Optional[Vector2]]:
         """Throw vector (magnitude throw_velocity) and predicted receiver position via kinematics.first_throw_tick."""
+        throw_direction, predicted_receiver_position, _ = ThrowDirector.throw_analytic_with_tick(player, receiver)
+        return throw_direction, predicted_receiver_position
+
+    @staticmethod
+    def throw_analytic_with_tick(player: Player, receiver: Player) -> Tuple[Optional[Vector2], Optional[Vector2], Optional[float]]:
+        """Like _throw_analytic, plus the (fractional) tick at which the ball reaches the receiver."""
         throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
         result = first_throw_tick(
             thrower_x=player.position.x,
@@ -242,8 +248,8 @@ class ThrowDirector:
             reach_distance=Config.THROW_CATCH_MARGIN_FACTOR * (receiver.radius + Config.VOLLEYBALL_RADIUS),
         )
         if result is None:
-            return None, None
-        _, receiver_x, receiver_y = result
+            return None, None, None
+        catch_tick, receiver_x, receiver_y = result
         throw_x = receiver_x - player.position.x
         throw_y = receiver_y - player.position.y
         mag_throw = math.hypot(throw_x, throw_y)
@@ -251,7 +257,8 @@ class ThrowDirector:
             throw_x, throw_y = receiver.position.x - player.position.x, receiver.position.y - player.position.y
             mag_throw = math.hypot(throw_x, throw_y) or 1.0
         return (Vector2(throw_x / mag_throw * throw_velocity, throw_y / mag_throw * throw_velocity),
-                Vector2(receiver_x, receiver_y))
+                Vector2(receiver_x, receiver_y),
+                catch_tick)
 
 
 class ScoreAttempter:
@@ -260,12 +267,20 @@ class ScoreAttempter:
 
     Shared by the base attack and the moves, so a player scores the same way
     no matter which of them currently steers it.
+
+    interception_model:
+        'beam': beam cosine angle score, shoot if above `scoring_threshold`.
+        'time_margin': game seconds the fastest defender needs longer to reach the shot than the shot needs
+            to the hoop (analytic motion model), shoot if at least `shot_time_margin`.
     """
     def __init__(self,
                  interception_calculator: InterceptionCalculator,
                  process_action_logic,
                  score_squared_max_distance: float,
                  scoring_threshold: float,
+                 interception_model: str = 'beam',
+                 shot_time_margin: float = 0.5,
+                 time_margin_cap: float = 3.0,
                  logger: Optional[logging.Logger] = None):
         """Store the interception model and the shot thresholds."""
         self.interception_calculator = interception_calculator
@@ -273,7 +288,33 @@ class ScoreAttempter:
         # only consider scoring on hoops within this squared distance from the volleyball, since far shots are unlikely to be good opportunities
         self.score_squared_max_distance = score_squared_max_distance
         self.scoring_threshold = scoring_threshold
+        self.use_time_margin = interception_model == 'time_margin' and Config.MOTION_MODEL == 'analytic'
+        self.shot_time_margin = shot_time_margin
+        self.time_margin_cap = time_margin_cap
         self.logger = logger or logging.getLogger("computer_player")
+
+    def get_time_margins_for_hoops(self,
+                                   volleyball: VolleyBall,
+                                   volleyball_holder: Player,
+                                   attack_hoops: List[Hoop],
+                                   defending_chaser_keeper_ids: List[str]) -> Dict[str, float]:
+        """Time margin of a shot at each attack hoop in range, the larger the safer."""
+        time_margins_dict = {}
+        throw_velocity = ProcessActionLogic.effective_throw_velocity(volleyball_holder)
+        for hoop in attack_hoops:
+            dx = hoop.position.x - volleyball.position.x
+            dy = hoop.position.y - volleyball.position.y
+            squared_distance = dx**2 + dy**2
+            if squared_distance > self.score_squared_max_distance or squared_distance == 0:
+                continue
+            distance = math.sqrt(squared_distance)
+            arrival_time = self.interception_calculator.arrival_time(volleyball, throw_velocity, distance)
+            if arrival_time == float('inf'):
+                continue # the ball stops before the hoop
+            time_margins_dict[hoop.id] = self.interception_calculator.throw_time_margin(
+                volleyball, Vector2(throw_velocity * dx / distance, throw_velocity * dy / distance),
+                arrival_time, defending_chaser_keeper_ids, self.time_margin_cap)
+        return time_margins_dict
 
     def get_intercepting_scores_for_hoops(self,
                                           volleyball: VolleyBall,
@@ -313,15 +354,19 @@ class ScoreAttempter:
                 volleyball_holder: Player,
                 attack_hoops: List[Hoop],
                 defending_chaser_keeper_ids: List[str]) -> bool:
-        """Shoot at the safest hoop when its interception score is above threshold. Returns True if a shot was taken."""
-        intercepting_scores_dict = self.get_intercepting_scores_for_hoops(volleyball, volleyball_holder, attack_hoops, defending_chaser_keeper_ids)
+        """Shoot at the safest hoop when its score (interception score or time margin) is good enough. Returns True if a shot was taken."""
+        if self.use_time_margin:
+            intercepting_scores_dict = self.get_time_margins_for_hoops(volleyball, volleyball_holder, attack_hoops, defending_chaser_keeper_ids)
+        else:
+            intercepting_scores_dict = self.get_intercepting_scores_for_hoops(volleyball, volleyball_holder, attack_hoops, defending_chaser_keeper_ids)
         # if no intercepting_scores, then probably to far away to score
         if len(intercepting_scores_dict) == 0:
             return False
-        # get hoop with highest interception score (lowest chance of being intercepted)
+        # get hoop with highest score (lowest chance of being intercepted)
         best_hoop_id = max(intercepting_scores_dict, key=intercepting_scores_dict.get)
         best_score = intercepting_scores_dict[best_hoop_id]
-        if best_score > self.scoring_threshold:
+        good_enough = best_score >= self.shot_time_margin if self.use_time_margin else best_score > self.scoring_threshold
+        if good_enough:
             best_hoop = next(hoop for hoop in attack_hoops if hoop.id == best_hoop_id)
             volleyball_holder.direction = Vector2(
                 best_hoop.position.x - volleyball_holder.position.x,
@@ -341,6 +386,7 @@ class PassOption:
     throw_direction: Vector2
     predicted_receiver_position: Vector2
     interception_score: float # the larger, the less likely the pass is intercepted (>= 1 outside the interception cone)
+    time_margin: Optional[float] = None # game seconds the ball arrives before the fastest defender could reach it ('time_margin' model)
 
 
 class PassEvaluator:
@@ -349,13 +395,32 @@ class PassEvaluator:
 
     Shared by the base attack and the moves, so both use the same pass-to-player
     score (position penalty) and the same interception model.
+
+    interception_model:
+        'beam': a pass is safe if its beam interception score passes the caller's threshold.
+        'time_margin': a pass is safe if the ball reaches the receiver at least `pass_time_margin`
+            game seconds before the fastest defender could reach it (analytic motion model).
     """
     def __init__(self,
                  interception_calculator: InterceptionCalculator,
-                 passing_evade_vector_position_penalty_weight: float):
+                 passing_evade_vector_position_penalty_weight: float,
+                 interception_model: str = 'beam',
+                 pass_time_margin: float = 0.5,
+                 time_margin_cap: float = 3.0):
         """Store the interception model and the evade weight of the position penalty."""
         self.interception_calculator = interception_calculator
         self.passing_evade_vector_position_penalty_weight = passing_evade_vector_position_penalty_weight
+        self.use_time_margin = interception_model == 'time_margin' and Config.MOTION_MODEL == 'analytic'
+        self.pass_time_margin = pass_time_margin
+        self.time_margin_cap = time_margin_cap
+
+    def is_safe(self, pass_option: PassOption, beam_threshold: float, strict: bool = False) -> bool:
+        """Whether the pass is safe enough: time margin model, or the beam score against the caller's threshold."""
+        if self.use_time_margin:
+            return pass_option.time_margin >= self.pass_time_margin
+        if strict:
+            return pass_option.interception_score > beam_threshold
+        return pass_option.interception_score >= beam_threshold
 
     def position_penalty(self, player: Player, attack_hoops: List[Hoop], evade_vector: Vector2) -> float:
         """
@@ -381,11 +446,19 @@ class PassEvaluator:
 
         Returns None if the ball cannot reach the receiver or the throw would go through own hoops.
         """
-        throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, receiver)
+        time_margin = None
+        if self.use_time_margin:
+            throw_direction, predicted_receiver_position, catch_tick = ThrowDirector.throw_analytic_with_tick(volleyball_holder, receiver)
+        else:
+            throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, receiver)
         if throw_direction is None:
             return None # ball cannot reach this player
         if InterceptionCalculator.intercepting_hoop_before_target(volleyball, predicted_receiver_position, own_hoops):
             return None
+        if self.use_time_margin:
+            # throw_direction still has the throw speed as magnitude here
+            time_margin = self.interception_calculator.throw_time_margin(
+                volleyball, throw_direction, catch_tick * TICK_DT, defending_chaser_keeper_ids, self.time_margin_cap)
         # beam_cosine_angle normalizes throw_direction in place, which is then thrown as is
         beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator.beam_cosine_angle(
             moving_entity=volleyball,
@@ -398,4 +471,4 @@ class PassEvaluator:
             beam_angle_player_id=beam_cosine_angle_player_id,
             mag_moving_entity_velocity=ProcessActionLogic.effective_throw_velocity(volleyball_holder),
         )
-        return PassOption(receiver.id, throw_direction, predicted_receiver_position, interception_score)
+        return PassOption(receiver.id, throw_direction, predicted_receiver_position, interception_score, time_margin)
