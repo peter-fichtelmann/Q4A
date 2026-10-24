@@ -27,6 +27,8 @@ class CherryPicker:
     enough is chased for at most `follow_duration` game seconds, throwing once it is within
     `cherry_pick_distance`. A beater that gives up on a target does not follow it again for
     `follow_duration`.
+
+    With `include_seekers`, the opponent seeker is a target as well while the seekers are on pitch.
     """
     def __init__(self,
                  logic: GameLogic,
@@ -37,6 +39,7 @@ class CherryPicker:
                  protection_radius: float = 4.0,
                  recovery_margin: float = 1.0,
                  own_hoop_safe_distance: float = 15.0,
+                 include_seekers: bool = False,
                  logger: Optional[logging.Logger] = None):
         """Store the cherry pick criteria."""
         self.logic = logic
@@ -47,6 +50,7 @@ class CherryPicker:
         self.squared_protection_radius = protection_radius ** 2
         self.recovery_margin = recovery_margin
         self.squared_own_hoop_safe_distance = own_hoop_safe_distance ** 2
+        self.include_seekers = include_seekers
         self.logger = logger or logging.getLogger("computer_player")
         self._follows: Dict[str, Tuple[str, float]] = {} # beater id -> (target id, start game time)
         self._follow_blocked_until: Dict[Tuple[str, str], float] = {} # (beater id, target id) -> game time
@@ -78,7 +82,10 @@ class CherryPicker:
                 self._stop_following(beater)
         if target is None:
             best_squared_distance = None
-            for target_id in roster.opponent_chaser_keeper_ids:
+            target_ids = roster.opponent_chaser_keeper_ids
+            if self.include_seekers and state.seeker_on_pitch:
+                target_ids = target_ids + roster.opponent_seeker_ids
+            for target_id in target_ids:
                 candidate = state.players[target_id]
                 if state.game_time < self._follow_blocked_until.get((beater.id, target_id), float('-inf')):
                     continue

@@ -1,4 +1,5 @@
 import itertools
+import math
 import logging
 from typing import Dict, Optional, List, Tuple
 
@@ -28,6 +29,12 @@ class DiamondAttackChaserKeeper(BaseStrategy):
 
     If there is a scoring opportunity, they score.
 
+    Getting open (`get_open_weight`): while a teammate holds the volleyball, each off-ball player
+    rates its position and eight points `get_open_radius` around it by the clearance of the passing
+    lane from the holder (smallest distance of an opponent chaser/keeper to the lane, capped at
+    `get_open_clearance_cap`; points beyond the passing distance are skipped, closeness to the
+    opponent hoops breaks ties) and is pulled towards the best one with `get_open_weight`.
+
     Hoop assignment and evade vectors are computed for all attacking chasers/keepers
     and cached for the step, so moves can position their players the same way
     via `position_player`.
@@ -46,6 +53,9 @@ class DiamondAttackChaserKeeper(BaseStrategy):
                 positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
                 passing_threshold: float = 0.8, # minimum interception score (chance of not being intercepted) to attempt a pass
                 passing_squared_max_distance: float = 400,
+                get_open_weight: Optional[float] = None, # None: no getting open
+                get_open_radius: float = 2.0, # m
+                get_open_clearance_cap: float = 3.0, # m, more lane clearance does not count
                 logger: Optional[logging.Logger] = None
                 ):
         """Configure attack-team positioning, passing, and scoring heuristics."""
@@ -64,6 +74,12 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             chaser_pull_teammate_chaser_keeper_distance = passing_squared_max_distance ** 0.5
         # pull weight * d^2 equals evade weight / d at the pull distance: push dominates below it, pull above it
         self.chaser_pull_teammate_chaser_keeper_weight = chaser_evade_teamate_chaser_keeper_weight / chaser_pull_teammate_chaser_keeper_distance ** 3
+        self.get_open_weight = get_open_weight
+        self.get_open_radius = get_open_radius
+        self.get_open_clearance_cap = get_open_clearance_cap
+        self._get_open_offsets = [(0.0, 0.0)] + [
+            (get_open_radius * math.cos(i * math.pi / 4), get_open_radius * math.sin(i * math.pi / 4)) for i in range(8)
+        ]
         # cached per step by __call__
         self.roster: Optional[TeamRoster] = None
         self.move_vectors: Dict[str, Vector2] = {}
@@ -105,6 +121,10 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             )
         move_vector.x += total_evade_vector.x
         move_vector.y += total_evade_vector.y
+        if not player.has_ball and self.get_open_weight is not None:
+            get_open_vector = self.get_open_vector(player)
+            move_vector.x += get_open_vector.x
+            move_vector.y += get_open_vector.y
         if player.has_ball:
             for hoop in self.roster.own_hoops:
                 evade_vector = MoveUtility.evade(player.position, hoop.position, weight=self.volleyball_holder_evade_own_hoop_weight)
@@ -120,6 +140,40 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             buffer = self.positioning_boundary_buffer_distance
         )
         player.direction = Vector2(move_vector.x, move_vector.y)
+
+    def get_open_vector(self, player: Player) -> Vector2:
+        """Pull of weight `get_open_weight` towards the point around `player` with the clearest passing lane from the teammate holder."""
+        state = self.logic.state
+        holder_id = state.volleyball.holder_id
+        holder = state.players.get(holder_id) if holder_id is not None else None
+        if holder is None or holder.team != player.team or holder.id == player.id:
+            return Vector2(0, 0)
+        defenders = [state.players[player_id] for player_id in self.roster.opponent_chaser_keeper_ids if not state.players[player_id].is_knocked_out]
+        hx, hy = holder.position.x, holder.position.y
+        best_score, best_offset = None, (0.0, 0.0)
+        for ox, oy in self._get_open_offsets:
+            px, py = player.position.x + ox, player.position.y + oy
+            lane_x, lane_y = px - hx, py - hy
+            squared_lane_length = lane_x ** 2 + lane_y ** 2
+            if squared_lane_length > self.passing_squared_max_distance:
+                continue
+            clearance = self.get_open_clearance_cap
+            for defender in defenders:
+                # distance of the defender to the lane segment holder -> point
+                if squared_lane_length == 0:
+                    fraction = 0.0
+                else:
+                    fraction = min(1.0, max(0.0, ((defender.position.x - hx) * lane_x + (defender.position.y - hy) * lane_y) / squared_lane_length))
+                distance = math.hypot(defender.position.x - hx - fraction * lane_x, defender.position.y - hy - fraction * lane_y)
+                clearance = min(clearance, distance)
+            hoop_distance = min(math.hypot(px - hoop.position.x, py - hoop.position.y) for hoop in self.roster.opponent_hoops)
+            score = clearance - 0.01 * hoop_distance
+            if best_score is None or score > best_score:
+                best_score, best_offset = score, (ox, oy)
+        magnitude = math.hypot(*best_offset)
+        if magnitude == 0:
+            return Vector2(0, 0)
+        return Vector2(best_offset[0] / magnitude * self.get_open_weight, best_offset[1] / magnitude * self.get_open_weight)
 
     def position_player(self, player: Player):
         """Position one attacking chaser/keeper with the move and evade vectors cached in this step."""
@@ -291,6 +345,10 @@ class DiamondAttackBeater(BaseStrategy):
 
     Beaters move to the volleyball, evade loaded opponent beaters when loaded,
     and throw at loaded opponent beaters in range.
+
+    Protecting the carrier (`protect_carrier_distance`): a loaded beater beats the opponent
+    chaser/keeper closest to the own volleyball holder if it is within that distance of the holder
+    (tackling or about to) and within `protect_carrier_throw_distance` of the beater.
     """
     def __init__(self,
                  logic: GameLogic,
@@ -298,11 +356,15 @@ class DiamondAttackBeater(BaseStrategy):
                  unloaded_beater_evade_loaded_opponent_beater_weight: float = -3, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
                  loaded_beater_evade_loaded_opponent_beater_weight: float = -2,
                  loaded_beater_evade_unloaded_opponent_beater_weight: float = 2,
+                 protect_carrier_distance: Optional[float] = None, # m; None: no protection beats
+                 protect_carrier_throw_distance: float = 5.0, # m
                  logger: Optional[logging.Logger] = None
                  ):
         """Configure beater pressure weights."""
         super().__init__(logic, logger)
         self.beater_throw_decider = beater_throw_decider
+        self.squared_protect_carrier_distance = protect_carrier_distance**2 if protect_carrier_distance is not None else None
+        self.squared_protect_carrier_throw_distance = protect_carrier_throw_distance**2
         self.cherry_picker = None # optional CherryPicker, set by the orchestrator
         self.unloaded_beater_evade_loaded_opponent_beater_weight = unloaded_beater_evade_loaded_opponent_beater_weight
         self.loaded_beater_evade_loaded_opponent_beater_weight = loaded_beater_evade_loaded_opponent_beater_weight
@@ -357,8 +419,36 @@ class DiamondAttackBeater(BaseStrategy):
                     if self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, opponent_beater):
                         return
                     break
+        if self.protect_carrier(beater, roster):
+            return
         if self.cherry_picker is not None:
             self.cherry_picker.try_pick(beater, roster, on_attack=True)
+
+    def protect_carrier(self, beater: Player, roster: TeamRoster) -> bool:
+        """Beat the opponent chaser/keeper closest to the own volleyball holder if it threatens it. Returns whether it threw."""
+        if self.squared_protect_carrier_distance is None:
+            return False
+        state = self.logic.state
+        holder = state.players.get(state.volleyball.holder_id) if state.volleyball.holder_id is not None else None
+        if holder is None or holder.team != roster.team:
+            return False
+        best_target, best_squared_distance = None, self.squared_protect_carrier_distance
+        for opponent_id in roster.opponent_chaser_keeper_ids:
+            opponent = state.players[opponent_id]
+            if opponent.is_knocked_out or opponent.dodgeball_immunity or opponent.id in self.beater_throw_decider.pending_throws:
+                continue
+            squared_distance = UtilityLogic._squared_distance(opponent.position, holder.position)
+            if squared_distance > best_squared_distance:
+                continue
+            if UtilityLogic._squared_distance(beater.position, opponent.position) > self.squared_protect_carrier_throw_distance:
+                continue
+            best_target, best_squared_distance = opponent, squared_distance
+        if best_target is None:
+            return False
+        if self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, best_target):
+            self.logger.info("Beater %s protects carrier %s by beating %s", beater.id, holder.id, best_target.id)
+            return True
+        return False
 
     def __call__(self,
                  ctx: StepContext,

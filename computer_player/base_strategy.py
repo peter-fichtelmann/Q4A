@@ -18,6 +18,8 @@ class TeamRoster:
     beater_ids: List[str]
     opponent_chaser_keeper_ids: List[str]
     opponent_beater_ids: List[str]
+    seeker_ids: List[str] = field(default_factory=list)
+    opponent_seeker_ids: List[str] = field(default_factory=list)
 
     @classmethod
     def build(cls, state, team: int) -> 'TeamRoster':
@@ -34,6 +36,8 @@ class TeamRoster:
                 (roster.chaser_keeper_ids if own else roster.opponent_chaser_keeper_ids).append(player.id)
             elif player.role == PlayerRole.BEATER:
                 (roster.beater_ids if own else roster.opponent_beater_ids).append(player.id)
+            elif player.role == PlayerRole.SEEKER:
+                (roster.seeker_ids if own else roster.opponent_seeker_ids).append(player.id)
         return roster
 
 

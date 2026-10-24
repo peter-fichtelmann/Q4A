@@ -14,6 +14,7 @@ from computer_player.dodgeball_assigner import DodgeballAssigner
 from computer_player.seeker_director import SeekerDirector
 from computer_player.dodgeball_dodger import DodgeballDodger
 from computer_player.cherry_picker import CherryPicker
+from computer_player.beater_seeker_focus import BeaterSeekerFocus
 from computer_player.volleyball_possession_calculator import VolleyballPossession, VolleyballPossessionCalculator
 from computer_player.moves.move import Move, MoveStatus
 from computer_player.moves.volleyball_shift import VolleyballShift
@@ -73,6 +74,9 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  possession_kwargs: Optional[Dict] = None,
                  dodge_kwargs: Optional[Dict] = None,
                  cherry_pick_kwargs: Optional[Dict] = None,
+                 bludger_control_kwargs: Optional[Dict] = None,
+                 seeker_kwargs: Optional[Dict] = None,
+                 beater_seeker_focus_kwargs: Optional[Dict] = None,
                  moves: Optional[Dict[str, Dict]] = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
                  beater_throw_threshold_loaded_beater: float = 4,
@@ -102,7 +106,9 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         self.possession_calculator = VolleyballPossessionCalculator(self.logic, self.interception_calculator, **(possession_kwargs or {}))
         self.beater_throw_decider = beater_throw_decider = BeaterThrowDecider(
             throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
-            throw_threshold_loaded_beater=beater_throw_threshold_loaded_beater
+            throw_threshold_loaded_beater=beater_throw_threshold_loaded_beater,
+            state=state,
+            **(bludger_control_kwargs or {})
         )
         self.score_attempter = ScoreAttempter(
             self.interception_calculator,
@@ -137,7 +143,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         # the chaser/keeper defence strategy is chosen each time a team starts defending
         self.box_defence_probability = box_defence_probability
         self.defence_chaser_keeper_strategies: Dict[int, BaseStrategy] = {}
-        self.seeker_director = SeekerDirector(state)
+        self.seeker_director = SeekerDirector(state, **(seeker_kwargs or {}))
+        self.beater_seeker_focus = BeaterSeekerFocus(self.logic, beater_throw_decider, logger=self.logger, **(beater_seeker_focus_kwargs or {}))
         self.dodgeball_dodger = DodgeballDodger(self.logic, logger=self.logger, **(dodge_kwargs or {}))
 
         # moves
@@ -190,6 +197,11 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         steerable_id_set = set(steerable_ids)
 
         assigned_beater_ids = self._profile_call('orchestrator.dodgeball_assigner', self.dodgeball_assigner, steerable_id_set)
+        # beaters with a seeker focus play the seeker game instead of the base beater strategies
+        seeker_focus_ids = {team: [player_id for player_id in self.beater_seeker_focus.select(team) if player_id in steerable_id_set] for team in (0, 1)}
+        if seeker_focus_ids[0] or seeker_focus_ids[1]:
+            excluded = set(seeker_focus_ids[0]) | set(seeker_focus_ids[1])
+            steerable_ids = [player_id for player_id in steerable_ids if player_id not in excluded]
         defence_ids = [player_id for player_id in steerable_ids if self.logic.state.players[player_id].team != attack_team]
         defence_strategies = [self.defence_chaser_keeper_strategies[defence_team], self.hoop_defence_beater]
         for strategy in defence_strategies:
@@ -199,6 +211,9 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             for strategy in self.attack_strategies:
                 self._profile_call(f'orchestrator.{type(strategy).__name__}', strategy, ctx, attack_team, attack_ids, assigned_beater_ids)
         # TODO: with no attacking team (all chasers/keepers knocked out), only team 0 defends
+        for team in (0, 1):
+            if seeker_focus_ids[team]:
+                self._profile_call('orchestrator.BeaterSeekerFocus', self.beater_seeker_focus, ctx, team, seeker_focus_ids[team], assigned_beater_ids)
         self._steer_contester(possession, steerable_id_set)
 
         for move in self.active_moves:

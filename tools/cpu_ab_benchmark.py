@@ -42,7 +42,7 @@ import main
 from config import Config
 from core.game_logic.game_logic import GameLogic
 
-ROLES = ['keeper', 'chaser', 'chaser', 'chaser', 'beater', 'beater', 'seeker']
+ROLES = ['keeper', 'chaser', 'chaser', 'chaser', 'beater', 'beater'] # the room adds the seekers itself
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -90,6 +90,8 @@ class LogCounter(logging.Handler):
             self.counts[(self._player_team(args[1]), 'passes')] += 1
         elif msg.startswith('Cherry pick by beater'):
             self.counts[(self._player_team(args[0]), 'cherry picks')] += 1
+        elif msg.startswith('Beater %s protects carrier'):
+            self.counts[(self._player_team(args[0]), 'carrier protections')] += 1
         elif msg.startswith('Move ended'):
             name, team, status, reason = args[:4]
             self.counts[(team, f'move {name}:{status}:{reason}')] += 1
@@ -113,7 +115,8 @@ def play(seed: int, ticks: int, configs: dict, a_team: int) -> dict:
     cp_logger.handlers = [counter]
     cp_logger.propagate = False
     label_of_team = {a_team: 'A', 1 - a_team: 'B'}
-    team_ids = {team: [pid for pid in room.cpu_player_ids if state.players[pid].team == team] for team in (0, 1)}
+    # all players incl. the room's seekers, as the server hands every not human controlled player to the CPU
+    team_ids = {team: [pid for pid in room.get_cpu_controlled_player_ids() if state.players[pid].team == team] for team in (0, 1)}
     controllers = {
         team: room.computer_player_class(room.game_logic, computer_player_log_level=logging.INFO, **configs[label_of_team[team]])
         for team in (0, 1)
@@ -125,6 +128,8 @@ def play(seed: int, ticks: int, configs: dict, a_team: int) -> dict:
     knocked = {pid: False for pid in state.players}
     previous_possession = None
     for tick in range(ticks):
+        if state.is_game_over:
+            break
         room.game_logic.update(dt)
         for announcement in room.game_logic.penalty_logic.pop_announcements():
             if announcement.get('type') != 'penalty_turnover':
@@ -155,6 +160,8 @@ def play(seed: int, ticks: int, configs: dict, a_team: int) -> dict:
                 start = time.perf_counter_ns()
                 controllers[team].make_move(dt * Config.COMPUTER_PLAYER_TICK_RATE, team_ids[team])
                 times[label_of_team[team]].append((time.perf_counter_ns() - start) / 1e6)
+    if state.flag_catched_team is not None:
+        result[label_of_team[state.flag_catched_team]]['flag catches'] += 1
     for team in (0, 1):
         label = label_of_team[team]
         result[label]['goals for'] += state.score[team]
@@ -224,7 +231,7 @@ def main_cli():
         conversion = t['goals for'] / t['shots'] if t['shots'] else float('nan')
         ms = times[label]
         print(f'\n[{label}] goals {t["goals for"]}, possessions {t["possessions"]}, goals/possession {per_possession:.3f}, '
-              f'shots {t["shots"]}, goals/shot {conversion:.2f}, passes {t["passes"]}, cherry picks {t["cherry picks"]}')
+              f'shots {t["shots"]}, goals/shot {conversion:.2f}, passes {t["passes"]}, cherry picks {t["cherry picks"]}, carrier protections {t["carrier protections"]}, flag catches {t["flag catches"]}')
         print(f'    make_move: mean {sum(ms)/len(ms):.3f} ms  p95 {percentile(ms, .95):.3f}  p99 {percentile(ms, .99):.3f}  max {max(ms):.3f}')
         for key in sorted(t):
             if key.startswith(('knocked out', 'turnover', 'other penalty')):

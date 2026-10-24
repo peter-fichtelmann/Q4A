@@ -3,7 +3,7 @@ import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 from config import Config
-from core.entities import Hoop, Player, Vector2, VolleyBall
+from core.entities import Hoop, Player, PlayerRole, Vector2, VolleyBall
 from core.game_logic.utility_logic import UtilityLogic
 from core.game_logic.process_action_logic import ProcessActionLogic
 from computer_player.computer_player_utility.kinematics import TICK_DT, decay_table, first_throw_tick
@@ -79,15 +79,25 @@ class BeaterThrowDecider:
     Shared by all beater strategies and the dodgeball assigner. A target that a dodgeball of the
     thrower's team is already flying at is not thrown at again, so a second beater keeps its
     dodgeball as backup instead of wasting it on the same player.
+
+    Bludger control (`keep_last_dodgeball`): a beater with the team's last dodgeball does not throw it
+    while an opponent beater is loaded, except at a loaded opponent beater or at a volleyball holder
+    within `last_dodgeball_threat_distance` of the thrower's own hoops.
     """
     def __init__(
             self,
             throw_threshold_volleyball_holder: float,
-            throw_threshold_loaded_beater: float
+            throw_threshold_loaded_beater: float,
+            state=None,
+            keep_last_dodgeball: bool = False,
+            last_dodgeball_threat_distance: float = 8.0,
             ):
         """Store squared distance thresholds used by beater throw checks."""
         self.squared_throw_threshold_volleyball_holder = throw_threshold_volleyball_holder**2
         self.squared_throw_threshold_loaded_beater = throw_threshold_loaded_beater**2
+        self.state = state
+        self.keep_last_dodgeball = keep_last_dodgeball
+        self.squared_last_dodgeball_threat_distance = last_dodgeball_threat_distance**2
         self.pending_throws: Dict[str, Tuple[str, int]] = {} # target id -> (dodgeball id, thrower team) of a throw in flight
 
     def update_pending_throws(self, state) -> None:
@@ -101,11 +111,31 @@ class BeaterThrowDecider:
 
     def throw_at(self, process_action_logic, beater: Player, target: Player) -> bool:
         """Throw `beater`'s dodgeball at the moving `target` and remember the throw. Returns whether the throw happened."""
+        if self._keeps_last_dodgeball(beater, target):
+            return False
         dodgeball_id = beater.has_ball
         throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target)
         if not process_action_logic.process_throw_action(beater.id, throw_direction):
             return False
         self.pending_throws[target.id] = (dodgeball_id, beater.team)
+        return True
+
+    def _keeps_last_dodgeball(self, beater: Player, target: Player) -> bool:
+        """Whether `beater` keeps its dodgeball as the team's last one instead of throwing it at `target`."""
+        if not self.keep_last_dodgeball or self.state is None:
+            return False
+        players = self.state.players.values()
+        if any(player.team == beater.team and player.role == PlayerRole.BEATER and player.has_ball and player.id != beater.id for player in players):
+            return False # not the last dodgeball
+        if not any(player.team != beater.team and player.role == PlayerRole.BEATER and player.has_ball and not player.is_knocked_out for player in players):
+            return False # no loaded opponent beater to keep control against
+        if target.role == PlayerRole.BEATER and target.has_ball:
+            return False # beating a loaded beater frees its dodgeball
+        volleyball = self.state.volleyball
+        if volleyball is not None and target.id == volleyball.holder_id:
+            own_hoops = [hoop for hoop in self.state.hoops.values() if hoop.team == beater.team]
+            if any(UtilityLogic._squared_distance(target.position, hoop.position) <= self.squared_last_dodgeball_threat_distance for hoop in own_hoops):
+                return False # scoring threat
         return True
 
     def _is_targeted(self, target: Player) -> bool:
