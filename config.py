@@ -188,7 +188,7 @@ class Config:
                 'hoop_switch_margin': 0.2, # interception score another hoop must be better by to change the target hoop
             },
             'volleyball_shift_drive': { # volleyball_shift, then volleyball_drive for the new carrier if the second pass was caught
-                'start_probability_per_second': 0.3,
+                'start_probability_per_second': 0.3, # probability that the move is tried within one game second
                 'cooldown': 3,
                 'shift': {
                     'max_duration': 12,
@@ -209,7 +209,7 @@ class Config:
                 },
             },
             'volleyball_crossing_drive': { # volleyball_crossing (scissors in front of a defender), then volleyball_drive after the exit run
-                'start_probability_per_second': 0.3,
+                'start_probability_per_second': 0.3, # probability that the move is tried within one game second
                 'cooldown': 3,
                 'crossing': {
                     'max_duration': 15, # timeout of the crossing incl. exit run
@@ -245,13 +245,18 @@ class Config:
                 'cooldown': 3,
                 'block': {
                     'max_duration': 10, # timeout of the block phase
-                    'blocker_max_distance': 15, # m, blocker at most this far from the carrier
-                    'block_offset': 0.9, # m, the block point is at least this far in front of the defender on its interception line (about body contact)
-                    'block_set_width': 0.6, # m, block counts as set once the blocker is this close to the defender's interception line
-                    'block_sample_step': 0.5, # m, step along the interception line when searching the first point the blocker reaches before the defender
-                    'unset_stick_input': 0.5, # carrier stick input until the block is set
-                    'screen_clearance': 1.5, # m, the carrier passes the blocker this far on the side away from the defender
-                    'loaded_beater_path_distance': 4, # m, no loaded opponent beater this close to the carrier's run at the start
+                    'blocker_max_distance': 20, # m, blocker at most this far from the carrier (max passing distance)
+                    'block_offset': 0.9, # m, the screen spot is this far beside the defender, on the side the blocker comes from (about body contact)
+                    'block_set_width': 0.8, # m, block counts as set once the blocker is this close to the screen spot
+                    'max_lead_time': 1.5, # game s, the blocker aims at the screen spot moved by the defender's velocity times its arrival time, at most this
+                    'max_setup_time': 4.0, # game s, the blocker reaches the screen spot within this time at the start
+                    'unset_stick_input': 0.2, # lowest carrier stick input while waiting for the screen (the carrier is synced to reach the lane when it stands)
+                    'screen_clearance': 1.5, # m, the carrier's lane is this far beyond the screen spot
+                    'loaded_beater_path_distance': 4, # m, no loaded opponent beater this close to the carrier's run to the lane at the start
+                    'second_interceptor_margin': 0.0, # game s, the next opponent can intercept the run at least this much later than the blocked defender (0: no condition; CPU defenders cluster, gaps are mostly < 0.5 s)
+                    'min_defender_hoop_distance': 3.0, # m, the defender is at least this far from the target hoop (no hoop guard)
+                    'min_defender_distance': 4.0, # m, the defender is at least this far from the carrier at the start
+                    'max_defender_closing_speed': 0.5, # m/s, the defender runs at the carrier at most this fast at the start (a pressing defender cannot be screened)
                     'tackle_window': 1.0, # carrier counts as tackled this long after a tackle
                 },
                 'drive': {

@@ -21,6 +21,8 @@ from computer_player.moves.volleyball_drive import VolleyballDrive
 from computer_player.moves.volleyball_shift_drive import VolleyballShiftDrive
 from computer_player.moves.volleyball_crossing import VolleyballCrossing
 from computer_player.moves.volleyball_crossing_drive import VolleyballCrossingDrive
+from computer_player.moves.volleyball_block import VolleyballBlock
+from computer_player.moves.volleyball_block_drive import VolleyballBlockDrive
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, PassEvaluator, ScoreAttempter
@@ -54,6 +56,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         VolleyballShiftDrive.name: VolleyballShiftDrive,
         VolleyballCrossing.name: VolleyballCrossing,
         VolleyballCrossingDrive.name: VolleyballCrossingDrive,
+        VolleyballBlock.name: VolleyballBlock,
+        VolleyballBlockDrive.name: VolleyballBlockDrive,
     }
 
     def __init__(self,
