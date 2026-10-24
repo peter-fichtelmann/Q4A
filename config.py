@@ -119,10 +119,14 @@ class Config:
         'move_buffer_factor_y': 1.4, # for ComputerPlayerOrchestrator move_around_hoop_blockage, how much m extra space to add when blocking the hoop with the volleyball, to ensure blockage but not cause unnecessary movement
         'scoring_kwargs': { # ScoreAttempter, shared by the base attack and the moves
             'score_squared_max_distance': 8**2, # maximum squared distance from volleyball to consider scoring
-            'scoring_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a score
+            'scoring_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a score ('beam' model)
+            'interception_model': 'time_margin', # 'beam' (angle cone) or 'time_margin' (defender reach time vs shot arrival with ball decay)
+            'shot_time_margin': -0.25, # game seconds, shoot if the fastest defender reaches the shot at most this much before it arrives ('time_margin' model)
         },
         'passing_kwargs': { # PassEvaluator, shared by the base attack and the moves
             'passing_evade_vector_position_penalty_weight': 100, # pass-to-player score = squared distance to closest attack hoop + weight * squared evade vector magnitude
+            'interception_model': 'beam', # 'time_margin' rejects long slow passes and loses goals against the CPU defence at any margin
+            'pass_time_margin': 0.0, # game seconds ('time_margin' model)
         },
         'diamond_attack_kwargs': {
             'chaser_keeper': {
