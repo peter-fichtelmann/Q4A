@@ -78,9 +78,19 @@ class BoundaryLogic:
                                             ball.velocity.y = 0
                                     for contact_player_id in player.in_contact_player_ids:
                                         contact_player = self.state.players[contact_player_id]
-                                        contact_player.position.x = contact_player.position.x + reset_vector
+                                        self._shift_player(contact_player, reset_vector, 0)
                                     break
                                 # print(f'Player {player.id} blocked from going too close to own hoop')
+
+    def _shift_player(self, player: Player, dx: float, dy: float) -> None:
+        """Displace a player and carry a held ball along, so a push never leaves the ball behind."""
+        player.position.x += dx
+        player.position.y += dy
+        if player.has_ball:
+            ball = self.state.get_ball(player.has_ball)
+            if ball is not None:
+                ball.position.x += dx
+                ball.position.y += dy
 
     def _enforce_pitch_boundaries(self) -> None:
         """
@@ -130,8 +140,7 @@ class BoundaryLogic:
                         reset_vector.x = new_position_x - moving_entity.position.x
                         reset_vector.y = new_position_y - moving_entity.position.y
                         contact_player = self.state.players[contact_player_id]
-                        contact_player.position.x += reset_vector.x
-                        contact_player.position.y += reset_vector.y
+                        self._shift_player(contact_player, reset_vector.x, reset_vector.y)
                 moving_entity.position.x = new_position_x
                 moving_entity.position.y = new_position_y
 
@@ -266,9 +275,7 @@ class BoundaryLogic:
         
         # Apply all movements
         for player_id, move_vector in players_to_move.items():
-            player = self.state.players[player_id]
-            player.position.x += move_vector.x
-            player.position.y += move_vector.y
+            self._shift_player(self.state.players[player_id], move_vector.x, move_vector.y)
 
     def _making_alive_keeper_free_way(self, dt: float) -> None:
         """
@@ -303,8 +310,7 @@ class BoundaryLogic:
                 move_away_speed = other_player.max_speed
                 move_vector, normal = self._calculate_move_away_vector(keeper, other_player, dt, move_away_speed)
                 if move_vector is not None:
-                    other_player.position.x += move_vector.x
-                    other_player.position.y += move_vector.y
+                    self._shift_player(other_player, move_vector.x, move_vector.y)
             else:
                 break
 
@@ -335,8 +341,7 @@ class BoundaryLogic:
                 move_away_speed = other_player.max_speed
                 move_vector, _ = self._calculate_move_away_vector(claiming_beater, other_player, dt, move_away_speed)
                 if move_vector is not None:
-                    other_player.position.x += move_vector.x
-                    other_player.position.y += move_vector.y
+                    self._shift_player(other_player, move_vector.x, move_vector.y)
             else:
                 break
 
