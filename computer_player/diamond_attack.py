@@ -84,6 +84,7 @@ class DiamondAttackChaserKeeper(BaseStrategy):
         self.roster: Optional[TeamRoster] = None
         self.move_vectors: Dict[str, Vector2] = {}
         self.evade_vectors: Dict[str, Vector2] = {}
+        self.dt: float = 0.0
 
     def move_to_volleyball(self,
                            volleyball: VolleyBall,
@@ -139,6 +140,9 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             boundary_y_max = self.logic.state.boundaries_y[1],
             buffer = self.positioning_boundary_buffer_distance
         )
+        if player.role == PlayerRole.CHASER:
+            # the evade and get-open pulls can point into the own hoop blockage, check the way until the next step
+            move_vector = self.move_around_hoop_blockages[team].avoid(player, move_vector, lookahead_distance=player.max_speed * self.dt)
         player.direction = Vector2(move_vector.x, move_vector.y)
 
     def get_open_vector(self, player: Player) -> Vector2:
@@ -311,6 +315,7 @@ class DiamondAttackChaserKeeper(BaseStrategy):
                  assigned_beater_ids: List[str]):
         """Execute one diamond-attack tick for the attacking chasers/keepers in `controlled_ids`."""
         self.roster = ctx.rosters[team]
+        self.dt = ctx.dt
         volleyball = self.logic.state.volleyball
         not_knocked_out_chaser_keeper = [
             player for player in (self.logic.state.players[player_id] for player_id in self.roster.chaser_keeper_ids)
