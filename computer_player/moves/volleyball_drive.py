@@ -31,6 +31,7 @@ class VolleyballDrive(Move):
     """
     name = "volleyball_drive"
     side = "attack"
+    exclusive_group = "volleyball_carrier"
 
     def __init__(self,
                  orchestrator: 'ComputerPlayerOrchestrator',

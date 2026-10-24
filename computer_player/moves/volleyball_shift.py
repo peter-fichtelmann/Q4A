@@ -30,6 +30,7 @@ class VolleyballShift(Move):
     """
     name = "volleyball_shift"
     side = "attack"
+    exclusive_group = "volleyball_carrier"
 
     def __init__(self,
                  orchestrator: 'ComputerPlayerOrchestrator',

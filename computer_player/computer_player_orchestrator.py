@@ -246,6 +246,9 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                     continue
                 if any(type(move) is move_class and move.team == team for move in self.active_moves):
                     continue
+                if move_class.exclusive_group is not None and any(
+                        move.exclusive_group == move_class.exclusive_group and move.team == team for move in self.active_moves):
+                    continue
                 if ctx.game_time < self._move_cooldown_until.get((move_class.name, team), float('-inf')):
                     continue
                 # probability per step for a probability per game second, independent of dt

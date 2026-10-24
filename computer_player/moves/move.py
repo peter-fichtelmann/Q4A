@@ -26,6 +26,7 @@ class Move(ABC):
     """
     name: str = "move"
     side: str = "attack" # 'attack' or 'defence'
+    exclusive_group: Optional[str] = None # moves of the same group never run at the same time for one team
 
     def __init__(self,
                  orchestrator: 'ComputerPlayerOrchestrator',
