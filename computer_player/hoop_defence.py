@@ -94,8 +94,8 @@ class HoopDefenceChaserKeeper(BaseStrategy):
                             lookahead_to_target=next_direction_to_hoop,
                             add_target_x_buffer=True
                         )
-                        # tackle a carrier running into the hoop defender (no-op without contact)
-                        self.logic.process_action_logic.process_tackle_action(chaser_id)
+                        # tackle a carrier running into the hoop defender, every frame until the next CPU move (no-op without contact)
+                        chaser.is_holding_tackle = True
                     break
 
     def _is_volleyball_in_keeper_zone(self, volleyball: VolleyBall, team: int) -> bool:
@@ -127,8 +127,8 @@ class HoopDefenceChaserKeeper(BaseStrategy):
             crossing_point_y = volleyball.position.y + ((crossing_point_x - volleyball.position.x) / closest_hoop_volleyball_vector.x) * closest_hoop_volleyball_vector.y
             player.direction.x = crossing_point_x - player.position.x
             player.direction.y = crossing_point_y - player.position.y
-        # always try to tackle if not throwing
-        self.logic.process_action_logic.process_tackle_action(player.id)
+        # always try to tackle if not throwing, every frame until the next CPU move
+        player.is_holding_tackle = True
 
 
 class HoopDefenceBeater(BaseStrategy):
@@ -221,7 +221,7 @@ class HoopDefenceBeater(BaseStrategy):
                     if opponent.role == PlayerRole.BEATER:
                         # negative weight
                         evade_vectors.append(MoveUtility.evade(beater.position, opponent.position, weight=self.unloaded_beater_evade_beater_weight))
-                self.logic.process_action_logic.process_tackle_action(beater.id) # unloaded beaters try to make contact with other close opponent beaters
+                beater.is_holding_tackle = True # unloaded beaters try to make contact with other close opponent beaters
         for evade_vector in evade_vectors:
             move_vector.x += evade_vector.x
             move_vector.y += evade_vector.y

@@ -111,7 +111,7 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
 
         # the keeper always tries to tackle, like in the hoop defence
         if keeper is not None and keeper.id in controlled_id_set:
-            self.logic.process_action_logic.process_tackle_action(keeper.id)
+            keeper.is_holding_tackle = True
 
     def _box_chaser(self, team: int, chasers: List[Player], volleyball: VolleyBall) -> Optional[Player]:
         """
@@ -163,7 +163,7 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
         if presser.id in controlled_id_set:
             target_position = self._clamp(Vector2(volleyball.position.x, volleyball.position.y), x_limits, y_limits)
             presser.direction = move_around_hoop_blockage(presser, target_position, target_hoop=closest_hoop)
-            self.logic.process_action_logic.process_tackle_action(presser.id)
+            presser.is_holding_tackle = True
 
         opponents = [
             self.logic.state.players[player_id] for player_id in ctx.rosters[team].opponent_chaser_keeper_ids

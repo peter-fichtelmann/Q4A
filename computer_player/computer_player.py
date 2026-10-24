@@ -90,8 +90,13 @@ class ComputerPlayer(ABC):
         Seekers are kept apart from `cpu_players`: they are steered by the
         SeekerDirector, while `cpu_players` feeds the chaser/keeper/beater tactics.
         Unknown ids are skipped instead of raising.
+        The held tackles of the previous and current players are released; the strategies set them again.
         """
         players = self.logic.state.players
+        for player_id in self.cpu_player_id_set.union(cpu_player_ids):
+            player = players.get(player_id)
+            if player is not None:
+                player.is_holding_tackle = False
         self.cpu_player_ids = cpu_player_ids
         self.cpu_player_id_set = set(cpu_player_ids)
         self.cpu_players = []
@@ -156,5 +161,5 @@ class RandomComputerPlayer(ComputerPlayer):
             if throwing_decision:
                 self._profile_call('random.process_throw_action', self.logic.process_action_logic.process_throw_action, player.id)
             # always try to tackle if not throwing
-            self.logic.process_action_logic.process_tackle_action(player.id)
+            player.is_holding_tackle = True
 

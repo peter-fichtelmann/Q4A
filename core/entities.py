@@ -89,6 +89,7 @@ class Player:
     is_receiving_turnover_ball: bool = False  # True if player is currently receiving a turnover ball
     flag_runner_interaction_time: float = 0.0  #only for seekers: Time in seconds that the player has been in contact with the flag runner
     is_claiming: bool = False  # only for beaters: True while claiming the third dodgeball (runs to it, immune, free way)
+    is_holding_tackle: bool = False  # True while the player tries to tackle every frame (CPU tackle intent, set on CPU moves)
 
     def serialize(self) -> dict:
         """Convert player to JSON-serializable dict."""
@@ -149,7 +150,8 @@ class Player:
             tackling_player_ids=self.tackling_player_ids.copy(),
             is_receiving_turnover_ball=self.is_receiving_turnover_ball,
             flag_runner_interaction_time=self.flag_runner_interaction_time,
-            is_claiming=self.is_claiming
+            is_claiming=self.is_claiming,
+            is_holding_tackle=self.is_holding_tackle
         )
 
     def __copy__(self) -> 'Player':

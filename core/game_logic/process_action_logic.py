@@ -141,6 +141,12 @@ class ProcessActionLogic:
                                 return True
         return False
 
+    def process_holding_tackles(self) -> None:
+        """Attempt a tackle for every player holding the tackle (`is_holding_tackle`), each frame after the collision check."""
+        for player in self.state.players.values():
+            if player.is_holding_tackle and not player.is_knocked_out:
+                self.process_tackle_action(player.id)
+
 
     def can_claim(self, player: Player) -> bool:
         """

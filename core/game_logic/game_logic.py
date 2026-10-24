@@ -126,6 +126,8 @@ class GameLogic:
 
             # Check player collisions and enforce tackle effects before updating positions and after updating player velocities
             self.physical_contact_logic._check_player_collisions()
+            # held tackles (CPU) with the contacts of this frame, before stalled volleyball and _enforce_tackle read them
+            self.process_action_logic.process_holding_tackles()
             # stalled volleyball reads the tackles of this frame, so before _enforce_tackle clears them
             self.volleyball_logic._check_stalled_volleyball(dt)
             # after collisions before updating positions so setting velocity to 0 when tackling takes effect before position updates and after velocity updates
@@ -205,6 +207,7 @@ class GameLogic:
             ('basic.update_player_velocities', self.basic_logic, 'update_player_velocities'),
             ('physical._check_player_collisions', self.physical_contact_logic, '_check_player_collisions'),
             ('flag_runner._check_seeker_flag_runner_interaction', self.flag_runner_logic, '_check_seeker_flag_runner_interaction'),
+            ('process_action.process_holding_tackles', self.process_action_logic, 'process_holding_tackles'),
             ('volleyball._check_stalled_volleyball', self.volleyball_logic, '_check_stalled_volleyball'),
             ('physical._enforce_tackle', self.physical_contact_logic, '_enforce_tackle'),
             ('basic.update_ball_velocities', self.basic_logic, 'update_ball_velocities'),
