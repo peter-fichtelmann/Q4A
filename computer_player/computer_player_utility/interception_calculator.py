@@ -266,17 +266,24 @@ class InterceptionCalculator:
                           throw_velocity: Vector2,
                           arrival_time: float,
                           intercepting_player_ids: List[str],
-                          margin_cap: float) -> float:
+                          margin_cap: float,
+                          receiver_id: Optional[str] = None) -> float:
         """
         Time margin of a throw (analytic motion model): game seconds the fastest intercepting player needs
         longer to reach the thrown ball than the ball needs to its target (`arrival_time`).
 
         The ball starts at `ball`'s position with `throw_velocity` and decays like `ball`. Positive: the ball
         arrives first; negative: it is intercepted on the way. Capped at `margin_cap`, which also bounds the search.
+
+        With `receiver_id`, the receiver runs to the ball as well (like the defenders), so the ball's target
+        time is the earlier of `arrival_time` and the receiver's own interception time.
         """
         thrown_ball = ball.copy()
         thrown_ball.velocity.x = throw_velocity.x
         thrown_ball.velocity.y = throw_velocity.y
+        if receiver_id is not None:
+            receiver_time, _, _ = self._line_interception_analytic(thrown_ball, [receiver_id], max_ticks=math.ceil(arrival_time / TICK_DT))
+            arrival_time = min(arrival_time, receiver_time)
         max_ticks = math.ceil((arrival_time + margin_cap) / TICK_DT)
         interception_time, _, _ = self._line_interception_analytic(thrown_ball, intercepting_player_ids, max_ticks=max_ticks)
         return min(margin_cap, interception_time - arrival_time)

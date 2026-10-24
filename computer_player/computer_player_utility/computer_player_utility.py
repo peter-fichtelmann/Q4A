@@ -444,19 +444,23 @@ class PassEvaluator:
         'beam': a pass is safe if its beam interception score passes the caller's threshold.
         'time_margin': a pass is safe if the ball reaches the receiver at least `pass_time_margin`
             game seconds before the fastest defender could reach it (analytic motion model).
+            With `active_receiver`, the receiver runs to the ball like the defenders do, instead of
+            keeping its stick input.
     """
     def __init__(self,
                  interception_calculator: InterceptionCalculator,
                  passing_evade_vector_position_penalty_weight: float,
                  interception_model: str = 'beam',
                  pass_time_margin: float = 0.5,
-                 time_margin_cap: float = 3.0):
+                 time_margin_cap: float = 3.0,
+                 active_receiver: bool = False):
         """Store the interception model and the evade weight of the position penalty."""
         self.interception_calculator = interception_calculator
         self.passing_evade_vector_position_penalty_weight = passing_evade_vector_position_penalty_weight
         self.use_time_margin = interception_model == 'time_margin' and Config.MOTION_MODEL == 'analytic'
         self.pass_time_margin = pass_time_margin
         self.time_margin_cap = time_margin_cap
+        self.active_receiver = active_receiver # the receiver runs to the ball, so it may catch it before its predicted position
 
     def is_safe(self, pass_option: PassOption, beam_threshold: float, strict: bool = False) -> bool:
         """Whether the pass is safe enough: time margin model, or the beam score against the caller's threshold."""
@@ -503,7 +507,8 @@ class PassEvaluator:
         if self.use_time_margin:
             # throw_direction still has the throw speed as magnitude here
             time_margin = self.interception_calculator.throw_time_margin(
-                volleyball, throw_direction, catch_tick * TICK_DT, defending_chaser_keeper_ids, self.time_margin_cap)
+                volleyball, throw_direction, catch_tick * TICK_DT, defending_chaser_keeper_ids, self.time_margin_cap,
+                receiver_id=receiver.id if self.active_receiver else None)
         # beam_cosine_angle normalizes throw_direction in place, which is then thrown as is
         beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator.beam_cosine_angle(
             moving_entity=volleyball,
