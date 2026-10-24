@@ -73,6 +73,7 @@ class LogCounter(logging.Handler):
         super().__init__(logging.INFO)
         self.state = state
         self.counts = Counter() # (team, key) -> count
+        self.pending_throw = None # (kind, team, score at the throw) of the last pass/shot until its outcome is known
 
     def _player_team(self, player_id):
         player = self.state.players.get(player_id)
@@ -84,10 +85,13 @@ class LogCounter(logging.Handler):
             hoop = self.state.hoops.get(args[0])
             if hoop is not None:
                 self.counts[(1 - hoop.team, 'shots')] += 1
+                self.pending_throw = ('shot', 1 - hoop.team, list(self.state.score))
         elif msg.startswith('Passing from player'):
             self.counts[(self._player_team(args[0]), 'passes')] += 1
+            self.pending_throw = ('pass', self._player_team(args[0]), list(self.state.score))
         elif msg.startswith('VolleyballShift pass') or msg.startswith('VolleyballDrive pass'):
             self.counts[(self._player_team(args[1]), 'passes')] += 1
+            self.pending_throw = ('pass', self._player_team(args[1]), list(self.state.score))
         elif msg.startswith('Cherry pick by beater'):
             self.counts[(self._player_team(args[0]), 'cherry picks')] += 1
         elif msg.startswith('Beater %s protects carrier'):
@@ -149,6 +153,20 @@ def play(seed: int, ticks: int, configs: dict, a_team: int) -> dict:
             if player.is_knocked_out and not knocked[pid]:
                 result[label_of_team[player.team]][f'knocked out {player.role.value}'] += 1
             knocked[pid] = player.is_knocked_out
+        if counter.pending_throw is not None:
+            # outcome of the last pass/shot: goal, caught by the own team, intercepted by the opponents, or other (dead, penalty)
+            kind, team, score = counter.pending_throw
+            volleyball = state.volleyball
+            outcome = None
+            if state.score[team] > score[team]:
+                outcome = 'goal'
+            elif volleyball.holder_id is not None:
+                outcome = 'own' if state.players[volleyball.holder_id].team == team else 'intercepted'
+            elif volleyball.is_dead or volleyball.turnover_to_player is not None or volleyball.inbounder is not None:
+                outcome = 'other'
+            if outcome is not None:
+                result[label_of_team[team]][f'{kind} {outcome}'] += 1
+                counter.pending_throw = None
         possession = state.volleyball.possession_team
         if possession is not None and possession != previous_possession:
             result[label_of_team[possession]]['possessions'] += 1
@@ -232,6 +250,8 @@ def main_cli():
         ms = times[label]
         print(f'\n[{label}] goals {t["goals for"]}, possessions {t["possessions"]}, goals/possession {per_possession:.3f}, '
               f'shots {t["shots"]}, goals/shot {conversion:.2f}, passes {t["passes"]}, cherry picks {t["cherry picks"]}, carrier protections {t["carrier protections"]}, flag catches {t["flag catches"]}')
+        print(f'    passes: own {t["pass own"]}, intercepted {t["pass intercepted"]}, goal {t["pass goal"]}, other {t["pass other"]}; '
+              f'shots: goal {t["shot goal"]}, intercepted {t["shot intercepted"]}, own {t["shot own"]}, other {t["shot other"]}')
         print(f'    make_move: mean {sum(ms)/len(ms):.3f} ms  p95 {percentile(ms, .95):.3f}  p99 {percentile(ms, .99):.3f}  max {max(ms):.3f}')
         for key in sorted(t):
             if key.startswith(('knocked out', 'turnover', 'other penalty')):

@@ -1,5 +1,6 @@
 import logging
 import math
+import random
 from typing import Dict, List, Optional
 
 from core.entities import Player, PlayerRole, Vector2
@@ -23,7 +24,9 @@ class BeaterSeekerFocus(BaseStrategy):
     hoop defence (BeaterThrowDecider.should_throw_at_volleyball_holder).
 
     Focus beaters are the `seeker_focus_beaters` beaters of a team closest to its own seeker when the
-    seekers enter, kept while they are on stick (`select`).
+    seekers enter, kept while they are on stick (`select`). Each team decides once per seeker phase
+    whether it plays with a seeker focus at all (probability `seeker_focus_probability`) or keeps
+    all beaters on the volleyball game.
     """
     def __init__(self,
                  logic: GameLogic,
@@ -33,6 +36,7 @@ class BeaterSeekerFocus(BaseStrategy):
                  throw_distance: float = 5.0, # m
                  loaded_beater_threat_distance: float = 8.0, # m
                  opponent_seeker_threat_distance: float = 4.0, # m
+                 seeker_focus_probability: float = 1.0, # chance that a team plays with a seeker focus, drawn when the seekers enter
                  logger: Optional[logging.Logger] = None):
         """Store the focus parameters."""
         super().__init__(logic, logger)
@@ -42,7 +46,9 @@ class BeaterSeekerFocus(BaseStrategy):
         self.squared_throw_distance = throw_distance**2
         self.squared_loaded_beater_threat_distance = loaded_beater_threat_distance**2
         self.squared_opponent_seeker_threat_distance = opponent_seeker_threat_distance**2
+        self.seeker_focus_probability = seeker_focus_probability
         self._focus_ids: Dict[int, List[str]] = {0: [], 1: []}
+        self._uses_seeker_focus: Dict[int, Optional[bool]] = {0: None, 1: None} # None: not decided in this seeker phase
 
     def _seeker(self, team: int) -> Optional[Player]:
         """The team's seeker on stick, if any."""
@@ -55,7 +61,20 @@ class BeaterSeekerFocus(BaseStrategy):
         """Ids of the team's seeker focus beaters in this step (empty before the seekers enter)."""
         state = self.logic.state
         seeker = self._seeker(team)
-        if self.seeker_focus_beaters <= 0 or not state.seeker_on_pitch or seeker is None:
+        if self.seeker_focus_beaters <= 0 or not state.seeker_on_pitch:
+            self._focus_ids[team] = []
+            self._uses_seeker_focus[team] = None
+            return []
+        if self._uses_seeker_focus[team] is None:
+            # no random draw for probability 0 or 1, so traces stay reproducible
+            if self.seeker_focus_probability >= 1:
+                self._uses_seeker_focus[team] = True
+            elif self.seeker_focus_probability <= 0:
+                self._uses_seeker_focus[team] = False
+            else:
+                self._uses_seeker_focus[team] = random.random() < self.seeker_focus_probability
+            self.logger.info("Seeker phase: team=%s %s focus", team, "seeker" if self._uses_seeker_focus[team] else "volleyball")
+        if not self._uses_seeker_focus[team] or seeker is None:
             self._focus_ids[team] = []
             return []
         beaters = [player for player in state.players.values() if player.team == team and player.role == PlayerRole.BEATER]

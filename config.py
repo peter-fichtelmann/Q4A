@@ -184,6 +184,8 @@ class Config:
             'protection_radius': 4.0, # m, no loaded opponent beater this close to the target or the beater
             'recovery_margin': 1.0, # m, the beater is closer to the target (rebound) than every opponent beater by this
             'own_hoop_safe_distance': 15.0, # m, on defence only when the volleyball is at least this far from the own hoops
+            'include_seekers': True, # the opponent seeker is a cherry pick target too while the seekers are on pitch
+            'protect_carrier_distance': 2.0, # m, on attack an opponent chaser/keeper this close to the own carrier is followed and beaten with priority (None: off)
         },
         'beater_seeker_focus_kwargs': { # BeaterSeekerFocus, once the seekers are on pitch
             'seeker_focus_beaters': 2, # beaters per team (closest to the own seeker) that play the seeker game instead of the volleyball game; 0: off
@@ -191,6 +193,7 @@ class Config:
             'throw_distance': 5.0, # m, focus beaters only throw at targets this close
             'loaded_beater_threat_distance': 8.0, # m, loaded opponent beaters this close to the own seeker are beaten
             'opponent_seeker_threat_distance': 4.0, # m, the opponent seeker is beaten when this close to the flag runner
+            'seeker_focus_probability': 2 / 3, # chance that a team plays the seeker phase with seeker focus beaters (otherwise all beaters keep the volleyball focus), drawn when the seekers enter
         },
         'moves': { # sampled by the ComputerPlayerOrchestrator; times in game seconds
             'volleyball_shift': {

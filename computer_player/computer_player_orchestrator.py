@@ -77,6 +77,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  bludger_control_kwargs: Optional[Dict] = None,
                  seeker_kwargs: Optional[Dict] = None,
                  beater_seeker_focus_kwargs: Optional[Dict] = None,
+                 intercept_margin: Optional[float] = None, # game seconds; None: only the fastest player and the contester go for a loose volleyball
                  moves: Optional[Dict[str, Dict]] = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
                  beater_throw_threshold_loaded_beater: float = 4,
@@ -142,6 +143,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         self.attack_strategies = [self.diamond_attack_chaser_keeper, self.diamond_attack_beater]
         # the chaser/keeper defence strategy is chosen each time a team starts defending
         self.box_defence_probability = box_defence_probability
+        self.intercept_margin = intercept_margin
         self.defence_chaser_keeper_strategies: Dict[int, BaseStrategy] = {}
         self.seeker_director = SeekerDirector(state, **(seeker_kwargs or {}))
         self.beater_seeker_focus = BeaterSeekerFocus(self.logic, beater_throw_decider, logger=self.logger, **(beater_seeker_focus_kwargs or {}))
@@ -215,6 +217,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             if seeker_focus_ids[team]:
                 self._profile_call('orchestrator.BeaterSeekerFocus', self.beater_seeker_focus, ctx, team, seeker_focus_ids[team], assigned_beater_ids)
         self._steer_contester(possession, steerable_id_set)
+        self._profile_call('orchestrator.interceptors', self._steer_interceptors, possession, steerable_id_set)
 
         for move in self.active_moves:
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
@@ -231,6 +234,55 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             return
         aim = possession.contester_intercepting_position
         contester.direction = Vector2(aim.x - contester.position.x, aim.y - contester.position.y)
+
+    def _steer_interceptors(self, possession: VolleyballPossession, steerable_id_set: set) -> None:
+        """
+        Defenders go for a pass or shot in flight if they can reach it in time.
+
+        The deadline is when the throwing team's fastest chaser/keeper gets the volleyball (the receiver)
+        or when the volleyball passes one of the defending team's hoops (a shot), whichever is first.
+        Every steerable defender that reaches the volleyball at most `intercept_margin` game seconds
+        after the deadline runs to its interception point.
+        """
+        if self.intercept_margin is None or possession.interception_times is None:
+            return
+        state = self.logic.state
+        volleyball = state.volleyball
+        throwing_team = volleyball.possession_team
+        if throwing_team is None or volleyball.holder_id is not None or volleyball.is_dead:
+            return
+        times = possession.interception_times
+        # the thrower cannot catch its own throw right away (catch cooldown), so it does not set the deadline
+        deadline = min((time for player_id, time in times.items()
+                        if state.players[player_id].team == throwing_team and player_id != volleyball.previous_thrower_id), default=float('inf'))
+        deadline = min(deadline, self._hoop_arrival_time(volleyball, 1 - throwing_team))
+        if deadline == float('inf'):
+            return
+        for player_id, time in times.items():
+            player = state.players[player_id]
+            if player.team == throwing_team or player_id not in steerable_id_set or player.is_knocked_out:
+                continue
+            if time <= deadline + self.intercept_margin:
+                aim = self.interception_calculator.get_aim_position(player, volleyball, time)
+                player.direction = Vector2(aim.x - player.position.x, aim.y - player.position.y)
+
+    def _hoop_arrival_time(self, volleyball, defending_team: int) -> float:
+        """Game seconds until the free volleyball passes through one of `defending_team`'s hoops, inf if it does not."""
+        vx, vy = volleyball.velocity.x, volleyball.velocity.y
+        speed = (vx ** 2 + vy ** 2) ** 0.5
+        if vx == 0:
+            return float('inf')
+        best = float('inf')
+        for hoop in self.rosters[defending_team].own_hoops:
+            fraction = (hoop.position.x - volleyball.position.x) / vx # in units of velocity
+            if fraction <= 0:
+                continue
+            crossing_y = volleyball.position.y + vy * fraction
+            if abs(crossing_y - hoop.position.y) > hoop.radius:
+                continue
+            distance = speed * fraction
+            best = min(best, self.interception_calculator.arrival_time(volleyball, speed, distance))
+        return best
 
     def _actual_possession_team(self) -> Optional[int]:
         """

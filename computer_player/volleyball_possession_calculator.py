@@ -19,6 +19,7 @@ class VolleyballPossession:
     intercepting_position: Optional[Vector2] = None
     contester_id: Optional[str] = None
     contester_intercepting_position: Optional[Vector2] = None
+    interception_times: Optional[Dict[str, float]] = None # loose volleyball: game seconds each chaser/keeper needs to reach it
 
 
 class VolleyballPossessionCalculator:
@@ -82,7 +83,8 @@ class VolleyballPossessionCalculator:
                     and fastest[team][0] > fastest[previous_team][0] - self.possession_switch_margin):
                 team = previous_team # not faster by the switch margin: keep the predicted possession
             interception_time, player_id = fastest[team]
-            possession = VolleyballPossession(team, player_id, self._aim_position(player_id, interception_time))
+            possession = VolleyballPossession(team, player_id, self._aim_position(player_id, interception_time),
+                                              interception_times=interception_info_dict)
             other_team = 1 - team
             if (self.loose_ball_contest_margin is not None and other_team in fastest
                     and fastest[other_team][0] <= interception_time + self.loose_ball_contest_margin):
