@@ -34,6 +34,19 @@ class MoveUtility:
         return evade_vector
 
     @staticmethod
+    def attract_quadratic(player_position: Vector2, entity_to_attract_position: Vector2, weight: float = 1.0) -> Vector2:
+        """Return a vector towards another entity whose magnitude grows with the squared distance (weight * distance^2)."""
+        player_to_entity_vector = Vector2(
+            entity_to_attract_position.x - player_position.x,
+            entity_to_attract_position.y - player_position.y
+        )
+        distance = math.sqrt(UtilityLogic._squared_sum(player_to_entity_vector.x, player_to_entity_vector.y))
+        return Vector2(
+            player_to_entity_vector.x * weight * distance, # vector has magnitude distance, times distance gives distance^2
+            player_to_entity_vector.y * weight * distance
+        )
+
+    @staticmethod
     def adjust_move_vector_to_avoid_boundary(
             player_position: Vector2,
             move_vector: Vector2,

@@ -21,6 +21,8 @@ class DiamondAttackChaserKeeper(BaseStrategy):
         - opponent loaded beaters
         - opponent chasers/keeper
         - own chasers/keeper (to keep distance and form square)
+    and a quadratic anti evade (pull) vector towards own chasers/keeper, negligible up close
+    but outweighing the teammate evasion beyond the max passing distance.
 
     If they are under pressure, they pass.
 
@@ -39,6 +41,7 @@ class DiamondAttackChaserKeeper(BaseStrategy):
                 chaser_evade_beater_weight: float = 4,
                 chaser_evade_chaser_keeper_weight: float = 2,
                 chaser_evade_teamate_chaser_keeper_weight: float = 1,
+                chaser_pull_teammate_chaser_keeper_distance: Optional[float] = None, # distance at which the quadratic pull to a teammate cancels the teammate evasion, default max passing distance
                 volleyball_holder_evade_own_hoop_weight: float|Tuple[float, float] = (1, 2),
                 positioning_boundary_buffer_distance: float = 2, # distance from boundary at which to start evading boundary
                 passing_threshold: float = 0.8, # minimum interception score (chance of not being intercepted) to attempt a pass
@@ -57,6 +60,10 @@ class DiamondAttackChaserKeeper(BaseStrategy):
         self.positioning_boundary_buffer_distance = positioning_boundary_buffer_distance
         self.passing_threshold = passing_threshold
         self.passing_squared_max_distance = passing_squared_max_distance
+        if chaser_pull_teammate_chaser_keeper_distance is None:
+            chaser_pull_teammate_chaser_keeper_distance = passing_squared_max_distance ** 0.5
+        # pull weight * d^2 equals evade weight / d at the pull distance: push dominates below it, pull above it
+        self.chaser_pull_teammate_chaser_keeper_weight = chaser_evade_teamate_chaser_keeper_weight / chaser_pull_teammate_chaser_keeper_distance ** 3
         # cached per step by __call__
         self.roster: Optional[TeamRoster] = None
         self.move_vectors: Dict[str, Vector2] = {}
@@ -176,6 +183,10 @@ class DiamondAttackChaserKeeper(BaseStrategy):
                     evade_vector = MoveUtility.evade(player.position, other_player.position, weight=self.chaser_evade_teamate_chaser_keeper_weight)
                     total_evade_vector.x += evade_vector.x
                     total_evade_vector.y += evade_vector.y
+                    if not other_player.is_knocked_out: # anti evade: keep teammates within passing distance
+                        pull_vector = MoveUtility.attract_quadratic(player.position, other_player.position, weight=self.chaser_pull_teammate_chaser_keeper_weight)
+                        total_evade_vector.x += pull_vector.x
+                        total_evade_vector.y += pull_vector.y
             evade_vectors_dict[player.id] = total_evade_vector
         return evade_vectors_dict
 
