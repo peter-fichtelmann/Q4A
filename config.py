@@ -127,11 +127,11 @@ class Config:
                 'chaser_evade_beater_weight': 3.5,
                 'chaser_evade_chaser_keeper_weight': 1.0,
                 'chaser_evade_teamate_chaser_keeper_weight': 1.5,
-                'chaser_pull_teammate_chaser_keeper_distance': 17, # m, beyond this the quadratic pull to a teammate outweighs the teammate evasion (max passing distance)
+                'chaser_pull_teammate_chaser_keeper_distance': 20, # m, beyond this the quadratic pull to a teammate outweighs the teammate evasion (max passing distance)
                 'volleyball_holder_evade_own_hoop_weight': (0.5, 1.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
                 'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
                 'passing_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a pass
-                'passing_squared_max_distance': 17**2, # maximum squared distance from volleyball to consider passing (also used by moves)
+                'passing_squared_max_distance': 20**2, # maximum squared distance from volleyball to consider passing (also used by moves)
             },
             'beater': {
                 'unloaded_beater_evade_loaded_opponent_beater_weight': -20, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
