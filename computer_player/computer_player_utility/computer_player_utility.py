@@ -305,6 +305,11 @@ class ScoreAttempter:
 
     Hoops seen at less than `min_shot_angle` degrees from the hoop line (a shot from far to the side)
     are never shot at, since such shots rarely go through the hoop.
+
+    With `angle_scaled_risk`, the interception risk allowed for a shot scales with sin(angle to the hoop line):
+    a 90° shot may take the risk of the plain threshold, a 20° shot only about a third (sin 20° = 0.34).
+    Risk is 1 - score in the 'beam' model, and 1 / (1 + exp(margin / `shot_risk_time_scale`)) in the
+    'time_margin' model. Among the hoops, the one exceeding its required score the most is shot at.
     """
     def __init__(self,
                  interception_calculator: InterceptionCalculator,
@@ -315,6 +320,8 @@ class ScoreAttempter:
                  shot_time_margin: float = 0.5,
                  time_margin_cap: float = 3.0,
                  min_shot_angle: float = 0.0,
+                 angle_scaled_risk: bool = False,
+                 shot_risk_time_scale: float = 0.5,
                  logger: Optional[logging.Logger] = None):
         """Store the interception model and the shot thresholds."""
         self.interception_calculator = interception_calculator
@@ -327,11 +334,31 @@ class ScoreAttempter:
         self.time_margin_cap = time_margin_cap
         # |dx| < tan(min_shot_angle) * |dy|: the shot comes in at less than min_shot_angle to the hoop line
         self.min_shot_angle_tan = math.tan(math.radians(min_shot_angle))
+        self.angle_scaled_risk = angle_scaled_risk
+        self.shot_risk_time_scale = shot_risk_time_scale
+        # interception risk allowed for a 90° shot
+        if self.use_time_margin:
+            self.straight_shot_risk = 1 / (1 + math.exp(shot_time_margin / shot_risk_time_scale))
+        else:
+            self.straight_shot_risk = 1 - scoring_threshold
         self.logger = logger or logging.getLogger("computer_player")
 
     def is_too_far_to_the_side(self, dx: float, dy: float) -> bool:
         """Whether a shot along (dx, dy) to a hoop comes in at less than `min_shot_angle` to the hoop line."""
         return abs(dx) < self.min_shot_angle_tan * abs(dy)
+
+    def required_score(self, dx: float, dy: float) -> float:
+        """Score (time margin or beam score) a shot along (dx, dy) needs, the larger the more to the side with `angle_scaled_risk`."""
+        threshold = self.shot_time_margin if self.use_time_margin else self.scoring_threshold
+        if not self.angle_scaled_risk:
+            return threshold
+        distance = math.hypot(dx, dy)
+        allowed_risk = self.straight_shot_risk * abs(dx) / distance if distance > 0 else 0.0 # risk scaled by sin(angle to the hoop line)
+        if allowed_risk <= 0:
+            return float('inf') # exactly along the hoop line
+        if self.use_time_margin:
+            return self.shot_risk_time_scale * math.log(1 / allowed_risk - 1)
+        return 1 - allowed_risk
 
     def get_time_margins_for_hoops(self,
                                    volleyball: VolleyBall,
@@ -406,12 +433,17 @@ class ScoreAttempter:
         # if no intercepting_scores, then probably to far away to score
         if len(intercepting_scores_dict) == 0:
             return False
-        # get hoop with highest score (lowest chance of being intercepted)
-        best_hoop_id = max(intercepting_scores_dict, key=intercepting_scores_dict.get)
+        # get hoop whose score exceeds its required score the most (lowest chance of being intercepted for its angle)
+        hoops_by_id = {hoop.id: hoop for hoop in attack_hoops}
+        excess_dict = {}
+        for hoop_id, score in intercepting_scores_dict.items():
+            hoop = hoops_by_id[hoop_id]
+            excess_dict[hoop_id] = score - self.required_score(hoop.position.x - volleyball.position.x, hoop.position.y - volleyball.position.y)
+        best_hoop_id = max(excess_dict, key=excess_dict.get)
         best_score = intercepting_scores_dict[best_hoop_id]
-        good_enough = best_score >= self.shot_time_margin if self.use_time_margin else best_score > self.scoring_threshold
+        good_enough = excess_dict[best_hoop_id] >= 0 if self.use_time_margin else excess_dict[best_hoop_id] > 0
         if good_enough:
-            best_hoop = next(hoop for hoop in attack_hoops if hoop.id == best_hoop_id)
+            best_hoop = hoops_by_id[best_hoop_id]
             volleyball_holder.direction = Vector2(
                 best_hoop.position.x - volleyball_holder.position.x,
                 best_hoop.position.y - volleyball_holder.position.y

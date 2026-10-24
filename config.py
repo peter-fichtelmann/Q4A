@@ -122,6 +122,9 @@ class Config:
             'scoring_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a score ('beam' model)
             'interception_model': 'time_margin', # 'beam' (angle cone) or 'time_margin' (defender reach time vs shot arrival with ball decay)
             'shot_time_margin': 0.0, # game seconds, shoot if the fastest defender reaches the shot at least this much after it passes the hoop ('time_margin' model; tuned with intercept_margin on)
+            'min_shot_angle': 20, # degrees, never shoot at a hoop seen at less than this angle to the hoop line (from far to the side)
+            'angle_scaled_risk': True, # allowed interception risk scales with sin(angle to the hoop line): 90° the plain threshold, 20° about a third
+            'shot_risk_time_scale': 1.0, # game seconds, logistic scale turning a time margin into an interception risk ('time_margin' model with angle_scaled_risk)
         },
         'passing_kwargs': { # PassEvaluator, shared by the base attack and the moves
             'passing_evade_vector_position_penalty_weight': 100, # pass-to-player score = squared distance to closest attack hoop + weight * squared evade vector magnitude
