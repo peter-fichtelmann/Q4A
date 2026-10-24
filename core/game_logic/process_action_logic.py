@@ -99,6 +99,7 @@ class ProcessActionLogic:
         - The acting player exists and is not currently carrying a ball
         - At least one contacted player is on the opposing team
         - The opposing contacted player is currently carrying a ball
+        - The opposing contacted player is not tackle immune (stalled volleyball turnover receiver)
 
         On success both players receive each other in their tackling lists so
         `_enforce_tackle` can freeze movement for the frame.
@@ -132,6 +133,8 @@ class ProcessActionLogic:
                         # only tackling player with ball allowed
                         if other_player.has_ball:
                             if other_player.team != player.team:
+                                if self.state.game_time < self.state.tackle_immune_until.get(other_id, float('-inf')):
+                                    continue # just received a stalled volleyball turnover
                                 player.tackling_player_ids.append(other_id)
                                 other_player.tackling_player_ids.append(player.id)
                                 self.logger.debug("Player %s tackled player %s", player_id, other_id)

@@ -43,6 +43,9 @@ class GameState:
     stalled_volleyball_tackle_grace: float = 2.0               # Game seconds without a new tackle after which the carrier counts as no longer tackled
     turnover_throw_block_time: float = 3.0                     # Game seconds a player receiving a turnover ball cannot throw it
     throw_blocked_until: Dict[str, float] = field(default_factory=dict)  # player id -> game time until which throwing is blocked
+    stalled_turnover_tackle_immunity_time: float = 1.5         # Game seconds the player receiving a stalled volleyball turnover cannot be tackled
+    is_stalled_turnover_pending: bool = False                  # True while the volleyball in turnover was turned over for being stalled
+    tackle_immune_until: Dict[str, float] = field(default_factory=dict)  # player id -> game time until which the player cannot be tackled
     third_dodgeball: str = None # third dodgeball id if third dodgeball
     third_dodgeball_team: str = None # team which is assigned the third dodgeball
     potential_third_dodgeball_interference_kwargs: Dict[str, str] = field(default_factory=lambda: {'player_id': None, 'dodgeball_id': None}) # third dodgeball id and player id if potential interferenece if not beat attempt
@@ -125,6 +128,10 @@ class GameState:
         """Block throwing for a player who just picked up a turnover ball."""
         self.throw_blocked_until[player_id] = self.game_time + self.turnover_throw_block_time
 
+    def grant_stalled_turnover_tackle_immunity(self, player_id: str) -> None:
+        """Protect a player who just picked up a stalled volleyball turnover from tackles."""
+        self.tackle_immune_until[player_id] = self.game_time + self.stalled_turnover_tackle_immunity_time
+
     def update_game_time(self, dt: float) -> None:
         """Update elapsed game time."""
         self.game_time += dt
@@ -180,6 +187,9 @@ class GameState:
             stalled_volleyball_tackle_grace=self.stalled_volleyball_tackle_grace,
             turnover_throw_block_time=self.turnover_throw_block_time,
             throw_blocked_until=self.throw_blocked_until.copy(),
+            stalled_turnover_tackle_immunity_time=self.stalled_turnover_tackle_immunity_time,
+            is_stalled_turnover_pending=self.is_stalled_turnover_pending,
+            tackle_immune_until=self.tackle_immune_until.copy(),
             third_dodgeball=self.third_dodgeball,
             third_dodgeball_team=self.third_dodgeball_team,
             potential_third_dodgeball_interference_kwargs=(

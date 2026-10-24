@@ -34,7 +34,8 @@ class VolleyballLogic:
         single action, so the carrier counts as still tackled until
         `stalled_volleyball_tackle_grace` game seconds pass without a new one.
         After `stalled_volleyball_time_limit` game seconds of continuous tackling
-        the volleyball goes to the closest opponent chaser/keeper.
+        the volleyball goes to the closest opponent chaser/keeper, who cannot be
+        tackled for `stalled_turnover_tackle_immunity_time` game seconds after the pickup.
 
         Must run before `_enforce_tackle`, which clears `tackling_player_ids`.
 
@@ -44,6 +45,8 @@ class VolleyballLogic:
         volleyball = self.state.volleyball
         if volleyball is None:
             return
+        if volleyball.turnover_to_player is None:
+            self.state.is_stalled_turnover_pending = False # turnover picked up or cancelled
         holder = self.state.players.get(volleyball.holder_id) if volleyball.holder_id is not None else None
         # any release (pass, shot, beat, turnover) ends the stall; dead and inbounded volleyballs never stall
         if holder is None or volleyball.is_dead or volleyball.inbounder is not None:
@@ -62,6 +65,8 @@ class VolleyballLogic:
             volleyball.possession_team = holder.team # turnover goes to the other team
             if self.penalty_logic is not None:
                 self.penalty_logic._designate_turnover(volleyball)
+                # the receiver gets a moment to move off before the tacklers can stall it again
+                self.state.is_stalled_turnover_pending = volleyball.turnover_to_player is not None
                 self.penalty_logic.announce_turnover('stalled_volleyball', volleyball.position, [volleyball])
             self._reset_stalled_volleyball(volleyball)
 
@@ -130,6 +135,9 @@ class VolleyballLogic:
                                 volleyball.turnover_to_player = None
                                 player.is_receiving_turnover_ball = False
                                 self.state.block_turnover_throw(player.id)
+                                if self.state.is_stalled_turnover_pending:
+                                    self.state.is_stalled_turnover_pending = False
+                                    self.state.grant_stalled_turnover_tackle_immunity(player.id)
                             self.logger.info("Player %s picked up the volleyball", player.id)
                             break
                     else:

@@ -121,6 +121,7 @@ class GameRoom:
         self.game_state.stalled_volleyball_countdown = Config.STALLED_VOLLEYBALL_COUNTDOWN
         self.game_state.stalled_volleyball_tackle_grace = Config.STALLED_VOLLEYBALL_TACKLE_GRACE
         self.game_state.turnover_throw_block_time = Config.TURNOVER_THROW_BLOCK_TIME
+        self.game_state.stalled_turnover_tackle_immunity_time = Config.STALLED_TURNOVER_TACKLE_IMMUNITY_TIME
         self.game_state.beat_attempt_time_limit = Config.BEAT_ATTEMPT_TIME_LIMIT
         self.game_state.flag_catch_continue_timer = Config.FLAG_CATCH_CONTINUE_TIMER
         self.game_state.flag_catch_continue_timer_total = Config.FLAG_CATCH_CONTINUE_TIMER
