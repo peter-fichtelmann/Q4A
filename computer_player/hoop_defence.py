@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Optional
 from core.entities import Hoop, Player, VolleyBall, Vector2, PlayerRole
 from core.game_logic.game_logic import GameLogic
-from computer_player.base_strategy import BaseStrategy, StepContext
+from computer_player.base_strategy import BaseStrategy, StepContext, TeamRoster
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.computer_player_utility import MoveUtility, BeaterThrowDecider
 
@@ -152,6 +152,7 @@ class HoopDefenceBeater(BaseStrategy):
         """Initialize beater steering configuration."""
         super().__init__(logic, logger)
         self.beater_throw_decider = beater_throw_decider
+        self.cherry_picker = None # optional CherryPicker, set by the orchestrator
         self.beater_evade_beater_buddy_weight = beater_evade_beater_buddy_weight
         self.beater_evade_volleyball_weight = beater_evade_volleyball_weight
         self.beater_evade_chaser_keeper_weight = beater_evade_chaser_keeper_weight
@@ -176,7 +177,7 @@ class HoopDefenceBeater(BaseStrategy):
             # beater action if beater cpu player and not already assigned to get a dodgeball
             if beater.id in controlled_id_set and beater.id not in assigned_beater_ids:
                 self.beater_move_action(beater, volleyball, center_hoop, defence_beaters, attack_players)
-                self.beater_throw_action(beater, volleyball)
+                self.beater_throw_action(beater, volleyball, ctx.rosters[team])
 
     def beater_move_action(self, beater: Player, volleyball: VolleyBall, center_hoop: Hoop, defence_beaters: List[Player], attack_players: List[Player]):
         """
@@ -235,11 +236,14 @@ class HoopDefenceBeater(BaseStrategy):
         )
         beater.direction = move_vector
 
-    def beater_throw_action(self, beater: Player, volleyball: VolleyBall):
-        """Throw at the volleyball holder when distance-based criteria are satisfied."""
+    def beater_throw_action(self, beater: Player, volleyball: VolleyBall, roster: TeamRoster):
+        """Throw at the volleyball holder when distance-based criteria are satisfied, otherwise look for a cherry pick."""
         if not beater.has_ball:
             return
         if volleyball.holder_id is not None:
             volleyball_holder = self.logic.state.players[volleyball.holder_id]
             if self.beater_throw_decider.should_throw_at_volleyball_holder(beater, volleyball_holder):
-                self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, volleyball_holder)
+                if self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, volleyball_holder):
+                    return
+        if self.cherry_picker is not None:
+            self.cherry_picker.try_pick(beater, roster, on_attack=False)

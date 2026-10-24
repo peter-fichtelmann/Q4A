@@ -12,6 +12,8 @@ from computer_player.hoop_defence import HoopDefenceBeater, HoopDefenceChaserKee
 from computer_player.box_defence import BoxDefenceChaserKeeper
 from computer_player.dodgeball_assigner import DodgeballAssigner
 from computer_player.seeker_director import SeekerDirector
+from computer_player.dodgeball_dodger import DodgeballDodger
+from computer_player.cherry_picker import CherryPicker
 from computer_player.volleyball_possession_calculator import VolleyballPossession, VolleyballPossessionCalculator
 from computer_player.moves.move import Move, MoveStatus
 from computer_player.moves.volleyball_shift import VolleyballShift
@@ -41,7 +43,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         2. ends moves whose stop criteria are met and samples new moves for the attack and defence team,
         3. runs the base strategies (chasers+keeper and beaters, for attack and defence) for all CPU players
            that no move controls, and sends the contester of a loose volleyball after it,
-        4. runs the moves for their players, and the seeker director.
+        4. runs the moves for their players, and the seeker director,
+        5. lets CPU players about to be hit by a dodgeball sidestep it.
     """
     MOVE_CLASSES: Dict[str, type] = {
         VolleyballShift.name: VolleyballShift,
@@ -60,6 +63,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  scoring_kwargs: Optional[Dict] = None,
                  passing_kwargs: Optional[Dict] = None,
                  possession_kwargs: Optional[Dict] = None,
+                 dodge_kwargs: Optional[Dict] = None,
+                 cherry_pick_kwargs: Optional[Dict] = None,
                  moves: Optional[Dict[str, Dict]] = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
                  beater_throw_threshold_loaded_beater: float = 4,
@@ -114,6 +119,9 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         self.hoop_defence_beater = HoopDefenceBeater(
             self.logic, beater_throw_decider, logger=self.logger, **hoop_defence_kwargs.get('beater', {})
         )
+        cherry_picker = CherryPicker(self.logic, beater_throw_decider, logger=self.logger, **(cherry_pick_kwargs or {}))
+        self.diamond_attack_beater.cherry_picker = cherry_picker
+        self.hoop_defence_beater.cherry_picker = cherry_picker
         self.box_defence_chaser_keeper = BoxDefenceChaserKeeper(
             self.logic, move_around_hoop_blockages, logger=self.logger, **box_defence_kwargs.get('chaser_keeper', {})
         )
@@ -122,6 +130,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         self.box_defence_probability = box_defence_probability
         self.defence_chaser_keeper_strategies: Dict[int, BaseStrategy] = {}
         self.seeker_director = SeekerDirector(state)
+        self.dodgeball_dodger = DodgeballDodger(self.logic, logger=self.logger, **(dodge_kwargs or {}))
 
         # moves
         self.move_specs: List[MoveSpec] = []
@@ -187,6 +196,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         for move in self.active_moves:
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
         self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
+        self._profile_call('orchestrator.dodgeball_dodger', self.dodgeball_dodger, self.cpu_players + self.cpu_seekers)
 
     def _steer_contester(self, possession: VolleyballPossession, steerable_id_set: set) -> None:
         """The other team's fastest player races for a loose volleyball it can nearly reach first, overriding its base strategy."""

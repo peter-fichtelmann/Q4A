@@ -333,16 +333,15 @@ class BoundaryLogic:
                 if other_player.role != PlayerRole.BEATER or other_player.is_knocked_out:
                     continue
                 move_away_speed = other_player.max_speed
-                move_away = self._calculate_move_away_vector(claiming_beater, other_player, dt, move_away_speed)
-                if move_away is not None:
-                    move_vector, _ = move_away
+                move_vector, _ = self._calculate_move_away_vector(claiming_beater, other_player, dt, move_away_speed)
+                if move_vector is not None:
                     other_player.position.x += move_vector.x
                     other_player.position.y += move_vector.y
             else:
                 break
 
 
-    def _calculate_move_away_vector(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> Optional[tuple[Vector2, Vector2]]:
+    def _calculate_move_away_vector(self, move_free_entity, move_away_entity, dt: float, move_away_speed: float) -> tuple[Optional[Vector2], Optional[Vector2]]:
         """
         Calculate the movement vector to move an entity away from another entity.
         
@@ -362,7 +361,7 @@ class BoundaryLogic:
             Tuple of (move_vector, normal) where:
                 - move_vector: The position offset to apply (scaled by dt)
                 - normal: The unit normal from fixed entity to moving entity
-            Returns None if entities are at same position (division by zero)
+            Returns (None, None) if entities are at same position (division by zero)
         """
         # push player away from the entity
         normal = Vector2(
@@ -372,7 +371,7 @@ class BoundaryLogic:
         normal_mag = UtilityLogic._magnitude(normal)
         if normal_mag == 0:
             self.logger.warning("Zero normal magnitude in inbounding free way (entities at same position)")
-            return None
+            return None, None
         normal.x /= normal_mag
         normal.y /= normal_mag
         # take into account the other player's velocity and movement this frame so no "unnatural movement" occurs

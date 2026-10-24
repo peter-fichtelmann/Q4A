@@ -303,6 +303,7 @@ class DiamondAttackBeater(BaseStrategy):
         """Configure beater pressure weights."""
         super().__init__(logic, logger)
         self.beater_throw_decider = beater_throw_decider
+        self.cherry_picker = None # optional CherryPicker, set by the orchestrator
         self.unloaded_beater_evade_loaded_opponent_beater_weight = unloaded_beater_evade_loaded_opponent_beater_weight
         self.loaded_beater_evade_loaded_opponent_beater_weight = loaded_beater_evade_loaded_opponent_beater_weight
         self.loaded_beater_evade_unloaded_opponent_beater_weight = loaded_beater_evade_unloaded_opponent_beater_weight
@@ -342,19 +343,22 @@ class DiamondAttackBeater(BaseStrategy):
             move_vector.y += evade_vector.y
         beater.direction = move_vector
 
-    def beater_throw_action(self, beater: Player, opponent_beater_ids: List[str]):
-        """Throw at a loaded opposing beater when the throw policy allows it."""
+    def beater_throw_action(self, beater: Player, roster: TeamRoster):
+        """Throw at a loaded opposing beater when the throw policy allows it, otherwise look for a cherry pick."""
         if not beater.has_ball:
             return
-        for opponent_beater_id in opponent_beater_ids:
+        for opponent_beater_id in roster.opponent_beater_ids:
             opponent_beater = self.logic.state.players[opponent_beater_id]
             if opponent_beater.is_knocked_out:
                 continue
             if opponent_beater.has_ball:
                 if self.beater_throw_decider.should_throw_at_loaded_beater(beater, opponent_beater):
-                    self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, opponent_beater)
                     # throw at first egligble loaded opponent beater
+                    if self.beater_throw_decider.throw_at(self.logic.process_action_logic, beater, opponent_beater):
+                        return
                     break
+        if self.cherry_picker is not None:
+            self.cherry_picker.try_pick(beater, roster, on_attack=True)
 
     def __call__(self,
                  ctx: StepContext,
@@ -363,9 +367,9 @@ class DiamondAttackBeater(BaseStrategy):
                  assigned_beater_ids: List[str]):
         """Move and throw for the attacking beaters in `controlled_ids` not fetching a dodgeball."""
         volleyball = self.logic.state.volleyball
-        opponent_beater_ids = ctx.rosters[team].opponent_beater_ids
+        roster = ctx.rosters[team]
         for player_id in controlled_ids:
             player = self.logic.state.players[player_id]
             if player.role == PlayerRole.BEATER and player.id not in assigned_beater_ids:
-                self.beater_move_action(player, volleyball, opponent_beater_ids)
-                self.beater_throw_action(player, opponent_beater_ids)
+                self.beater_move_action(player, volleyball, roster.opponent_beater_ids)
+                self.beater_throw_action(player, roster)

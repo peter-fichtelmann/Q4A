@@ -132,7 +132,10 @@ def play(seed: int, ticks: int, configs: dict, a_team: int) -> dict:
                 # the receiver may have picked the volleyball up within the same update already
                 receiver_id = volleyball.turnover_to_player
                 receiving_team = state.players[receiver_id].team if receiver_id is not None else volleyball.possession_team
-                result[label_of_team[1 - receiving_team]][f'turnover {announcement["rule"]}'] += 1
+                if receiving_team is None:
+                    result['A'][f'other penalty {announcement["rule"]} (unattributed)'] += 1
+                else:
+                    result[label_of_team[1 - receiving_team]][f'turnover {announcement["rule"]}'] += 1
             else:
                 result['A'][f'other penalty {announcement["rule"]} (both)'] += 1
         for pid, player in state.players.items():
