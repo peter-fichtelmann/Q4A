@@ -98,7 +98,6 @@ def first_interception_tick(
         reach_distance: float,
         target_tick_offset: int = 0,
         max_ticks: int = Config.MOTION_MODEL_MAX_TICKS,
-        scan_step: int = Config.MOTION_MODEL_SCAN_STEP,
         ) -> Optional[Tuple[int, float, float]]:
     """
     First tick n at which a player can be within reach_distance of a decaying target (e.g. a free ball).
@@ -109,7 +108,11 @@ def first_interception_tick(
 
         |B(n) - C(n)| <= R(n) + reach_distance,   B(n) = b_0 + v_b * tau_b(n + target_tick_offset)
 
-    The first n is found with a coarse scan (step grows for far horizons) and bisection.
+    The first n is found by scanning with the largest step that cannot skip it: the distance from B(n) to
+    the reach boundary shrinks by at most the ball's and the player's drift per tick plus the growth of R
+    per tick (all non-increasing or constant), so no tick before n + distance / closing speed can be in
+    reach. A fast ball passing a nearby player (a window of about 3 ticks) is therefore never missed, while
+    far or slow targets are skipped in few steps.
 
     Returns (n, steer_x, steer_y) with the constant steering vector B(n) - C(n), or None if not
     possible within max_ticks.
@@ -127,27 +130,33 @@ def first_interception_tick(
         ex = target_x + target_vx * tb - player_x - player_vx * tp
         ey = target_y + target_vy * tb - player_y - player_vy * tp
         reach = run_speed * (n * dt - tp) + reach_distance
-        return ex * ex + ey * ey - reach * reach, ex, ey
+        return ex * ex + ey * ey - reach * reach, ex, ey, reach
 
-    g, ex, ey = gap(0)
+    g, ex, ey, reach = gap(0)
     if g <= 0:
         return 0, ex, ey
-    previous = 0
+    target_speed = math.hypot(target_vx, target_vy)
+    player_speed = math.hypot(player_vx, player_vy)
+    reach_growth = run_speed * dt # upper bound of R(n + 1) - R(n)
     n = 0
     while n < max_ticks:
-        n = min(n + max(scan_step, n // 4), max_ticks)
-        g, ex, ey = gap(n)
+        closing = (target_speed * (tau_b[n + target_tick_offset + 1] - tau_b[n + target_tick_offset])
+                   + player_speed * (tau_p[n + 1] - tau_p[n]) + reach_growth)
+        distance = math.sqrt(g + reach * reach) - reach # to the reach boundary, > 0 here
+        step = max(1, int(distance / closing)) if closing > 0 else max_ticks - n
+        previous = n
+        n = min(n + step, max_ticks)
+        g, ex, ey, reach = gap(n)
         if g <= 0:
-            low, high = previous, n # gap(low) > 0, gap(high) <= 0
+            low, high = previous, n # gap(low) > 0, gap(high) <= 0; the step is 1 tick unless the root lies exactly at n
             while high - low > 1:
                 middle = (low + high) // 2
-                g_middle, ex_middle, ey_middle = gap(middle)
+                g_middle, ex_middle, ey_middle, _ = gap(middle)
                 if g_middle <= 0:
                     high, ex, ey = middle, ex_middle, ey_middle
                 else:
                     low = middle
             return high, ex, ey
-        previous = n
     return None
 
 
