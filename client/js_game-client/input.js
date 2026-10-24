@@ -55,8 +55,16 @@ export function update() {
       }
       const p = State.gameState.players[State.localPlayerId];
       const pp = p.position || p.pos || p;
-      let dx = mx - (pp.x || 0);
-      let dy = my - (pp.y || 0);
+      // A thrown ball leaves from where it is held (around the player radius off-centre), so aim from there:
+      // the dashed throw line then runs from the ball through the cursor.
+      let originX = pp.x || 0, originY = pp.y || 0;
+      if (p.has_ball && State.gameState.balls) {
+        for (const ball of Object.values(State.gameState.balls)) {
+          if (ball.holder_id === State.localPlayerId) { const bp = ball.position || ball.pos || ball; originX = bp.x; originY = bp.y; break; }
+        }
+      }
+      let dx = mx - originX;
+      let dy = my - originY;
       sendPlayerInput(dx, dy);
       actualDirX = dx; actualDirY = dy;
     } catch (err) { if (State.debug.enabled) console.warn('mouse input compute error', err); }

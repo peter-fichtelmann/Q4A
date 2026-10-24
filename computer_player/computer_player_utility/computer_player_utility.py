@@ -114,7 +114,8 @@ class BeaterThrowDecider:
         if self._keeps_last_dodgeball(beater, target):
             return False
         dodgeball_id = beater.has_ball
-        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target)
+        held_ball = self.state.balls.get(dodgeball_id) if self.state is not None else None
+        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target, held_ball.position if held_ball else None)
         if not process_action_logic.process_throw_action(beater.id, throw_direction):
             return False
         self.pending_throws[target.id] = (dodgeball_id, beater.team)
@@ -164,19 +165,21 @@ class BeaterThrowDecider:
 class ThrowDirector:
     """Calculates the throw vector to a moving receiver e.g. for passes and beats"""
     @staticmethod
-    def get_throw_direction_static_receiver(player: Player, receiver: Player):
-        """Return direct throw vector from thrower to a static receiver position."""
+    def get_throw_direction_static_receiver(player: Player, receiver: Player, origin: Optional[Vector2] = None):
+        """Return direct throw vector from the ball's start `origin` (default the player) to a static receiver position."""
+        origin = origin or player.position
         return  Vector2(
-            receiver.position.x - player.position.x,
-            receiver.position.y - player.position.y
+            receiver.position.x - origin.x,
+            receiver.position.y - origin.y
         )
 
     @staticmethod
-    def _prepare_linear_solve(player: Player, receiver: Player):
+    def _prepare_linear_solve(player: Player, receiver: Player, origin: Optional[Vector2] = None):
         """Prepare variables for linear solve of throw direction to moving receiver."""
-        # assume ball starts at player position
-        s_b_x = player.position.x
-        s_b_y = player.position.y
+        # the ball starts at `origin` (a held ball is offset from its holder, around the player radius), default player position
+        origin = origin or player.position
+        s_b_x = origin.x
+        s_b_y = origin.y
         s_p_x = receiver.position.x
         s_p_y = receiver.position.y
         v_p_x = receiver.velocity.x
@@ -187,9 +190,10 @@ class ThrowDirector:
         return s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root
 
     @staticmethod
-    def get_throw_direction_moving_receiver(player: Player, receiver: Player):
+    def get_throw_direction_moving_receiver(player: Player, receiver: Player, origin: Optional[Vector2] = None):
         """
-        Assume constant ball velocity.
+        Assume constant ball velocity. The throw velocity is the player's, but the ball starts at `origin`
+        (the held ball's position, default the player's), so the throw line runs from there to the receiver.
 
         Used first solution via sympy solve:
 
@@ -211,7 +215,7 @@ class ThrowDirector:
         ball cannot reach the receiver, it falls back to the constant velocity solution (throw anyway).
         """
         if Config.MOTION_MODEL == "analytic":
-            throw_direction, _ = ThrowDirector._throw_analytic(player, receiver)
+            throw_direction, _ = ThrowDirector._throw_analytic(player, receiver, origin)
             if throw_direction is not None:
                 return throw_direction
         # # assume ball starts at player position
@@ -230,7 +234,7 @@ class ThrowDirector:
         # # print('v_p_y', v_p_y)
         # # print('v_b_value_sq', v_b_value_sq)
         # root = math.sqrt(s_b_x**2*v_b_value_sq - s_b_x**2*v_p_y**2 + 2*s_b_x*s_b_y*v_p_x*v_p_y - 2*s_b_x*s_p_x*v_b_value_sq + 2*s_b_x*s_p_x*v_p_y**2 - 2*s_b_x*s_p_y*v_p_x*v_p_y + s_b_y**2*v_b_value_sq - s_b_y**2*v_p_x**2 - 2*s_b_y*s_p_x*v_p_x*v_p_y - 2*s_b_y*s_p_y*v_b_value_sq + 2*s_b_y*s_p_y*v_p_x**2 + s_p_x**2*v_b_value_sq - s_p_x**2*v_p_y**2 + 2*s_p_x*s_p_y*v_p_x*v_p_y + s_p_y**2*v_b_value_sq - s_p_y**2*v_p_x**2)
-        s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root = ThrowDirector._prepare_linear_solve(player, receiver)
+        s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root = ThrowDirector._prepare_linear_solve(player, receiver, origin)
         v_b_x = (-s_b_x*s_b_y*v_p_y + s_b_x*s_p_y*v_p_y - s_b_x*root + s_b_y**2*v_p_x + s_b_y*s_p_x*v_p_y - 2*s_b_y*s_p_y*v_p_x - s_p_x*s_p_y*v_p_y + s_p_x*root + s_p_y**2*v_p_x)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2) 
         v_b_y = (s_b_x**2*v_p_y - s_b_x*s_b_y*v_p_x - 2*s_b_x*s_p_x*v_p_y + s_b_x*s_p_y*v_p_x + s_b_y*s_p_x*v_p_x - s_b_y*root + s_p_x**2*v_p_y - s_p_x*s_p_y*v_p_x + s_p_y*root)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2)
         # dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)/(v_b_value_sq - v_p_x**2 - v_p_y**2) + root/(v_b_value_sq - v_p_x**2 - v_p_y**2)
@@ -240,7 +244,7 @@ class ThrowDirector:
         return Vector2(v_b_x, v_b_y)
 
     @staticmethod
-    def get_throw_direction_and_position_moving_receiver(player: Player, receiver: Player):
+    def get_throw_direction_and_position_moving_receiver(player: Player, receiver: Player, origin: Optional[Vector2] = None):
         """
         Return throw vector and predicted receiver position for moving receiver.
 
@@ -248,8 +252,8 @@ class ThrowDirector:
         stick input are modelled exactly; returns (None, None) if the ball cannot reach the receiver.
         """
         if Config.MOTION_MODEL == "analytic":
-            return ThrowDirector._throw_analytic(player, receiver)
-        s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root = ThrowDirector._prepare_linear_solve(player, receiver)
+            return ThrowDirector._throw_analytic(player, receiver, origin)
+        s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root = ThrowDirector._prepare_linear_solve(player, receiver, origin)
         v_b_x = (-s_b_x*s_b_y*v_p_y + s_b_x*s_p_y*v_p_y - s_b_x*root + s_b_y**2*v_p_x + s_b_y*s_p_x*v_p_y - 2*s_b_y*s_p_y*v_p_x - s_p_x*s_p_y*v_p_y + s_p_x*root + s_p_y**2*v_p_x)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2) 
         v_b_y = (s_b_x**2*v_p_y - s_b_x*s_b_y*v_p_x - 2*s_b_x*s_p_x*v_p_y + s_b_x*s_p_y*v_p_x + s_b_y*s_p_x*v_p_x - s_b_y*root + s_p_x**2*v_p_y - s_p_x*s_p_y*v_p_x + s_p_y*root)/(s_b_x**2 - 2*s_b_x*s_p_x + s_b_y**2 - 2*s_b_y*s_p_y + s_p_x**2 + s_p_y**2)
         dt = -(s_b_x*v_p_x + s_b_y*v_p_y - s_p_x*v_p_x - s_p_y*v_p_y)/(v_b_value_sq - v_p_x**2 - v_p_y**2) + root/(v_b_value_sq - v_p_x**2 - v_p_y**2)
@@ -260,18 +264,19 @@ class ThrowDirector:
         return Vector2(v_b_x, v_b_y), predicted_receiver_position
 
     @staticmethod
-    def _throw_analytic(player: Player, receiver: Player) -> Tuple[Optional[Vector2], Optional[Vector2]]:
+    def _throw_analytic(player: Player, receiver: Player, origin: Optional[Vector2] = None) -> Tuple[Optional[Vector2], Optional[Vector2]]:
         """Throw vector (magnitude throw_velocity) and predicted receiver position via kinematics.first_throw_tick."""
-        throw_direction, predicted_receiver_position, _ = ThrowDirector.throw_analytic_with_tick(player, receiver)
+        throw_direction, predicted_receiver_position, _ = ThrowDirector.throw_analytic_with_tick(player, receiver, origin)
         return throw_direction, predicted_receiver_position
 
     @staticmethod
-    def throw_analytic_with_tick(player: Player, receiver: Player) -> Tuple[Optional[Vector2], Optional[Vector2], Optional[float]]:
+    def throw_analytic_with_tick(player: Player, receiver: Player, origin: Optional[Vector2] = None) -> Tuple[Optional[Vector2], Optional[Vector2], Optional[float]]:
         """Like _throw_analytic, plus the (fractional) tick at which the ball reaches the receiver."""
+        origin = origin or player.position
         throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
         result = first_throw_tick(
-            thrower_x=player.position.x,
-            thrower_y=player.position.y,
+            thrower_x=origin.x,
+            thrower_y=origin.y,
             throw_velocity=throw_velocity,
             ball_table=decay_table(Config.BALL_DEACCELERATION_RATE),
             receiver=receiver,
@@ -280,11 +285,11 @@ class ThrowDirector:
         if result is None:
             return None, None, None
         catch_tick, receiver_x, receiver_y = result
-        throw_x = receiver_x - player.position.x
-        throw_y = receiver_y - player.position.y
+        throw_x = receiver_x - origin.x
+        throw_y = receiver_y - origin.y
         mag_throw = math.hypot(throw_x, throw_y)
         if mag_throw == 0:
-            throw_x, throw_y = receiver.position.x - player.position.x, receiver.position.y - player.position.y
+            throw_x, throw_y = receiver.position.x - origin.x, receiver.position.y - origin.y
             mag_throw = math.hypot(throw_x, throw_y) or 1.0
         return (Vector2(throw_x / mag_throw * throw_velocity, throw_y / mag_throw * throw_velocity),
                 Vector2(receiver_x, receiver_y),
@@ -528,9 +533,9 @@ class PassEvaluator:
         """
         time_margin = None
         if self.use_time_margin:
-            throw_direction, predicted_receiver_position, catch_tick = ThrowDirector.throw_analytic_with_tick(volleyball_holder, receiver)
+            throw_direction, predicted_receiver_position, catch_tick = ThrowDirector.throw_analytic_with_tick(volleyball_holder, receiver, volleyball.position)
         else:
-            throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, receiver)
+            throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, receiver, volleyball.position)
         if throw_direction is None:
             return None # ball cannot reach this player
         # throw_direction still has the throw speed as magnitude here
