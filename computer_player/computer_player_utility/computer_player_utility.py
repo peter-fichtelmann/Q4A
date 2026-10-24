@@ -302,6 +302,9 @@ class ScoreAttempter:
         'beam': beam cosine angle score, shoot if above `scoring_threshold`.
         'time_margin': game seconds the fastest defender needs longer to reach the shot than the shot needs
             to the hoop (analytic motion model), shoot if at least `shot_time_margin`.
+
+    Hoops seen at less than `min_shot_angle` degrees from the hoop line (a shot from far to the side)
+    are never shot at, since such shots rarely go through the hoop.
     """
     def __init__(self,
                  interception_calculator: InterceptionCalculator,
@@ -311,6 +314,7 @@ class ScoreAttempter:
                  interception_model: str = 'beam',
                  shot_time_margin: float = 0.5,
                  time_margin_cap: float = 3.0,
+                 min_shot_angle: float = 0.0,
                  logger: Optional[logging.Logger] = None):
         """Store the interception model and the shot thresholds."""
         self.interception_calculator = interception_calculator
@@ -321,7 +325,13 @@ class ScoreAttempter:
         self.use_time_margin = interception_model == 'time_margin' and Config.MOTION_MODEL == 'analytic'
         self.shot_time_margin = shot_time_margin
         self.time_margin_cap = time_margin_cap
+        # |dx| < tan(min_shot_angle) * |dy|: the shot comes in at less than min_shot_angle to the hoop line
+        self.min_shot_angle_tan = math.tan(math.radians(min_shot_angle))
         self.logger = logger or logging.getLogger("computer_player")
+
+    def is_too_far_to_the_side(self, dx: float, dy: float) -> bool:
+        """Whether a shot along (dx, dy) to a hoop comes in at less than `min_shot_angle` to the hoop line."""
+        return abs(dx) < self.min_shot_angle_tan * abs(dy)
 
     def get_time_margins_for_hoops(self,
                                    volleyball: VolleyBall,
@@ -336,6 +346,8 @@ class ScoreAttempter:
             dy = hoop.position.y - volleyball.position.y
             squared_distance = dx**2 + dy**2
             if squared_distance > self.score_squared_max_distance or squared_distance == 0:
+                continue
+            if self.is_too_far_to_the_side(dx, dy):
                 continue
             distance = math.sqrt(squared_distance)
             arrival_time = self.interception_calculator.arrival_time(volleyball, throw_velocity, distance)
@@ -361,6 +373,8 @@ class ScoreAttempter:
             )
             squared_volleyball_hoop_distance = volleyball_hoop_vector.x**2 + volleyball_hoop_vector.y**2
             if squared_volleyball_hoop_distance > self.score_squared_max_distance:
+                continue
+            if self.is_too_far_to_the_side(volleyball_hoop_vector.x, volleyball_hoop_vector.y):
                 continue
             copy_volleyball = volleyball.copy()
             mag_volleyball_hoop_vector = math.sqrt(squared_volleyball_hoop_distance)
@@ -483,7 +497,8 @@ class PassEvaluator:
             throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, receiver)
         if throw_direction is None:
             return None # ball cannot reach this player
-        if InterceptionCalculator.intercepting_hoop_before_target(volleyball, predicted_receiver_position, own_hoops):
+        # throw_direction still has the throw speed as magnitude here
+        if InterceptionCalculator.throw_through_hoop(volleyball, throw_direction, own_hoops):
             return None
         if self.use_time_margin:
             # throw_direction still has the throw speed as magnitude here
