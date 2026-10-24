@@ -206,6 +206,38 @@ class Config:
                     'hoop_switch_margin': 0.2,
                 },
             },
+            'volleyball_crossing_drive': { # volleyball_crossing (scissors in front of a defender), then volleyball_drive after the exit run
+                'start_probability_per_second': 0.3,
+                'cooldown': 3,
+                'crossing': {
+                    'max_duration': 15, # timeout of the crossing incl. exit run
+                    'teammate_max_distance': 20, # m, receiver at most this far from the carrier (max passing distance)
+                    'teammate_min_lateral': 2, # m, receiver at least this far to the side (y) of the carrier, so the paths cross
+                    'opponent_max_distance': 10, # m, defender at most this far from the midpoint of carrier and receiver
+                    'crossing_distance': 1.0, # m, crossing point in front of the defender (towards the attackers)
+                    'min_approach_distance': 1.5, # m, both runners at least this far behind the crossing point at the start
+                    'hoop_clearance': 2.0, # m, crossing point at least this far in front of the opponent hoop line
+                    'receiver_behind_distance': 1.0, # m, the receiver crosses this far behind the carrier's crossing point (no contact)
+                    'receiver_time_gap': 0.5, # game s the receiver reaches its crossing point after the carrier reaches its own
+                    'min_stick_input': 0.2, # lowest stick input when slowing down to keep the timing (low, so the carrier can wait for a far receiver)
+                    'loaded_beater_path_distance': 4, # m, no loaded opponent beater this close to the paths to the crossing point
+                    'blocking_path_distance': 1.5, # m, no other opponent chaser/keeper this close to the paths to the crossing point
+                    'exit_angle': 45, # degrees of the exit lines from the attack direction
+                    'opponent_prediction_time': 1.0, # game s; pass if the defender will then be closer to the carrier than to the receiver, else dummy
+                    'pass_interception_threshold': 0.95, # minimum interception score of the pass at the crossing
+                    'max_pass_distance': 4, # m, carrier-receiver distance at the crossing above which the move fails (out of sync)
+                    'exit_duration': 2.0, # game s the holder runs its exit line before the drive starts
+                    'tackle_window': 1.0, # carrier counts as tackled this long after a tackle
+                },
+                'drive': {
+                    'max_duration': 5 * GAME_TIME_TO_REAL_TIME_RATIO,
+                    'min_chaser_keepers': 3,
+                    'dodgeball_pass_distance': 3,
+                    'tackle_window': 1.0,
+                    'pass_interception_threshold': 0.95,
+                    'hoop_switch_margin': 0.2,
+                },
+            },
         },
     }
 
