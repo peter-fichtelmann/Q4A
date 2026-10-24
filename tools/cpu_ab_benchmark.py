@@ -88,6 +88,8 @@ class LogCounter(logging.Handler):
             self.counts[(self._player_team(args[0]), 'passes')] += 1
         elif msg.startswith('VolleyballShift pass') or msg.startswith('VolleyballDrive pass'):
             self.counts[(self._player_team(args[1]), 'passes')] += 1
+        elif msg.startswith('Cherry pick by beater'):
+            self.counts[(self._player_team(args[0]), 'cherry picks')] += 1
         elif msg.startswith('Move ended'):
             name, team, status, reason = args[:4]
             self.counts[(team, f'move {name}:{status}:{reason}')] += 1
@@ -222,7 +224,7 @@ def main_cli():
         conversion = t['goals for'] / t['shots'] if t['shots'] else float('nan')
         ms = times[label]
         print(f'\n[{label}] goals {t["goals for"]}, possessions {t["possessions"]}, goals/possession {per_possession:.3f}, '
-              f'shots {t["shots"]}, goals/shot {conversion:.2f}, passes {t["passes"]}')
+              f'shots {t["shots"]}, goals/shot {conversion:.2f}, passes {t["passes"]}, cherry picks {t["cherry picks"]}')
         print(f'    make_move: mean {sum(ms)/len(ms):.3f} ms  p95 {percentile(ms, .95):.3f}  p99 {percentile(ms, .99):.3f}  max {max(ms):.3f}')
         for key in sorted(t):
             if key.startswith(('knocked out', 'turnover', 'other penalty')):

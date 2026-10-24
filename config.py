@@ -165,6 +165,22 @@ class Config:
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
         'beater_throw_threshold_loaded_beater': 4, # distance in m for beater to throw at loaded opponent beater
+        'possession_kwargs': { # VolleyballPossessionCalculator, loose volleyball
+            'possession_switch_margin': 0.0, # game seconds the other team has to be faster to take over the predicted possession
+            'loose_ball_contest_margin': 1.5, # game seconds; the other team's fastest player also races for the volleyball if at most this much slower (None: off)
+        },
+        'dodge_kwargs': { # DodgeballDodger
+            'dodge_horizon': 2.0, # game seconds; CPU players sidestep an opponent dodgeball that would hit them within this time (None: off)
+            'dodge_buffer': 0.3, # m added to the hit distance (player radius + ball radius)
+        },
+        'cherry_pick_kwargs': { # CherryPicker, close beats of unprotected opponent chasers/keepers by loaded beaters
+            'cherry_pick_distance': 1.5, # m, throw when the target is this close (None: off)
+            'follow_distance': 3.0, # m, follow a target this close until it is within the cherry pick distance (None: no following)
+            'follow_duration': 1.5 * GAME_TIME_TO_REAL_TIME_RATIO, # game seconds, give up following after 1.5 real seconds
+            'protection_radius': 4.0, # m, no loaded opponent beater this close to the target or the beater
+            'recovery_margin': 1.0, # m, the beater is closer to the target (rebound) than every opponent beater by this
+            'own_hoop_safe_distance': 15.0, # m, on defence only when the volleyball is at least this far from the own hoops
+        },
         'moves': { # sampled by the ComputerPlayerOrchestrator; times in game seconds
             'volleyball_shift': {
                 'start_probability_per_second': 0.0, # probability that the move is tried within one game second
