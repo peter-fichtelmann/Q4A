@@ -121,12 +121,13 @@ class Config:
             'score_squared_max_distance': 8**2, # maximum squared distance from volleyball to consider scoring
             'scoring_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a score ('beam' model)
             'interception_model': 'time_margin', # 'beam' (angle cone) or 'time_margin' (defender reach time vs shot arrival with ball decay)
-            'shot_time_margin': -0.25, # game seconds, shoot if the fastest defender reaches the shot at most this much before it arrives ('time_margin' model)
+            'shot_time_margin': 0.0, # game seconds, shoot if the fastest defender reaches the shot at least this much after it passes the hoop ('time_margin' model; tuned with intercept_margin on)
         },
         'passing_kwargs': { # PassEvaluator, shared by the base attack and the moves
             'passing_evade_vector_position_penalty_weight': 100, # pass-to-player score = squared distance to closest attack hoop + weight * squared evade vector magnitude
-            'interception_model': 'beam', # 'time_margin' rejects long slow passes and loses goals against the CPU defence at any margin
-            'pass_time_margin': 0.0, # game seconds ('time_margin' model)
+            'interception_model': 'time_margin', # 'beam' (angle cone) or 'time_margin' (defender reach time vs receiver reach time with ball decay)
+            'pass_time_margin': 0.25, # game seconds, pass if the receiver reaches the ball at least this much before the fastest defender ('time_margin' model; tuned with intercept_margin on)
+            'active_receiver': True, # the receiver runs to the ball like the defenders, instead of keeping its stick input
         },
         'diamond_attack_kwargs': {
             'chaser_keeper': {
@@ -169,6 +170,7 @@ class Config:
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
         'beater_throw_threshold_loaded_beater': 4, # distance in m for beater to throw at loaded opponent beater
+        'intercept_margin': 0.0, # game seconds; every defender that reaches a pass/shot in flight at most this much after the receiver (or the hoop) goes for it (None: only the fastest player and the contester)
         'possession_kwargs': { # VolleyballPossessionCalculator, loose volleyball
             'possession_switch_margin': 0.0, # game seconds the other team has to be faster to take over the predicted possession
             'loose_ball_contest_margin': 1.5, # game seconds; the other team's fastest player also races for the volleyball if at most this much slower (None: off)
