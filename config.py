@@ -290,8 +290,8 @@ class Config:
                     'loaded_beater_path_distance': 4, # m, no loaded opponent beater this close to the carrier's run to the lane at the start
                     'second_interceptor_margin': 0.0, # game s, the next opponent can intercept the run at least this much later than the blocked defender (0: no condition; CPU defenders cluster, gaps are mostly < 0.5 s)
                     'min_defender_hoop_distance': 3.0, # m, the defender is at least this far from the target hoop (no hoop guard)
-                    'min_defender_distance': 4.0, # m, the defender is at least this far from the carrier at the start
-                    'max_defender_closing_speed': 0.5, # m/s, the defender runs at the carrier at most this fast at the start (a pressing defender cannot be screened)
+                    'min_defender_distance': 3.0, # m, the defender is at least this far from the carrier at the start
+                    'max_defender_closing_speed': 1.0, # m/s, the defender runs at the carrier at most this fast at the start (a pressing defender cannot be screened)
                     'tackle_window': 1.0, # carrier counts as tackled this long after a tackle
                 },
                 'drive': {

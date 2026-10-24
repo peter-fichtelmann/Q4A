@@ -57,6 +57,7 @@ class Replay:
         self.hoops = [(h.position.x, h.position.y, h.radius, h.team) for h in state.hoops.values()]
         self.bounds = (state.boundaries_x, state.boundaries_y)
         self.midline_x = state.midline_x
+        self.keeper_zone_xs = (state.keeper_zone_x_0, state.keeper_zone_x_1)
 
     @staticmethod
     def _frame(state):
@@ -92,6 +93,8 @@ class Viewer:
         self.ax.set_aspect('equal')
         self.ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec='k'))
         self.ax.axvline(self.r.midline_x, color='0.8', lw=1)
+        for zone_x, team in zip(self.r.keeper_zone_xs, (0, 1)):
+            self.ax.axvline(zone_x, color=TEAM_COLORS[team], lw=1, ls='--', alpha=0.6)
         for hx, hy, hr, team in self.r.hoops:
             self.ax.add_patch(Circle((hx, hy), max(hr, 0.3), fill=False, ec=TEAM_COLORS.get(team, 'k'), lw=2))
         self.artists = []
