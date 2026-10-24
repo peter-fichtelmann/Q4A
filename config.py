@@ -127,6 +127,7 @@ class Config:
                 'chaser_evade_beater_weight': 3.5,
                 'chaser_evade_chaser_keeper_weight': 1.0,
                 'chaser_evade_teamate_chaser_keeper_weight': 1.5,
+                'chaser_pull_teammate_chaser_keeper_distance': 17, # m, beyond this the quadratic pull to a teammate outweighs the teammate evasion (max passing distance)
                 'volleyball_holder_evade_own_hoop_weight': (0.5, 1.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
                 'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
                 'passing_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a pass
@@ -173,6 +174,37 @@ class Config:
                 'loaded_beater_radius': 7, # m, no loaded opponent beater this close to the receiver
                 'max_pass_penalty_worsening': 100, # m^2, how much worse the receiver's pass-to-player score may be than the carrier's (e.g. 10 m -> 14 m from the hoops)
                 'delay_of_game_fraction': 0.5, # stop once the delay of game timer reaches this fraction of the limit
+            },
+            'volleyball_drive': {
+                'start_probability_per_second': 0.3, # probability that the move is tried within one game second
+                'cooldown': 3, # after the move ended, before the same team may start it again
+                'max_duration': 5 * GAME_TIME_TO_REAL_TIME_RATIO, # timeout, 5 real seconds
+                'min_chaser_keepers': 3, # chasers/keepers of the team not knocked out
+                'dodgeball_pass_distance': 3, # m, pass when an opponent live dodgeball is closer than this to the carrier
+                'tackle_window': 1.0, # pass when the carrier was tackled within this time (tackles are one-shot actions)
+                'pass_interception_threshold': 0.95, # minimum interception score of the pass
+                'hoop_switch_margin': 0.2, # interception score another hoop must be better by to change the target hoop
+            },
+            'volleyball_shift_drive': { # volleyball_shift, then volleyball_drive for the new carrier if the second pass was caught
+                'start_probability_per_second': 0.3,
+                'cooldown': 3,
+                'shift': {
+                    'max_duration': 12,
+                    'attack_line_fraction': 0.6,
+                    'min_participants': 3,
+                    'pass_interception_threshold': 1.0,
+                    'loaded_beater_radius': 7,
+                    'max_pass_penalty_worsening': 100,
+                    'delay_of_game_fraction': 0.5,
+                },
+                'drive': {
+                    'max_duration': 5 * GAME_TIME_TO_REAL_TIME_RATIO,
+                    'min_chaser_keepers': 3,
+                    'dodgeball_pass_distance': 3,
+                    'tackle_window': 1.0,
+                    'pass_interception_threshold': 0.95,
+                    'hoop_switch_margin': 0.2,
+                },
             },
         },
     }

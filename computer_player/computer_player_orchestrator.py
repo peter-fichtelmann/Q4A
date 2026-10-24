@@ -14,6 +14,8 @@ from computer_player.seeker_director import SeekerDirector
 from computer_player.volleyball_possession_calculator import VolleyballPossession, VolleyballPossessionCalculator
 from computer_player.moves.move import Move, MoveStatus
 from computer_player.moves.volleyball_shift import VolleyballShift
+from computer_player.moves.volleyball_drive import VolleyballDrive
+from computer_player.moves.volleyball_shift_drive import VolleyballShiftDrive
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, PassEvaluator, ScoreAttempter
@@ -42,6 +44,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
     """
     MOVE_CLASSES: Dict[str, type] = {
         VolleyballShift.name: VolleyballShift,
+        VolleyballDrive.name: VolleyballDrive,
+        VolleyballShiftDrive.name: VolleyballShiftDrive,
     }
 
     def __init__(self,
