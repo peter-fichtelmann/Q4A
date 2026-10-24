@@ -4,7 +4,7 @@
 
 Without a file the newest *_state.jsonl in game_data/logs is used. Keys:
     space play/pause   r reverse direction   left/right step 1 tick (shift: 20)
-    up/down speed x2   [ / ] jump 10 game s   home/end start/end   g jump to tick (type, enter)
+    up/down speed (x0.25 to x16, also the speed slider)   [ / ] jump 10 game s   home/end start/end   g jump to tick (type, enter)
     click or drag the slider to scrub.
 """
 import argparse
@@ -100,6 +100,11 @@ class Viewer:
         self.slider = Slider(sax, 'tick', int(self.r.ticks[0]), int(self.r.ticks[-1]),
                              valinit=int(self.r.ticks[self.i]), valstep=1)
         self.slider.on_changed(self._on_slider)
+        spax = self.fig.add_axes([0.08, 0.09, 0.2, 0.03])
+        self.speed_slider = Slider(spax, 'speed', 0, len(self.SPEEDS) - 1, valinit=self.speed_idx, valstep=1,
+                                   valfmt='%d')
+        self.speed_slider.valtext.set_text(f'x{self.SPEEDS[self.speed_idx]}')
+        self.speed_slider.on_changed(self._on_speed_slider)
         self.fig.canvas.mpl_connect('key_press_event', self._on_key)
         self.timer = self.fig.canvas.new_timer(interval=30)
         self.timer.add_callback(self._on_timer)
@@ -147,6 +152,18 @@ class Viewer:
             self.i = min(int(np.searchsorted(self.r.ticks, value)), len(self.r.ticks) - 1)
             self.draw()
 
+    def _set_speed(self, idx):
+        self.speed_idx = int(min(max(idx, 0), len(self.SPEEDS) - 1))
+        if int(self.speed_slider.val) != self.speed_idx:
+            self.speed_slider.eventson = False  # avoid re-entering _on_speed_slider
+            self.speed_slider.set_val(self.speed_idx)
+            self.speed_slider.eventson = True
+        self.speed_slider.valtext.set_text(f'x{self.SPEEDS[self.speed_idx]}')
+        self.draw()
+
+    def _on_speed_slider(self, value):
+        self._set_speed(int(value))
+
     def _on_timer(self):
         now = time.perf_counter()
         elapsed, self._last = now - self._last, now
@@ -187,9 +204,11 @@ class Viewer:
             self.seek(self.i + (20 if k.startswith('shift') else 1) * (1 if k.endswith('right') else -1))
             return
         elif k == 'up':
-            self.speed_idx = min(self.speed_idx + 1, len(self.SPEEDS) - 1)
+            self._set_speed(self.speed_idx + 1)
+            return
         elif k == 'down':
-            self.speed_idx = max(self.speed_idx - 1, 0)
+            self._set_speed(self.speed_idx - 1)
+            return
         elif k in ('[', ']'):
             self.seek_time(-10 if k == '[' else 10)
             return
