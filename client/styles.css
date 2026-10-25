@@ -548,3 +548,11 @@ input:focus, select:focus {
         min-height: 140px;
     }
 }
+
+
+/* Room lobby embedded in the in-game settings menu */
+body.ingame .actions,
+body.ingame .room-status,
+body.ingame .subtitle,
+body.ingame h1 { display: none; }
+body.ingame .room-container { padding-top: 8px; }

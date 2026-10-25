@@ -158,6 +158,13 @@ class GameRoom:
         self.is_tutorial: bool = False
         self.tutorial_director = None
         self.room_jsonl_logger = RoomJsonlLogger(self)
+        # Connection player ids that currently have the in-game settings menu open.
+        # The game is paused for everybody while this is non-empty.
+        self.settings_open_by: set = set()
+        self.paused: bool = False
+        # Entity a connection's slot refers to once an in-game slot move put it on a
+        # different entity than its own id; absent means "its own entity".
+        self.slot_entity_by_player: Dict[str, str] = {}
 
     @staticmethod
     def _slot_id(team_label: str, role: str, index: int) -> str:
@@ -190,6 +197,88 @@ class GameRoom:
             for i in range(1, int(n_right) + 1):
                 slots[self._slot_id("team_b", role, i)] = None
         return slots
+
+    def lobby_players(self) -> List[Dict]:
+        """Players shown in the room lobby: humans only, never the CPU fillers."""
+        cpu_ids = set(self.cpu_player_ids)
+        return [p for pid, p in self.players.items() if pid not in cpu_ids]
+
+    def pause_state_message(self) -> dict:
+        names = [self.players[pid]["name"] for pid in self.settings_open_by if pid in self.players]
+        return {"type": "game_paused", "paused": self.paused, "by": names}
+
+    def refresh_paused(self) -> bool:
+        """Recompute `paused` from the open settings menus; True when it changed."""
+        paused = bool(self.settings_open_by)
+        if paused == self.paused:
+            return False
+        self.paused = paused
+        return True
+
+    def home_entity_id(self, connection_player_id: str) -> str:
+        return self.slot_entity_by_player.get(connection_player_id, connection_player_id)
+
+    def move_player_slot_in_game(self, player_id: str, target_slot: Optional[str]) -> tuple[bool, str]:
+        """Slot change after the game started.
+
+        Entities are fixed once the game runs, so a move re-points the connection at a
+        free (CPU-driven) entity of the target team and role; the entity it leaves goes
+        back to the CPU. `None` makes the player a spectator.
+        """
+        if player_id not in self.players:
+            return False, "Player not found"
+        if target_slot is not None:
+            if target_slot not in self.slot_assignments:
+                return False, "Invalid slot"
+            occupying = self.slot_assignments[target_slot]
+            if occupying is not None and occupying != player_id:
+                return False, "Target slot is occupied"
+            if occupying == player_id:
+                return True, "ok"
+
+        state = self.game_state
+        old_id = self.controlled_player_by_player.get(player_id)
+        new_entity = None
+        if target_slot is not None:
+            parts = target_slot.split("_")
+            if len(parts) != 4:
+                return False, "Invalid slot format"
+            team = 0 if parts[1] == "a" else 1
+            role = PlayerRole(parts[2])
+            taken = set(self.controlled_player_by_player.values())
+            candidates = [
+                p for p in state.players.values()
+                if p.team == team and p.role == role and (p.id not in taken or p.id == old_id)
+            ]
+            if not candidates:
+                return False, "No free player at that position right now"
+            new_entity = next((p for p in candidates if p.id == old_id), candidates[0])
+
+        old_entity = state.get_player(old_id) if old_id else None
+        if new_entity is None:
+            self.controlled_player_by_player.pop(player_id, None)
+            self.slot_entity_by_player.pop(player_id, None)
+        else:
+            self.controlled_player_by_player[player_id] = new_entity.id
+            self.slot_entity_by_player[player_id] = new_entity.id
+            player_switch.apply_human_tuning(new_entity)
+            player_switch.stop(new_entity)
+        if old_entity is not None and (new_entity is None or old_entity.id != new_entity.id):
+            player_switch.apply_cpu_tuning(old_entity)
+            player_switch.stop(old_entity)
+
+        for slot_id, assigned in self.slot_assignments.items():
+            if assigned == player_id:
+                self.slot_assignments[slot_id] = None
+        info = self.players[player_id]
+        if target_slot is None:
+            info["team"] = None
+            info["role"] = "spectator"
+        else:
+            self.slot_assignments[target_slot] = player_id
+            info["team"] = new_entity.team
+            info["role"] = new_entity.role.value
+        return True, "ok"
 
     def next_default_player_name(self) -> str:
         self.player_counter += 1
@@ -542,7 +631,7 @@ async def websocket_lobby(websocket: WebSocket):
                     "room_id": room_id,
                     "passkey": passkey,
                     "player_id": creator_player_id,
-                    "players": list(room.players.values()),
+                    "players": room.lobby_players(),
                     "slots": room.slot_assignments,
                     "tutorial": room.is_tutorial,
                 })
@@ -578,14 +667,14 @@ async def websocket_lobby(websocket: WebSocket):
                         "type": "join_successful",
                         "room_id": room_id,
                         "player_id": player_id,
-                        "players": list(room.players.values()),
+                        "players": room.lobby_players(),
                         "slots": room.slot_assignments,
                     })
                     # Notify other lobby connections in the room about the new player
                     await broadcast_lobby(room, {
                         "type": "players_updated",
                         "room_id": room_id,
-                        "players": list(room.players.values()),
+                        "players": room.lobby_players(),
                         "slots": room.slot_assignments,
                     })
                 else:
@@ -616,7 +705,7 @@ async def websocket_lobby(websocket: WebSocket):
                     "room_id": room_id,
                     "player_id": player_id,
                     "is_creator": player_id == getattr(room, "creator_player_id", None),
-                    "players": list(room.players.values()),
+                    "players": room.lobby_players(),
                     "slots": room.slot_assignments,
                 })
 
@@ -634,7 +723,13 @@ async def websocket_lobby(websocket: WebSocket):
                     await websocket.send_json({"type": "update_failed", "error": "Player not found in room"})
                     continue
 
-                success, reason = room.set_player_slot(player_id, target_slot)
+                if room.game_started:
+                    if room.is_tutorial:
+                        await websocket.send_json({"type": "update_failed", "error": "Positions are fixed in the tutorial"})
+                        continue
+                    success, reason = room.move_player_slot_in_game(player_id, target_slot)
+                else:
+                    success, reason = room.set_player_slot(player_id, target_slot)
                 if not success:
                     await websocket.send_json({"type": "update_failed", "error": reason})
                     continue
@@ -642,9 +737,21 @@ async def websocket_lobby(websocket: WebSocket):
                 await broadcast_lobby(room, {
                     "type": "players_updated",
                     "room_id": room_id,
-                    "players": list(room.players.values()),
+                    "players": room.lobby_players(),
                     "slots": room.slot_assignments,
                 })
+
+                if room.game_started:
+                    # The game is usually paused while slots change, so there is no state
+                    # update to carry the new controlled player: tell the client directly.
+                    controlled_id = room.get_controlled_player_id(player_id) if player_id in room.controlled_player_by_player else None
+                    for game_cid, game_pid in list(room.game_client_player_ids.items()):
+                        game_ws = room.client_connections.get(game_cid)
+                        if game_pid == player_id and game_ws is not None:
+                            try:
+                                await game_ws.send_json({"type": "controlled_player", "controlled_player_id": controlled_id})
+                            except Exception:
+                                pass
 
             elif message_type == "update_player":
                 # Update a player's team/role inside a room
@@ -715,7 +822,7 @@ async def websocket_lobby(websocket: WebSocket):
                         await broadcast_lobby(room, {
                             "type": "players_updated",
                             "room_id": room_id,
-                            "players": list(room.players.values()),
+                            "players": room.lobby_players(),
                             "slots": room.slot_assignments,
                         })
 
@@ -740,7 +847,7 @@ async def websocket_lobby(websocket: WebSocket):
                                 "type": "start_successful",
                                 "room_id": room_id,
                                 "player_id": pid,
-                                "players": list(room.players.values()),
+                                "players": room.lobby_players(),
                             })
                         except Exception:
                             pass
@@ -892,7 +999,7 @@ async def websocket_lobby(websocket: WebSocket):
                                     "type": "start_successful",
                                     "room_id": room_id,
                                     "player_id": pid,
-                                    "players": list(room.players.values())
+                                    "players": room.lobby_players()
                                 })
                             except Exception:
                                 # ignore send failures; cleanup will happen on disconnect
@@ -903,7 +1010,7 @@ async def websocket_lobby(websocket: WebSocket):
                             "type": "start_successful",
                             "room_id": room_id,
                             "player_id": creator_player_id,
-                            "players": list(room.players.values())
+                            "players": room.lobby_players()
                         })
     
     except WebSocketDisconnect:
@@ -960,9 +1067,11 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
     client_id = str(uuid.uuid4())
     room.client_connections[client_id] = websocket
     room.game_client_player_ids[client_id] = player_id
-    if player_id in room.game_state.players:
-        room.controlled_player_by_player.setdefault(player_id, player_id)
-        player_switch.apply_human_tuning(room.game_state.players[player_id])
+    home_id = room.home_entity_id(player_id)
+    is_spectator = room.players.get(player_id, {}).get("role") == "spectator"
+    if home_id in room.game_state.players and not is_spectator:
+        room.controlled_player_by_player.setdefault(player_id, home_id)
+        player_switch.apply_human_tuning(room.game_state.players[room.controlled_player_by_player[player_id]])
 
     try:
         # Send initial game state. This is the one broadcast carrying full player
@@ -975,7 +1084,9 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 "balls_order": list(room.game_state.balls.keys()),
                 # which entity this client steers right now, so the first frame is
                 # correct without waiting for a binary state update
-                "controlled_player_id": room.get_controlled_player_id(player_id),
+                "controlled_player_id": room.controlled_player_by_player.get(player_id),
+                "is_tutorial": room.is_tutorial,
+                "paused": room.pause_state_message(),
                 # send the fixed game tick duration once so the client can extrapolate between updates
                 "tick_time_seconds": (1.0 / Config.FPS) * Config.GAME_TIME_TO_REAL_TIME_RATIO,
             "players": list(room.players.values()),
@@ -1017,6 +1128,22 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 # Input always targets the entity this connection currently steers,
                 # which is its own player until it switches to a teammate.
                 controlled_player_id = room.get_controlled_player_id(player_id)
+
+                if message_type in ("settings_open", "settings_close"):
+                    if not room.is_tutorial:
+                        if message_type == "settings_open":
+                            room.settings_open_by.add(player_id)
+                        else:
+                            room.settings_open_by.discard(player_id)
+                        if room.refresh_paused():
+                            await broadcast_to_room(room, room.pause_state_message())
+                        elif room.paused:
+                            # someone else opened it too: refresh the "paused by" names
+                            await broadcast_to_room(room, room.pause_state_message())
+                    continue
+
+                if room.paused and message_type in ("player_input", "throw", "claim", "switch_player"):
+                    continue
 
                 if message_type == "player_input":
                     direction_x = message.get("direction_x", 0)
@@ -1093,6 +1220,8 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
         pass
     finally:
         _drop_game_client(room, client_id)
+        if room.refresh_paused():
+            await broadcast_to_room(room, room.pause_state_message())
         mark_tutorial_room_abandoned(room)
 
 
@@ -1105,6 +1234,7 @@ def _drop_game_client(room: GameRoom, client_id: str) -> None:
     room.client_connections.pop(client_id, None)
     connection_player_id = room.game_client_player_ids.pop(client_id, None)
     if connection_player_id is not None:
+        room.settings_open_by.discard(connection_player_id)
         player_switch.release_to_connection_player(room, connection_player_id)
 
 async def broadcast_to_room(room: GameRoom, message: dict):
@@ -1468,7 +1598,7 @@ async def game_loop_manager():
         except Exception:
             logger.exception('Tutorial room sweep failed')
         for room_id, room in list(lobby_manager.rooms.items()):
-            if room.game_started:
+            if room.game_started and not room.paused:
                 if Config.GAME_LOGIC_STEP_PROFILING_ENABLED and not room.step_profile_finished:
                     profile_start_tick = max(0, int(Config.GAME_LOGIC_STEP_PROFILE_START_TICK))
                     profile_num_ticks = max(0, int(Config.GAME_LOGIC_STEP_PROFILE_NUM_TICKS))

@@ -313,6 +313,8 @@ def release_to_connection_player(room, connection_player_id: str) -> None:
     """
     controlled: Dict[str, str] = room.controlled_player_by_player
     current_id = controlled.get(connection_player_id)
-    if current_id is None or current_id == connection_player_id:
+    # After an in-game slot move the slot's entity is no longer the connection's own id.
+    home_id = room.home_entity_id(connection_player_id)
+    if current_id is None or current_id == home_id:
         return
-    apply_switch(room, connection_player_id, current_id, connection_player_id)
+    apply_switch(room, connection_player_id, current_id, home_id)

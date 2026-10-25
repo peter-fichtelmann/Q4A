@@ -42,6 +42,13 @@ const MUTE_BUTTON_TOP = 154;
 
 let started = false;
 let muted = false;
+// Player-chosen loudness (0..1) applied on top of every sound; kept across games.
+const VOLUME_STORAGE_KEY = 'q4a_master_volume';
+let masterVolume = 1;
+try {
+  const stored = parseFloat(localStorage.getItem(VOLUME_STORAGE_KEY));
+  if (Number.isFinite(stored)) masterVolume = Math.min(1, Math.max(0, stored));
+} catch (e) {}
 let unlockRegistered = false;
 // Every atmosphere element that is still audible: the running track plus, during
 // the crossfade, the one playing itself out. Kept so muting reaches both.
@@ -69,18 +76,22 @@ function pickOtherTrackIndex(excludeIndex) {
 }
 
 /** Bed volume right now: the base level, raised while a beat swell fades out. */
+function baseAtmosphereVolume() {
+  return ATMOSPHERE_VOLUME * masterVolume;
+}
+
 function atmosphereVolume() {
-  if (swellStartMs === null) return ATMOSPHERE_VOLUME;
+  if (swellStartMs === null) return baseAtmosphereVolume();
   const progress = (performance.now() - swellStartMs) / BEAT_SWELL_FADE_MS;
-  if (progress >= 1) return ATMOSPHERE_VOLUME;
+  if (progress >= 1) return baseAtmosphereVolume();
   const factor = BEAT_SWELL_FACTOR + (1 - BEAT_SWELL_FACTOR) * progress;
-  return Math.min(1, ATMOSPHERE_VOLUME * factor);
+  return Math.min(1, baseAtmosphereVolume() * factor);
 }
 
 function applySwellFrame() {
   const volume = atmosphereVolume();
   for (const element of liveTracks) element.volume = volume;
-  if (volume === ATMOSPHERE_VOLUME) {
+  if (volume === baseAtmosphereVolume()) {
     swellStartMs = null;
     swellFrame = null;
     return;
@@ -167,7 +178,7 @@ export function playScoreSound() {
   const url = EVENT_SOUNDS[Math.floor(Math.random() * EVENT_SOUNDS.length)];
   // A fresh element per call so goals in quick succession do not cut each other off.
   const element = new Audio(url);
-  element.volume = EVENT_VOLUME;
+  element.volume = EVENT_VOLUME * masterVolume;
   toPromise(element.play()).catch(() => {});
 }
 
@@ -241,6 +252,7 @@ export function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   if (voice) { utterance.voice = voice; utterance.lang = voice.lang; } else { utterance.lang = 'en-US'; }
   utterance.pitch = pitch;
+  utterance.volume = masterVolume;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -250,6 +262,14 @@ if (typeof window !== 'undefined' && window.speechSynthesis) {
 }
 
 export function isMuted() { return muted; }
+
+export function getMasterVolume() { return masterVolume; }
+
+export function setMasterVolume(volume) {
+  masterVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+  try { localStorage.setItem(VOLUME_STORAGE_KEY, String(masterVolume)); } catch (e) {}
+  for (const element of liveTracks) element.volume = atmosphereVolume();
+}
 
 export function setMuted(nextMuted) {
   muted = !!nextMuted;

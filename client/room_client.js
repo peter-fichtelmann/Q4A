@@ -391,6 +391,10 @@ function setPlayerSlot(targetSlot) {
 function toggleStartButton() {
     const startBtn = document.getElementById('startBtn');
     if (!startBtn) return;
+    if (document.body.classList.contains('ingame')) {
+        startBtn.classList.add('hidden');
+        return;
+    }
 
     if (isCreator) {
         startBtn.classList.remove('hidden');
@@ -442,6 +446,11 @@ window.addEventListener('load', () => {
     if (!params.roomId || !params.playerId) {
         updateStatus('Missing room_id or player_id in URL.', 'error');
         return;
+    }
+
+    // Embedded in the game's settings menu: positions only, no start or navigation.
+    if (new URLSearchParams(window.location.search).get('ingame') === '1') {
+        document.body.classList.add('ingame');
     }
 
     currentRoom = params.roomId;

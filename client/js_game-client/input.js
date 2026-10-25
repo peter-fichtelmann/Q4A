@@ -11,6 +11,8 @@ export function detectTouchDevice() {
 
 export function onKeyDown(e) {
   keys[e.key] = true;
+  if (e.key === 'Escape') { document.dispatchEvent(new CustomEvent('settings-toggle')); return; }
+  if (State.paused) return;
   if (e.key === ' ') { e.preventDefault(); sendThrow(); }
   if (e.key === 'f' || e.key === 'F') { e.preventDefault(); document.dispatchEvent(new CustomEvent('fullscreen-toggle')); }
   if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); document.dispatchEvent(new CustomEvent('switch-player-same')); }

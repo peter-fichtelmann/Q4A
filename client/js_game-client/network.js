@@ -6,6 +6,7 @@ import { showPrompt } from './fullscreen.js';
 import { ensureButtons, showForbidden } from './player_switch.js';
 import { ensureClaimButton, updateClaimButton } from './claim.js';
 import * as Audio from './audio.js';
+import { ensureSettingsButton, applyPauseState } from './settings.js';
 import { handlePenaltyTurnover, handleInbounding } from './penalty_announcements.js';
 
 function getNowMs() {
@@ -104,13 +105,17 @@ export function handleMessage(message) {
       if (cfg.flag_runner_radius !== undefined) Config.FLAG_RUNNER_RADIUS = cfg.flag_runner_radius;
       if (cfg.game_time_to_real_time_ratio !== undefined) Config.GAME_TIME_TO_REAL_TIME_RATIO = cfg.game_time_to_real_time_ratio;
     }
-    if (message.controlled_player_id) State.localPlayerId = message.controlled_player_id;
+    // Null for a spectator, who steers nobody.
+    State.localPlayerId = message.controlled_player_id || null;
+    State.isTutorial = !!message.is_tutorial;
     rememberServerUpdateTime();
     try { resizeCanvasToFit(); } catch (e) {}
     showPrompt();
     ensureButtons();
     ensureClaimButton();
     Audio.ensureMuteButton();
+    ensureSettingsButton();
+    if (message.paused) applyPauseState(message.paused);
     // Baseline only, so joining a running game does not replay its goals.
     Audio.noteScore(State.gameState && State.gameState.score);
     Audio.noteKnockouts(State.gameState && State.gameState.players);
@@ -119,6 +124,10 @@ export function handleMessage(message) {
     handlePenaltyTurnover(message);
   } else if (message.type === 'inbounding') {
     handleInbounding(message);
+  } else if (message.type === 'game_paused') {
+    applyPauseState(message);
+  } else if (message.type === 'controlled_player') {
+    State.localPlayerId = message.controlled_player_id || null;
   } else if (message.type === 'switch_player_failed') {
     showForbidden(message.mode, message.reason);
   } else if (message.type === 'state_update') {
@@ -185,9 +194,10 @@ export function handleMessage(message) {
     }
     // Which player we steer is sent as an index into playersOrder on every update
     // (255 = none), so a switch needs no extra message and cannot get out of sync.
-    if (incoming.controlled_index !== undefined && incoming.controlled_index !== 255 && State.playersOrder) {
-      const controlledId = State.playersOrder[incoming.controlled_index];
-      if (controlledId) State.localPlayerId = controlledId;
+    if (incoming.controlled_index !== undefined && State.playersOrder) {
+      State.localPlayerId = incoming.controlled_index === 255
+        ? null
+        : (State.playersOrder[incoming.controlled_index] || State.localPlayerId);
     }
     // Right after the merge, before the hooks below: if one of them throws, a stale
     // time would make the renderer extrapolate the fresh positions further and further.

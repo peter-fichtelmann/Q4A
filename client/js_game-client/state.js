@@ -13,6 +13,10 @@ export const State = {
   playersOrder: null,
   ballsOrder: null,
   network: { tickSeconds: 0, lastUpdateAtMs: 0 },
+  // Game paused for everybody (someone has the settings menu open).
+  paused: false,
+  pausedAtMs: 0,
+  isTutorial: false,
   mousePos: null,
   isTouchDevice: false,
   fullscreen: { isFullscreen: false, attempted: false, button: null },

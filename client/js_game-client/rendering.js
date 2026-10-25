@@ -25,7 +25,7 @@ function getPredictionDeltaSeconds() {
   const tickSeconds = Number(State.network?.tickSeconds) || 0;
   const lastUpdateAtMs = Number(State.network?.lastUpdateAtMs) || 0;
   if (!tickSeconds || !lastUpdateAtMs) return 0;
-  const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const nowMs = State.paused ? State.pausedAtMs : ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
   const realSeconds = Math.min(MAX_PREDICTION_SECONDS, Math.max(0, (nowMs - lastUpdateAtMs) / 1000));
   const ratio = Number(Config.GAME_TIME_TO_REAL_TIME_RATIO) || 1;
   return realSeconds * ratio;
