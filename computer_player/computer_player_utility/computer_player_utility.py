@@ -151,7 +151,7 @@ class BeaterThrowDecider:
         return True
 
     def _teammate_in_the_way(self, beater: Player, target: Player, origin: Vector2, throw_direction: Vector2, ball) -> bool:
-        """Whether a teammate of `beater` would reflect a dodgeball thrown from `origin` along `throw_direction` before it reaches `target`."""
+        """Whether a teammate of `beater` other than `target` would reflect a dodgeball thrown from `origin` along `throw_direction` before it reaches `target`."""
         if self.state is None:
             return False
         speed = math.hypot(throw_direction.x, throw_direction.y)
@@ -161,7 +161,7 @@ class BeaterThrowDecider:
         target_distance = (target.position.x - origin.x) * ux + (target.position.y - origin.y) * uy
         ball_radius = ball.radius if ball is not None else 0.0
         for player in self.state.players.values():
-            if player.team != beater.team or player.id == beater.id or player.is_knocked_out:
+            if player.team != beater.team or player.id == beater.id or player.id == target.id or player.is_knocked_out:
                 continue
             if player.role == PlayerRole.SEEKER and not self.state.seeker_on_pitch:
                 continue
@@ -328,10 +328,12 @@ class ThrowDirector:
         return throw_direction, predicted_receiver_position
 
     @staticmethod
-    def throw_analytic_with_tick(player: Player, receiver: Player, origin: Optional[Vector2] = None) -> Tuple[Optional[Vector2], Optional[Vector2], Optional[float]]:
-        """Like _throw_analytic, plus the (fractional) tick at which the ball reaches the receiver."""
+    def throw_analytic_with_tick(player: Player, receiver: Player, origin: Optional[Vector2] = None,
+                                 throw_velocity: Optional[float] = None) -> Tuple[Optional[Vector2], Optional[Vector2], Optional[float]]:
+        """Like _throw_analytic, plus the (fractional) tick at which the ball reaches the receiver (`throw_velocity` defaults to the player's)."""
         origin = origin or player.position
-        throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
+        if throw_velocity is None:
+            throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
         result = first_throw_tick(
             thrower_x=origin.x,
             thrower_y=origin.y,

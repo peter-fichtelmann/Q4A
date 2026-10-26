@@ -51,6 +51,15 @@ class Config:
     DODGEBALL_DEAD_VELOCITY_THRESHOLD_REAL = 4 # velocity m/s real when dodgeball becomes dead
     DODGEBALL_DEAD_VELOCITY_THRESHOLD = DODGEBALL_DEAD_VELOCITY_THRESHOLD_REAL / GAME_TIME_TO_REAL_TIME_RATIO
 
+    # Throw assist for humans (per player toggle in the settings menu): rotates a throw by a few degrees onto a pass, beat or shot
+    THROW_ASSIST_MAX_ANGLE_DEG = 5 # max rotation for passes and beats (moving receivers)
+    THROW_ASSIST_SHOT_MAX_ANGLE_DEG = THROW_ASSIST_MAX_ANGLE_DEG / 2 # max rotation for shots, as hoops do not move
+    THROW_ASSIST_SHOT_SEARCH_STEP_DEG = 0.25 # rotation step when searching the smallest rotation through a hoop
+    THROW_ASSIST_SAFE_MARGIN = 0.5 # game seconds; options with at least this time margin are safe, the others risky
+    THROW_ASSIST_TIME_MARGIN_CAP = 3.0 # game seconds, cap of the time margins
+    THROW_ASSIST_BEAT_DODGE_TIME = 0.8 * GAME_TIME_TO_REAL_TIME_RATIO # game seconds a target needs to dodge; beat time margin = this - flight time
+    THROW_ASSIST_TEAMMATE_BLOCK_MARGIN = 0.2 # m; a dodgeball option is dropped if a teammate this close to the throw line (+ radii) would reflect it
+
     DELAY_OF_GAME_TIME_LIMIT = 15  # game seconds before delay of game warning/penalty
     DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL = 1.4  # m/s in x direction the volleyball must exceed to avoid delay of game; should be slow running speed
     DELAY_OF_GAME_VELOCITY_X_THRESHOLD = DELAY_OF_GAME_VELOCITY_X_THRESHOLD_REAL / GAME_TIME_TO_REAL_TIME_RATIO

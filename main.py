@@ -24,6 +24,8 @@ from core.entities import Player, VolleyBall, DodgeBall, Vector2, PlayerRole, Ba
 from core.game_logic.game_logic import GameLogic
 from computer_player.computer_player import ComputerPlayer, RandomComputerPlayer
 from computer_player.computer_player_orchestrator import ComputerPlayerOrchestrator
+from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
+from computer_player.computer_player_utility.throw_assist import ThrowAssist
 from config import Config
 from room_jsonl_logger import RoomJsonlLogger
 from tutorial import setup_tutorial_room, mark_tutorial_room_abandoned, sweep_abandoned_tutorial_rooms
@@ -165,6 +167,8 @@ class GameRoom:
         # Entity a connection's slot refers to once an in-game slot move put it on a
         # different entity than its own id; absent means "its own entity".
         self.slot_entity_by_player: Dict[str, str] = {}
+        # Connection player ids that turned the throw assist off (it is on by default).
+        self.throw_assist_off_by: set = set()
 
     @staticmethod
     def _slot_id(team_label: str, role: str, index: int) -> str:
@@ -183,6 +187,16 @@ class GameRoom:
     def get_controlled_player_id(self, connection_player_id: str) -> str:
         """The entity a connection steers right now (its own player unless switched)."""
         return self.controlled_player_by_player.get(connection_player_id, connection_player_id)
+
+    def process_human_throw(self, connection_player_id: str) -> bool:
+        """Throw for a connection, rotated onto the intended pass/beat/shot unless it turned the throw assist off."""
+        controlled_player_id = self.get_controlled_player_id(connection_player_id)
+        throw_direction = None
+        if connection_player_id not in self.throw_assist_off_by:
+            player = self.game_state.get_player(controlled_player_id)
+            if player is not None and player.has_ball:
+                throw_direction = ThrowAssist(self.game_state, InterceptionCalculator(self.game_logic)).assisted_direction(player)
+        return self.game_logic.process_action_logic.process_throw_action(controlled_player_id, throw_direction)
 
     def _build_slot_assignments(self) -> Dict[str, Optional[str]]:
         slots: Dict[str, Optional[str]] = {}
@@ -1143,6 +1157,13 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                             await broadcast_to_room(room, room.pause_state_message())
                     continue
 
+                if message_type == "throw_assist":
+                    if message.get("enabled", True):
+                        room.throw_assist_off_by.discard(player_id)
+                    else:
+                        room.throw_assist_off_by.add(player_id)
+                    continue
+
                 if room.paused and message_type in ("player_input", "throw", "claim", "switch_player"):
                     continue
 
@@ -1165,7 +1186,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         player.direction.y = float(direction_y)
 
                 elif message_type == "throw":
-                    success_throw = room.game_logic.process_action_logic.process_throw_action(controlled_player_id)
+                    success_throw = room.process_human_throw(player_id)
                     success_tackle = room.game_logic.process_action_logic.process_tackle_action(controlled_player_id)
 
                 elif message_type == "claim":
@@ -1236,6 +1257,7 @@ def _drop_game_client(room: GameRoom, client_id: str) -> None:
     connection_player_id = room.game_client_player_ids.pop(client_id, None)
     if connection_player_id is not None:
         room.settings_open_by.discard(connection_player_id)
+        room.throw_assist_off_by.discard(connection_player_id)
         player_switch.release_to_connection_player(room, connection_player_id)
 
 async def broadcast_to_room(room: GameRoom, message: dict):

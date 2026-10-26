@@ -6,7 +6,7 @@ import { showPrompt } from './fullscreen.js';
 import { ensureButtons, showForbidden } from './player_switch.js';
 import { ensureClaimButton, updateClaimButton } from './claim.js';
 import * as Audio from './audio.js';
-import { ensureSettingsButton, applyPauseState } from './settings.js';
+import { ensureSettingsButton, applyPauseState, sendThrowAssist } from './settings.js';
 import { handlePenaltyTurnover, handleInbounding } from './penalty_announcements.js';
 
 function getNowMs() {
@@ -53,6 +53,7 @@ export function connectGame() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   State.gameSocket = new WebSocket(`${protocol}//${window.location.host}/ws/game/${State.roomId}/${State.connectionPlayerId}`);
   State.gameSocket.binaryType = 'arraybuffer';
+  State.gameSocket.onopen = () => { sendThrowAssist(); };
   State.gameSocket.onmessage = (event) => {
     try {
       if (event.data instanceof ArrayBuffer) {

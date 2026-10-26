@@ -1,5 +1,5 @@
 // In-game settings menu. Opening it pauses the game for everybody; it offers this
-// player's audio volume and a way into the room lobby (positions and teams, spectating).
+// player's audio volume, the throw assist toggle and a way into the room lobby (positions and teams, spectating).
 //
 // Imports no network.js (network.js imports this module); the socket is reached
 // through State, like player_switch.js does.
@@ -18,9 +18,27 @@ let lobbyFrame = null;
 let pausedBanner = null;
 let menuOpen = false;
 
-function send(type) {
+// Throw assist (server rotates throws by a few degrees onto a pass, beat or shot); on by default, kept across games.
+const THROW_ASSIST_STORAGE_KEY = 'q4a_throw_assist';
+let throwAssist = true;
+try {
+  throwAssist = localStorage.getItem(THROW_ASSIST_STORAGE_KEY) !== 'off';
+} catch (e) {}
+
+function send(type, fields = {}) {
   const socket = State.gameSocket;
-  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type }));
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type, ...fields }));
+}
+
+/** Tell the server this player's throw assist setting (on connect and on change). */
+export function sendThrowAssist() {
+  send('throw_assist', { enabled: throwAssist });
+}
+
+function setThrowAssist(enabled) {
+  throwAssist = enabled;
+  try { localStorage.setItem(THROW_ASSIST_STORAGE_KEY, enabled ? 'on' : 'off'); } catch (e) {}
+  sendThrowAssist();
 }
 
 function el(tag, css, text) {
@@ -51,6 +69,15 @@ function buildPanel() {
   slider.value = String(Math.round(Audio.getMasterVolume() * 100));
   slider.addEventListener('input', () => Audio.setMasterVolume(Number(slider.value) / 100));
   card.appendChild(slider);
+
+  const assistLabel = el('label', 'display: flex; align-items: center; gap: 8px; margin-top: 14px; cursor: pointer;');
+  const assistBox = el('input', 'width: 18px; height: 18px;');
+  assistBox.type = 'checkbox';
+  assistBox.checked = throwAssist;
+  assistBox.addEventListener('change', () => setThrowAssist(assistBox.checked));
+  assistLabel.appendChild(assistBox);
+  assistLabel.appendChild(el('span', '', 'Throw assist (corrects passes, beats and shots by a few degrees)'));
+  card.appendChild(assistLabel);
 
   const lobbyBtn = el('button', BTN_CSS, 'Change game room (teams & positions)');
   lobbyBtn.addEventListener('click', showLobby);
