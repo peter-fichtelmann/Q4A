@@ -138,20 +138,33 @@ class Config:
                 'chaser_evade_chaser_keeper_weight': 4,
                 'chaser_evade_opponent_max_magnitude': 2, # cap of each opponent's evade vector after the weight
                 'chaser_evade_teamate_chaser_keeper_weight': 1.5,
-                'chaser_pull_teammate_chaser_keeper_distance': 20, # m, beyond this the quadratic pull to a teammate outweighs the teammate evasion (max passing distance)
+                'chaser_pull_teammate_chaser_keeper_distance': 12, # m, beyond this the quadratic pull to a teammate outweighs the teammate evasion (max passing distance)
                 'volleyball_holder_evade_own_hoop_weight': (0.5, 1.0), # first weight x-axis, second weight y-axis. Larger y because of hoop radius
                 'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
                 'passing_threshold': 0.95, # minimum interception score (chance of not being intercepted) to attempt a pass
                 'passing_squared_max_distance': 20**2, # maximum squared distance from volleyball to consider passing (also used by moves)
+                'chaser_pull_closest_teammates': 2, # only this many closest teammates not knocked out pull (None: all)
+                'tackle_support_players': 2, # closest off-ball teammates moving to support spots while the own carrier is tackled (None: off)
+                'tackle_support_window': 1.0, # game seconds after a tackle the carrier counts as tackled
+                'tackle_support_distance': 4.0, # m, support spots around the carrier
+                'tackle_support_max_distance': 12.0, # m, only teammates this close to the carrier support
+                'tackle_support_margin_cap': 1.0, # game seconds, a better pass time margin of a spot does not count
+                'tackle_support_travel_weight': 0.3, # spot rating lost per game second of running to it
+                'tackle_support_spacing': 2.0, # m, minimum distance between the spots of two supporters
             },
             'beater': {
                 'unloaded_beater_evade_loaded_opponent_beater_weight': -20, # if opponent beater is loaded, we want to be closer to them to try to get the ball from them, so negative weight for evade vector, but if they are unloaded then we want to be farther away from them to avoid getting hit, so positive weight for evade vector
                 'loaded_beater_evade_loaded_opponent_beater_weight': -15,
                 'loaded_beater_evade_unloaded_opponent_beater_weight': 4.0,
+                'anticipate_volleyball': True, # during a pass, move to where the volleyball will be caught
             },
         },
         'hoop_defence_kwargs': {
-            'chaser_keeper': {},
+            'chaser_keeper': {
+                'anticipate_volleyball': True, # position against where a pass in flight will be caught (hoop assignment, in front/behind)
+                'orient_to_volleyball': True, # hoop chasers stand on the line hoop -> volleyball instead of straight in front of the hoop
+                'between_hoops_fraction': 0.5, # volleyball's y between two hoops: hoop chasers move this fraction of the way to its y (None: off)
+            },
             'beater': {
                 'beater_evade_beater_buddy_weight': 3,
                 'beater_evade_volleyball_weight': -3.5, # negative for anti-evade
@@ -160,6 +173,8 @@ class Config:
                 'unloaded_beater_evade_beater_weight': -2, # unloaded beaters try to make contact with other close opponent beaters
                 'unloaded_beater_max_x_to_midline': 8, # 11 would be stick to keeper zone, 0 would be got up to midline
                 'positioning_boundary_buffer_distance': 3, # distance from boundary at which to start evading boundary
+                'anticipate_volleyball': True, # during a pass, the pull to the volleyball goes to where it will be caught
+                'throw_at_receiver': True, # throw at the expected receiver of a pass in flight like at a holder
             },
         },
         'box_defence_probability': 0.5, # chance that a team uses the box defence instead of the hoop defence for chasers/keeper, drawn each time it starts defending
@@ -170,7 +185,17 @@ class Config:
                 'hoop_clearance_x': 1.0, # m, box players stay at least this far in front of the hoops
                 'min_defender_distance': 3.0, # m, the marker keeps at least this distance from the defender going for the volleyball
                 'max_y_offset': 7.0, # m, pressers/markers stay within this y distance of the centre hoop; opponents further to the sides are not marked
+                'assign_by_total_distance': False, # presser and marker by the smaller sum of distances to the volleyball and the marking position
+                'anticipate_volleyball': True, # like hoop_defence_kwargs; the expected receiver of a pass is pressed
+                'orient_to_volleyball': True, # like hoop_defence_kwargs, for the hoop chasers
+                'between_hoops_fraction': 0.5, # like hoop_defence_kwargs, for the hoop chasers
             },
+        },
+        'beater_throw_kwargs': { # BeaterThrowDecider
+            'teammate_block_margin': 0.2, # m; no throw if a teammate is this close to the throw line (+ radii), as it would reflect the dodgeball (None: off)
+        },
+        'dodgeball_assigner_kwargs': { # DodgeballAssigner
+            'missed_throw_lane_margin': 0.5, # m; a thrown dodgeball with no opponent this close to its path (+ radii) is fetched by the throwing team right away (None: only once dead)
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
         'beater_throw_threshold_loaded_beater': 4, # distance in m for beater to throw at loaded opponent beater

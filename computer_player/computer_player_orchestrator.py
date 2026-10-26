@@ -75,6 +75,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  dodge_kwargs: Optional[Dict] = None,
                  cherry_pick_kwargs: Optional[Dict] = None,
                  bludger_control_kwargs: Optional[Dict] = None,
+                 beater_throw_kwargs: Optional[Dict] = None,
+                 dodgeball_assigner_kwargs: Optional[Dict] = None,
                  seeker_kwargs: Optional[Dict] = None,
                  beater_seeker_focus_kwargs: Optional[Dict] = None,
                  intercept_margin: Optional[float] = None, # game seconds; None: only the fastest player and the contester go for a loose volleyball
@@ -109,7 +111,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
             throw_threshold_loaded_beater=beater_throw_threshold_loaded_beater,
             state=state,
-            **(bludger_control_kwargs or {})
+            **(bludger_control_kwargs or {}),
+            **(beater_throw_kwargs or {})
         )
         self.score_attempter = ScoreAttempter(
             self.interception_calculator,
@@ -118,7 +121,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             **(scoring_kwargs or {})
         )
         self.pass_evaluator = PassEvaluator(self.interception_calculator, **(passing_kwargs or {}))
-        self.dodgeball_assigner = DodgeballAssigner(self.logic, self.interception_calculator, logger=self.logger)
+        self.dodgeball_assigner = DodgeballAssigner(self.logic, self.interception_calculator, logger=self.logger, **(dodgeball_assigner_kwargs or {}))
 
         # base strategies
         self.diamond_attack_chaser_keeper = DiamondAttackChaserKeeper(
@@ -178,6 +181,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         attack_team = possession.team
         # with no attacking team (all chasers/keepers knocked out) team 0 defends
         defence_team = 1 - attack_team if attack_team is not None else 0
+        anticipated_position, anticipated_carrier_id = self._anticipate_volleyball(possession)
         ctx = StepContext(
             dt=dt,
             game_time=self.game_time,
@@ -187,6 +191,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             events=events,
             cpu_player_id_set=self.cpu_player_id_set,
             rosters=self.rosters,
+            anticipated_volleyball_position=anticipated_position,
+            anticipated_carrier_id=anticipated_carrier_id,
         )
         self._select_defence_strategy(ctx)
         self._profile_call('orchestrator.update_moves', self._update_moves, ctx)
@@ -223,6 +229,21 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
         self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
         self._profile_call('orchestrator.dodgeball_dodger', self.dodgeball_dodger, self.cpu_players + self.cpu_seekers)
+
+    def _anticipate_volleyball(self, possession: VolleyballPossession) -> Tuple[Vector2, Optional[str]]:
+        """
+        Where the volleyball will be caught and by whom: for a pass or shot in flight the predicted ball position
+        when the expected holder reaches it, otherwise the volleyball's position and its (expected) holder.
+        """
+        volleyball = self.logic.state.volleyball
+        position = Vector2(volleyball.position.x, volleyball.position.y)
+        carrier_id = possession.player_id
+        if volleyball.holder_id is not None or volleyball.is_dead or possession.interception_times is None:
+            return position, carrier_id
+        catch_time = possession.interception_times.get(carrier_id)
+        if catch_time is None:
+            return position, carrier_id
+        return self.interception_calculator.predict_entity_position(volleyball, catch_time), carrier_id
 
     def _steer_contester(self, possession: VolleyballPossession, steerable_id_set: set) -> None:
         """The other team's fastest player races for a loose volleyball it can nearly reach first, overriding its base strategy."""

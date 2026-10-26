@@ -102,6 +102,11 @@ class BeaterThrowDecider:
     Bludger control (`keep_last_dodgeball`): a beater with the team's last dodgeball does not throw it
     while an opponent beater is loaded, except at a loaded opponent beater or at a volleyball holder
     within `last_dodgeball_threat_distance` of the thrower's own hoops.
+
+    Teammates in the way (`teammate_block_margin`): a dodgeball touching a teammate of the thrower is
+    reflected and loses its possession, so the beat fails. A beater does not throw if a teammate,
+    moved on with its velocity until the dodgeball passes it, is closer to the throw line before the
+    target than its radius + the dodgeball radius + this margin.
     """
     def __init__(
             self,
@@ -110,6 +115,7 @@ class BeaterThrowDecider:
             state=None,
             keep_last_dodgeball: bool = False,
             last_dodgeball_threat_distance: float = 8.0,
+            teammate_block_margin: Optional[float] = None, # m; None: teammates in the way are ignored
             ):
         """Store squared distance thresholds used by beater throw checks."""
         self.squared_throw_threshold_volleyball_holder = throw_threshold_volleyball_holder**2
@@ -117,6 +123,7 @@ class BeaterThrowDecider:
         self.state = state
         self.keep_last_dodgeball = keep_last_dodgeball
         self.squared_last_dodgeball_threat_distance = last_dodgeball_threat_distance**2
+        self.teammate_block_margin = teammate_block_margin
         self.pending_throws: Dict[str, Tuple[str, int]] = {} # target id -> (dodgeball id, thrower team) of a throw in flight
 
     def update_pending_throws(self, state) -> None:
@@ -134,11 +141,43 @@ class BeaterThrowDecider:
             return False
         dodgeball_id = beater.has_ball
         held_ball = self.state.balls.get(dodgeball_id) if self.state is not None else None
-        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target, held_ball.position if held_ball else None)
+        origin = held_ball.position if held_ball else beater.position
+        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target, origin)
+        if self.teammate_block_margin is not None and self._teammate_in_the_way(beater, target, origin, throw_direction, held_ball):
+            return False
         if not process_action_logic.process_throw_action(beater.id, throw_direction):
             return False
         self.pending_throws[target.id] = (dodgeball_id, beater.team)
         return True
+
+    def _teammate_in_the_way(self, beater: Player, target: Player, origin: Vector2, throw_direction: Vector2, ball) -> bool:
+        """Whether a teammate of `beater` would reflect a dodgeball thrown from `origin` along `throw_direction` before it reaches `target`."""
+        if self.state is None:
+            return False
+        speed = math.hypot(throw_direction.x, throw_direction.y)
+        if speed == 0:
+            return False
+        ux, uy = throw_direction.x / speed, throw_direction.y / speed
+        target_distance = (target.position.x - origin.x) * ux + (target.position.y - origin.y) * uy
+        ball_radius = ball.radius if ball is not None else 0.0
+        for player in self.state.players.values():
+            if player.team != beater.team or player.id == beater.id or player.is_knocked_out:
+                continue
+            if player.role == PlayerRole.SEEKER and not self.state.seeker_on_pitch:
+                continue
+            along = (player.position.x - origin.x) * ux + (player.position.y - origin.y) * uy
+            if along <= 0 or along >= target_distance:
+                continue
+            # where the teammate is when the dodgeball passes it (constant speeds)
+            time = along / speed
+            x = player.position.x + player.velocity.x * time - origin.x
+            y = player.position.y + player.velocity.y * time - origin.y
+            along = x * ux + y * uy
+            if along <= 0 or along >= target_distance:
+                continue
+            if abs(x * uy - y * ux) < player.radius + ball_radius + self.teammate_block_margin:
+                return True
+        return False
 
     def _keeps_last_dodgeball(self, beater: Player, target: Player) -> bool:
         """Whether `beater` keeps its dodgeball as the team's last one instead of throwing it at `target`."""

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import Dict, List, Optional, Set
 
-from core.entities import Hoop, PlayerRole
+from core.entities import Hoop, PlayerRole, Vector2
 from core.game_logic.game_logic import GameLogic
 from computer_player.volleyball_possession_calculator import VolleyballPossession
 
@@ -59,6 +59,9 @@ class StepContext:
     events: PossessionEvents
     cpu_player_id_set: Set[str]
     rosters: Dict[int, TeamRoster] = field(default_factory=dict)
+    # where the volleyball will be caught during a pass in flight (its position otherwise), and by whom
+    anticipated_volleyball_position: Optional[Vector2] = None
+    anticipated_carrier_id: Optional[str] = None
 
 
 class BaseStrategy(ABC):

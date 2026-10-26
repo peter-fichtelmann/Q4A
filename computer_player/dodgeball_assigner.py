@@ -1,10 +1,13 @@
 import logging
+import math
 from typing import List, Optional, Set
 
+from config import Config
 from core.entities import BallType, PlayerRole, Vector2
 from core.game_logic.game_logic import GameLogic
 from core.game_logic.utility_logic import UtilityLogic
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
+from computer_player.computer_player_utility.kinematics import decay_table
 
 
 class DodgeballAssigner:
@@ -12,14 +15,22 @@ class DodgeballAssigner:
     Assign beaters of both teams to free dodgeballs and steer the assigned ones.
 
     Runs before the beater base strategies, which leave the assigned beaters alone.
+
+    Missed throws (`missed_throw_lane_margin`): a thrown dodgeball that no opponent is in the way of
+    anymore cannot beat. Beaters of the throwing team may pick it up while it is still live, so it is
+    free for them right away instead of only once it is slow enough to be dead. An opponent is in the
+    way if it is closer to the dodgeball's remaining path (until it is dead) than its radius + the
+    dodgeball radius + this margin, now or moved on with its velocity until the dodgeball passes it.
     """
     def __init__(self,
                  logic: GameLogic,
                  interception_calculator: InterceptionCalculator,
+                 missed_throw_lane_margin: Optional[float] = None, # m; None: missed throws are only fetched once dead
                  logger: Optional[logging.Logger] = None):
         """Bind game logic and the interception model."""
         self.logic = logic
         self.interception_calculator = interception_calculator
+        self.missed_throw_lane_margin = missed_throw_lane_margin
         self.logger = logger or logging.getLogger("computer_player")
         self.beaters = [player for player in self.logic.state.players.values() if player.role == PlayerRole.BEATER]
 
@@ -73,16 +84,25 @@ class DodgeballAssigner:
         else: # no third dodgeball, so no team already has two dodgeballs in possesion
             sorted_interception_per_dodgeball_dict = {}
             min_interception_time_dodgeball_dict = {}
+            live_dodgeball_ids = set() # missed throws, which only the throwing team may fetch
             dodgeballs = self.logic.state.dodgeballs
             for dodgeball in dodgeballs:
                 if dodgeball.ball_type == BallType.DODGEBALL:
                     if dodgeball.possession_team is None:
+                        competing_beaters = self.beaters
+                    elif dodgeball.holder_id is None and self._missed_throw(dodgeball):
+                        # only the throwing team can touch a live dodgeball without being beaten
+                        competing_beaters = [beater for beater in self.beaters if beater.team == dodgeball.possession_team]
+                        live_dodgeball_ids.add(dodgeball.id)
+                    else:
+                        competing_beaters = None
+                    if competing_beaters is not None:
                         # If there is a dead dodgeball which is not the third dodgeball, assign beater players to get the dodgeball
                         # does not matter which interception ratio calculator as beaters are not blocked by hoops
                         # all beaters compete, knocked out ones starting from their centre hoop
                         min_interception_time, _, interception_info_dict = self.interception_calculator.line_interception(
                             moving_entity=dodgeball,
-                            intercepting_player_ids=[beater.id for beater in self.beaters],
+                            intercepting_player_ids=[beater.id for beater in competing_beaters],
                         )
                         sorted_info_dict = sorted(interception_info_dict.items(), key=lambda item: item[1]) # sort by interception time
                         # sorted info dict is a list of Tuples (player_id, interception time)
@@ -106,10 +126,47 @@ class DodgeballAssigner:
                             )
                         break
             # only dodgeballs whereas possesion is None (sorted dodgeball ids) and not assigned before
-            unassigned_dodgeball_ids = [dodgeball_id for dodgeball_id in sorted_dodgeball_ids if dodgeball_id not in assigned_dodgeball_ids]
+            unassigned_dodgeball_ids = [dodgeball_id for dodgeball_id in sorted_dodgeball_ids
+                                        if dodgeball_id not in assigned_dodgeball_ids and dodgeball_id not in live_dodgeball_ids]
             if len(unassigned_dodgeball_ids) > 0:
                 assigned_beater_ids = self._distance_based_beater_assignment(unassigned_dodgeball_ids, assigned_beater_ids, steerable_id_set)
         return assigned_beater_ids
+
+    def _missed_throw(self, dodgeball) -> bool:
+        """Whether no opponent of the throwing team is in the way of the live thrown `dodgeball` until it is dead."""
+        if self.missed_throw_lane_margin is None:
+            return False
+        state = self.logic.state
+        speed = math.hypot(dodgeball.velocity.x, dodgeball.velocity.y)
+        if speed <= Config.DODGEBALL_DEAD_VELOCITY_THRESHOLD:
+            return False # dead within the next tick anyway
+        table = decay_table(dodgeball.deacceleration_rate)
+        # distance travelled until the speed drops to the dead threshold: c * (v - v_dead)
+        remaining = table.c * (speed - Config.DODGEBALL_DEAD_VELOCITY_THRESHOLD) if table.c is not None else float('inf')
+        ux, uy = dodgeball.velocity.x / speed, dodgeball.velocity.y / speed
+        for player in state.players.values():
+            if player.team == dodgeball.possession_team or player.is_knocked_out:
+                continue
+            if player.role == PlayerRole.SEEKER and not state.seeker_on_pitch:
+                continue
+            reach = player.radius + dodgeball.radius + self.missed_throw_lane_margin
+            dx = player.position.x - dodgeball.position.x
+            dy = player.position.y - dodgeball.position.y
+            along = dx * ux + dy * uy
+            if self._in_lane(dx, dy, ux, uy, reach, remaining):
+                return False
+            if along > 0:
+                # where the opponent is when the dodgeball passes it (constant speeds)
+                time = along / speed
+                if self._in_lane(dx + player.velocity.x * time, dy + player.velocity.y * time, ux, uy, reach, remaining):
+                    return False
+        return True
+
+    @staticmethod
+    def _in_lane(dx: float, dy: float, ux: float, uy: float, reach: float, length: float) -> bool:
+        """Whether the offset (dx, dy) from the dodgeball is within `reach` of its path of `length` along (ux, uy)."""
+        along = dx * ux + dy * uy
+        return -reach <= along <= length + reach and abs(dx * uy - dy * ux) < reach
 
     def _is_eligible(self, beater_id: str, steerable_id_set: Set[str]) -> bool:
         """A free dodgeball goes to a CPU steered beater without a dodgeball (knocked out ones included)."""
