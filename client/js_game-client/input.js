@@ -61,8 +61,13 @@ export function update() {
       // the dashed throw line then runs from the ball through the cursor.
       let originX = pp.x || 0, originY = pp.y || 0;
       if (p.has_ball && State.gameState.balls) {
+        // Binary states flag a held ball with holder_id === true (no id), so take the nearest held ball.
+        let bestD = Infinity;
         for (const ball of Object.values(State.gameState.balls)) {
-          if (ball.holder_id === State.localPlayerId) { const bp = ball.position || ball.pos || ball; originX = bp.x; originY = bp.y; break; }
+          if (ball.holder_id !== State.localPlayerId && ball.holder_id !== true) continue;
+          const bp = ball.position || ball.pos || ball;
+          const d = Math.hypot(bp.x - (pp.x || 0), bp.y - (pp.y || 0));
+          if (d < bestD) { bestD = d; originX = bp.x; originY = bp.y; }
         }
       }
       let dx = mx - originX;

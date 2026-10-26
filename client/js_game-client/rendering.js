@@ -304,8 +304,14 @@ export function renderGame() {
             const ndx = dirX / dm; const ndy = dirY / dm; const maxD = Math.max(Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
             let ballX = px, ballY = py;
             if (gs.balls) {
+              // Binary states flag a held ball with holder_id === true (no id), so take the nearest held ball.
+              const pw = player.position || player.pos || player;
+              let bestD = Infinity;
               for (const ball of Object.values(gs.balls)) {
-                if (ball.holder_id === player.id) { const bp = ball.position || ball.pos || ball; const bs = worldToScreen(bp.x, bp.y); ballX = bs.x; ballY = bs.y; break; }
+                if (ball.holder_id !== player.id && ball.holder_id !== true) continue;
+                const bp = ball.position || ball.pos || ball;
+                const d = Math.hypot(bp.x - pw.x, bp.y - pw.y);
+                if (d < bestD) { bestD = d; const bs = worldToScreen(bp.x, bp.y); ballX = bs.x; ballY = bs.y; }
               }
             }
             const startX = ballX, startY = ballY; const endX = ballX + maxD * ndx; const endY = ballY + maxD * ndy;
