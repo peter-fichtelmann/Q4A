@@ -1,3 +1,4 @@
+import itertools
 import logging
 import math
 from typing import Dict, List, Optional, Tuple
@@ -26,6 +27,11 @@ class HoopDefenceChaserKeeper(BaseStrategy):
         - `between_hoops_fraction`: if the volleyball's y is between the y of this hoop and a neighbouring
           hoop, this fraction of the way from the hoop's y to the volleyball's y, so the chaser can cover
           both hoops
+
+    Hoop assignment: by default the hoop closest to the volleyball gets its closest chaser first, then the
+    next hoop, which can swap chasers between hoops when the volleyball moves. With `stable_hoop_assignment`,
+    the hoops closest to the volleyball (all if there are enough chasers) are covered by the assignment with
+    the smallest sum of squared chaser-hoop distances, so chasers keep their hoops.
     """
     def __init__(self,
                  logic: GameLogic,
@@ -33,6 +39,7 @@ class HoopDefenceChaserKeeper(BaseStrategy):
                  anticipate_volleyball: bool = False,
                  orient_to_volleyball: bool = False,
                  between_hoops_fraction: Optional[float] = None, # None: always in front of the own hoop
+                 stable_hoop_assignment: bool = False,
                  logger: Optional[logging.Logger] = None
                  ):
         """Store the hoop blockage helpers and the positioning options."""
@@ -41,6 +48,7 @@ class HoopDefenceChaserKeeper(BaseStrategy):
         self.anticipate_volleyball = anticipate_volleyball
         self.orient_to_volleyball = orient_to_volleyball
         self.between_hoops_fraction = between_hoops_fraction
+        self.stable_hoop_assignment = stable_hoop_assignment
 
     def reference_position(self, ctx: StepContext) -> Vector2:
         """Volleyball position the defence positions against: where it will be caught with `anticipate_volleyball`."""
@@ -84,41 +92,57 @@ class HoopDefenceChaserKeeper(BaseStrategy):
     def chasers_action(self, sorted_hoop_distances, chaser_hoop_squared_distances, volleyball: VolleyBall, dt: float, team: int, controlled_id_set: set,
                        reference_position: Optional[Vector2] = None):
         """Assign and steer chasers to defend hoop lanes based on proximity order."""
-        # move chaser closest to hoop with closest distance volleyball first; then move next closest chaser to next closest hoop and so on, but only if they are not already directed towards a hoop by a closer chaser
         move_around_hoop_blockage = self.move_around_hoop_blockages[team]
-        directed_chasers = []
+        for hoop_id, chaser_id in self._assign_hoops(sorted_hoop_distances, chaser_hoop_squared_distances):
+            chaser = self.logic.state.get_player(chaser_id)
+            target_hoop = self.logic.state.hoops[hoop_id]
+            if chaser_id in controlled_id_set:
+                # TODO: chasers move with volleyball movement (between hoop x +/-) and chasers acknowledge hoop blockage and move around it if volleyball less than hoop x
+                add_hoop_blockage_x = chaser.radius + volleyball.radius
+                next_chaser_position_x, next_chaser_position_y = self.logic.basic_logic.get_update_position(chaser, dt)
+                if reference_position is not None:
+                    reference_x, reference_y = reference_position.x, reference_position.y
+                else:
+                    reference_x, reference_y = self.logic.basic_logic.get_update_position(volleyball, dt)
+                target_position, add_target_x_buffer = self._hoop_position(
+                    chaser, target_hoop, reference_x, reference_y, add_hoop_blockage_x, move_around_hoop_blockage)
+                next_direction_to_hoop = Vector2(
+                    target_position.x - next_chaser_position_x,
+                    target_position.y - next_chaser_position_y
+                )
+                chaser.direction = move_around_hoop_blockage(
+                    player=chaser,
+                    target_position=target_position,
+                    target_hoop=target_hoop,
+                    add_hoop_blockage_x=add_hoop_blockage_x,
+                    lookahead_to_target=next_direction_to_hoop,
+                    add_target_x_buffer=add_target_x_buffer
+                )
+                # tackle a carrier running into the hoop defender, every frame until the next CPU move (no-op without contact)
+                chaser.is_holding_tackle = True
+
+    def _assign_hoops(self, sorted_hoop_distances, chaser_hoop_squared_distances) -> List[Tuple[str, str]]:
+        """(hoop id, chaser id) pairs, hoops in order of their distance to the volleyball."""
+        pairs = []
+        if self.stable_hoop_assignment:
+            chaser_ids = list(next(iter(chaser_hoop_squared_distances.values()), {}).keys())
+            covered_hoop_ids = [hoop_id for hoop_id, _ in sorted_hoop_distances][:len(chaser_ids)]
+            best_cost, best_chasers = float('inf'), ()
+            for chasers in itertools.permutations(chaser_ids, len(covered_hoop_ids)):
+                cost = sum(chaser_hoop_squared_distances[hoop_id][chaser_id] for hoop_id, chaser_id in zip(covered_hoop_ids, chasers))
+                if cost < best_cost:
+                    best_cost, best_chasers = cost, chasers
+            return list(zip(covered_hoop_ids, best_chasers))
+        # move chaser closest to hoop with closest distance volleyball first; then move next closest chaser to next closest hoop and so on
+        directed_chasers = set()
         for hoop_id, _ in sorted_hoop_distances:
             sorted_chaser_distances = sorted(chaser_hoop_squared_distances[hoop_id].items(), key=lambda item: item[1])
             for chaser_id, _ in sorted_chaser_distances:
                 if chaser_id not in directed_chasers:
-                    chaser = self.logic.state.get_player(chaser_id)
-                    target_hoop = self.logic.state.hoops[hoop_id]
-                    directed_chasers.append(chaser_id)
-                    if chaser_id in controlled_id_set:
-                        # TODO: chasers move with volleyball movement (between hoop x +/-) and chasers acknowledge hoop blockage and move around it if volleyball less than hoop x
-                        add_hoop_blockage_x = chaser.radius + volleyball.radius
-                        next_chaser_position_x, next_chaser_position_y = self.logic.basic_logic.get_update_position(chaser, dt)
-                        if reference_position is not None:
-                            reference_x, reference_y = reference_position.x, reference_position.y
-                        else:
-                            reference_x, reference_y = self.logic.basic_logic.get_update_position(volleyball, dt)
-                        target_position, add_target_x_buffer = self._hoop_position(
-                            chaser, target_hoop, reference_x, reference_y, add_hoop_blockage_x, move_around_hoop_blockage)
-                        next_direction_to_hoop = Vector2(
-                            target_position.x - next_chaser_position_x,
-                            target_position.y - next_chaser_position_y
-                        )
-                        chaser.direction = move_around_hoop_blockage(
-                            player=chaser,
-                            target_position=target_position,
-                            target_hoop=target_hoop,
-                            add_hoop_blockage_x=add_hoop_blockage_x,
-                            lookahead_to_target=next_direction_to_hoop,
-                            add_target_x_buffer=add_target_x_buffer
-                        )
-                        # tackle a carrier running into the hoop defender, every frame until the next CPU move (no-op without contact)
-                        chaser.is_holding_tackle = True
+                    directed_chasers.add(chaser_id)
+                    pairs.append((hoop_id, chaser_id))
                     break
+        return pairs
 
     def _hoop_position(self,
                        chaser: Player,

@@ -36,6 +36,10 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
     volleyball and the marker's distance to its marking position is taken.
     With `anticipate_volleyball`, the defence positions against where a pass in flight will be caught,
     and the expected receiver is pressed instead of marked.
+    With `split_at_centre_y`, the two box players in front of the hoops split the pitch at the centre
+    hoop's y: the one further down stays below it, the other above, so a pass to the other side never
+    finds both on one side. The presser is chosen as before, within its own half; the marker marks the
+    opponent closest to the volleyball within its own half.
     """
     def __init__(self,
                  logic: GameLogic,
@@ -49,12 +53,16 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
                  anticipate_volleyball: bool = False,
                  orient_to_volleyball: bool = False,
                  between_hoops_fraction: Optional[float] = None,
+                 stable_hoop_assignment: bool = False,
+                 split_at_centre_y: bool = False,
                  logger: Optional[logging.Logger] = None
                  ):
         """Store the hoop blockage helpers and marking parameters."""
         super().__init__(logic, move_around_hoop_blockages, anticipate_volleyball=anticipate_volleyball,
-                         orient_to_volleyball=orient_to_volleyball, between_hoops_fraction=between_hoops_fraction, logger=logger)
+                         orient_to_volleyball=orient_to_volleyball, between_hoops_fraction=between_hoops_fraction,
+                         stable_hoop_assignment=stable_hoop_assignment, logger=logger)
         self.assign_by_total_distance = assign_by_total_distance
+        self.split_at_centre_y = split_at_centre_y
         self.marking_distance = marking_distance
         self.marking_max_distance = marking_max_distance
         self.hoop_clearance_x = hoop_clearance_x
@@ -123,7 +131,8 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
         center_hoop = defence_hoops[1] if len(defence_hoops) == 3 else defence_hoops[0]
         y_limits = (center_hoop.position.y - self.max_y_offset, center_hoop.position.y + self.max_y_offset)
         carrier_id = ctx.anticipated_carrier_id if self.anticipate_volleyball else volleyball.holder_id
-        self.press_and_mark_action(pressing_players, reference_position, carrier_id, closest_hoop, team, ctx, controlled_id_set, x_limits, y_limits)
+        split_y = center_hoop.position.y if self.split_at_centre_y and volleyball_in_front else None
+        self.press_and_mark_action(pressing_players, reference_position, carrier_id, closest_hoop, team, ctx, controlled_id_set, x_limits, y_limits, split_y)
 
         # the keeper always tries to tackle, like in the hoop defence
         if keeper is not None and keeper.id in controlled_id_set:
@@ -169,11 +178,17 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
                               ctx: StepContext,
                               controlled_id_set: set,
                               x_limits: Optional[Tuple[float, float]],
-                              y_limits: Tuple[float, float]):
-        """The player closest to the volleyball presses it, the other marks the opponent closest to the volleyball."""
+                              y_limits: Tuple[float, float],
+                              split_y: Optional[float] = None):
+        """The player closest to the volleyball presses it, the other marks the opponent closest to the volleyball (within its half with `split_y`)."""
         if not players:
             return
         move_around_hoop_blockage = self.move_around_hoop_blockages[team]
+        player_y_limits = {player.id: y_limits for player in players}
+        if split_y is not None and len(players) == 2:
+            lower, upper = sorted(players, key=lambda player: player.position.y)
+            player_y_limits[lower.id] = (y_limits[0], split_y)
+            player_y_limits[upper.id] = (split_y, y_limits[1])
         opponents = [
             self.logic.state.players[player_id] for player_id in ctx.rosters[team].opponent_chaser_keeper_ids
             if player_id != carrier_id
@@ -182,33 +197,46 @@ class BoxDefenceChaserKeeper(HoopDefenceChaserKeeper):
             and self._squared_distance(self.logic.state.players[player_id].position, volleyball_position) <= self.marking_max_distance ** 2
         ]
         opponents.sort(key=lambda opponent: self._squared_distance(opponent.position, volleyball_position))
-        press_position = self._clamp(Vector2(volleyball_position.x, volleyball_position.y), x_limits, y_limits)
+
+        def press_position_of(player: Player) -> Vector2:
+            return self._clamp(Vector2(volleyball_position.x, volleyball_position.y), x_limits, player_y_limits[player.id])
+
+        def opponents_of(player: Player) -> List[Player]:
+            limits = player_y_limits[player.id]
+            return [opponent for opponent in opponents if limits[0] <= opponent.position.y <= limits[1]]
+
         players = sorted(players, key=lambda player: self._squared_distance(player.position, volleyball_position))
-        if self.assign_by_total_distance and len(players) == 2 and opponents:
-            mark_position = self._clamp(self._marking_position(opponents[0], volleyball_position), x_limits, y_limits)
+        if self.assign_by_total_distance and len(players) == 2:
             def cost(presser: Player, marker: Player) -> float:
-                return (math.dist((presser.position.x, presser.position.y), (press_position.x, press_position.y))
-                        + math.dist((marker.position.x, marker.position.y), (mark_position.x, mark_position.y)))
-            if cost(players[1], players[0]) < cost(players[0], players[1]):
+                press_position = press_position_of(presser)
+                total = math.dist((presser.position.x, presser.position.y), (press_position.x, press_position.y))
+                marked = opponents_of(marker)
+                if marked:
+                    mark_position = self._clamp(self._marking_position(marked[0], volleyball_position), x_limits, player_y_limits[marker.id])
+                    total += math.dist((marker.position.x, marker.position.y), (mark_position.x, mark_position.y))
+                return total
+            if opponents and cost(players[1], players[0]) < cost(players[0], players[1]):
                 players = [players[1], players[0]]
         presser, markers = players[0], players[1:]
 
         if presser.id in controlled_id_set:
-            presser.direction = move_around_hoop_blockage(presser, press_position, target_hoop=closest_hoop)
+            presser.direction = move_around_hoop_blockage(presser, press_position_of(presser), target_hoop=closest_hoop)
             presser.is_holding_tackle = True
 
         for i, marker in enumerate(markers):
             if marker.id not in controlled_id_set:
                 continue
-            if i < len(opponents):
-                target_position = self._marking_position(opponents[i], volleyball_position)
+            marker_y_limits = player_y_limits[marker.id]
+            marked = opponents_of(marker)
+            if i < len(marked):
+                target_position = self._marking_position(marked[i], volleyball_position)
             else:
                 # nobody to mark: cover the volleyball's way to the closest hoop
                 target_position = Vector2(
                     (volleyball_position.x + closest_hoop.position.x) / 2,
                     (volleyball_position.y + closest_hoop.position.y) / 2
                 )
-            target_position = self._keep_away_from(target_position, presser.position, x_limits, y_limits)
+            target_position = self._keep_away_from(target_position, presser.position, x_limits, marker_y_limits)
             marker.direction = move_around_hoop_blockage(marker, target_position, target_hoop=closest_hoop)
 
     def _marking_position(self, opponent: Player, volleyball_position: Vector2) -> Vector2:

@@ -172,7 +172,8 @@ class Config:
             'chaser_keeper': {
                 'anticipate_volleyball': True, # position against where a pass in flight will be caught (hoop assignment, in front/behind)
                 'orient_to_volleyball': True, # hoop chasers stand on the line hoop -> volleyball instead of straight in front of the hoop
-                'between_hoops_fraction': 0.5, # volleyball's y between two hoops: hoop chasers move this fraction of the way to its y (None: off)
+                'between_hoops_fraction': None, # volleyball's y between two hoops: hoop chasers move this fraction of the way to its y (None: off; all three hoops are covered)
+                'stable_hoop_assignment': True, # chasers keep their hoops (least total distance) instead of the closest hoop to the volleyball taking its closest chaser first
             },
             'beater': {
                 'beater_evade_beater_buddy_weight': 3,
@@ -198,6 +199,8 @@ class Config:
                 'anticipate_volleyball': True, # like hoop_defence_kwargs; the expected receiver of a pass is pressed
                 'orient_to_volleyball': True, # like hoop_defence_kwargs, for the hoop chasers
                 'between_hoops_fraction': 0.5, # like hoop_defence_kwargs, for the hoop chasers
+                'stable_hoop_assignment': True, # like hoop_defence_kwargs, for the hoop chasers
+                'split_at_centre_y': True, # the two box players in front of the hoops stay on their side of the centre hoop's y
             },
         },
         'beater_throw_kwargs': { # BeaterThrowDecider
