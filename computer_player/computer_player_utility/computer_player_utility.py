@@ -507,9 +507,10 @@ class ScoreAttempter:
         good_enough = excess_dict[best_hoop_id] >= 0 if self.use_time_margin else excess_dict[best_hoop_id] > 0
         if good_enough:
             best_hoop = hoops_by_id[best_hoop_id]
+            # aim from the held ball, which is offset from the holder's centre by about the player radius
             volleyball_holder.direction = Vector2(
-                best_hoop.position.x - volleyball_holder.position.x,
-                best_hoop.position.y - volleyball_holder.position.y
+                best_hoop.position.x - volleyball.position.x,
+                best_hoop.position.y - volleyball.position.y
             )
             # the throw is refused e.g. right after receiving a turnover ball
             if self.process_action_logic.process_throw_action(volleyball_holder.id):
