@@ -88,5 +88,5 @@ class Move(ABC):
         pass
 
     def describe(self) -> str:
-        """Short summary for the move-ended log line."""
+        """Short summary for the move-started and move-ended log lines."""
         return ""

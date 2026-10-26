@@ -385,6 +385,18 @@ def _serialize_for_jsonl(obj, _seen: Optional[set[int]] = None):
     return str(obj)
 
 
+class _RoomTickFilter(logging.Filter):
+    """Stamps each record with the room's current game tick."""
+
+    def __init__(self, room):
+        super().__init__()
+        self.room = room
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.tick = getattr(self.room, 'game_tick_count', None)
+        return True
+
+
 class RoomJsonlLogger:
     """Handles compact JSONL logging for a single room."""
 
@@ -397,6 +409,10 @@ class RoomJsonlLogger:
         self._initial_state_snapshot_written = False
         self._previous_dynamic_snapshot = None
         self._last_dynamic_keyframe_tick = None
+        # the room's computer player logs to this child of "computer_player"; its INFO records
+        # (move starts and ends with status and reason, strategy choices, ...) go to the room's _computer_player.log
+        self.computer_player_logger_name = f"computer_player.room_{room.room_id}"
+        self.computer_player_log_handler = None
 
         try:
             created_stamp = room.created_at.strftime('%Y%m%dT%H%M%S')
@@ -409,6 +425,14 @@ class RoomJsonlLogger:
 
             self.state_file = state_path.open('a', encoding='utf-8', buffering=1024 * 1024)
             self.cpu_file = cpu_path.open('a', encoding='utf-8', buffering=1024 * 1024)
+
+            handler = logging.FileHandler(logs_dir / f"{base_name}_computer_player.log", encoding='utf-8', delay=True)
+            handler.setLevel(logging.INFO)
+            handler.addFilter(_RoomTickFilter(room))
+            # tick as in the state.jsonl records (the computer player moves after the tick's logic update)
+            handler.setFormatter(logging.Formatter('tick=%(tick)s %(levelname)s %(message)s'))
+            logging.getLogger(self.computer_player_logger_name).addHandler(handler)
+            self.computer_player_log_handler = handler
 
         except Exception:
             logger.exception('Failed to initialize JSONL room logger for room=%s', room.room_id)
@@ -743,6 +767,10 @@ class RoomJsonlLogger:
             except Exception:
                 pass
             self.cpu_file = None
+        if self.computer_player_log_handler is not None:
+            logging.getLogger(self.computer_player_logger_name).removeHandler(self.computer_player_log_handler)
+            self.computer_player_log_handler.close()
+            self.computer_player_log_handler = None
 
     @classmethod
     def load_game_state_at_tick(cls, state_file_path, tick: int) -> Optional[GameState]:

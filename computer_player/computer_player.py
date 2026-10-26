@@ -70,8 +70,11 @@ class ComputerPlayer(ABC):
     Subclasses implement `make_move` and set per-player directions/actions for one
     simulation step.
     """
-    def __init__(self, game_logic: GameLogic, computer_player_log_level: int = logging.INFO):
-        """Bind game logic. The controlled players are supplied per `make_move` call."""
+    def __init__(self, game_logic: GameLogic, computer_player_log_level: int = logging.INFO, logger_name: str = "computer_player"):
+        """
+        Bind game logic. The controlled players are supplied per `make_move` call.
+        `logger_name` lets a room give its CPU its own child logger of "computer_player" (e.g. for a per-room log file).
+        """
         self.logic = game_logic
         # Filled by `_bind_cpu_players` at the start of every make_move. Which players
         # the CPU drives changes during a match (humans hand players back and forth),
@@ -80,7 +83,7 @@ class ComputerPlayer(ABC):
         self.cpu_player_id_set: set = set()
         self.cpu_players: List = []
         self.cpu_seekers: List = []
-        self.logger = logging.getLogger("computer_player")
+        self.logger = logging.getLogger(logger_name)
         self.logger.setLevel(computer_player_log_level)
         self._step_profiler = _ComputerPlayerStepProfiler()
 
@@ -144,9 +147,10 @@ class RandomComputerPlayer(ComputerPlayer):
     def __init__(self,
                  game_logic: GameLogic,
                  throwing_probability: float = 0.1,
-                 computer_player_log_level: int = logging.INFO):
+                 computer_player_log_level: int = logging.INFO,
+                 logger_name: str = "computer_player"):
         """Create a random baseline controller."""
-        super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
+        super().__init__(game_logic, computer_player_log_level=computer_player_log_level, logger_name=logger_name)
         self.throwing_probability = throwing_probability
 
     def make_move(self, dt: float, cpu_player_ids: List[str]):

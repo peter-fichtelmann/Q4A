@@ -20,9 +20,10 @@ class ScriptedComputerPlayer(ComputerPlayer):
     def __init__(self,
                  game_logic: GameLogic,
                  computer_player_log_level: int = logging.INFO,
+                 logger_name: str = "computer_player",
                  **_ignored_kwargs):
         # Swallows Config.COMPUTER_PLAYER_KWARGS passed by the generic room setup.
-        super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
+        super().__init__(game_logic, computer_player_log_level=computer_player_log_level, logger_name=logger_name)
         self.mode = 'idle'
         self.mode_kwargs = {}
         self._free_play_delegate = None
@@ -334,6 +335,7 @@ class ScriptedComputerPlayer(ComputerPlayer):
             self._free_play_delegate = ComputerPlayerOrchestrator(
                 self.logic,
                 computer_player_log_level=self.logger.level,
+                logger_name=self.logger.name,
                 **Config.COMPUTER_PLAYER_KWARGS
             )
         self._free_play_delegate.make_move(dt, self.cpu_player_ids)

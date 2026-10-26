@@ -83,10 +83,11 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  moves: Optional[Dict[str, Dict]] = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
                  beater_throw_threshold_loaded_beater: float = 4,
-                 computer_player_log_level: int = logging.INFO
+                 computer_player_log_level: int = logging.INFO,
+                 logger_name: str = "computer_player"
                  ):
         """Build the possession calculator, base strategies and move registry once."""
-        super().__init__(game_logic, computer_player_log_level=computer_player_log_level)
+        super().__init__(game_logic, computer_player_log_level=computer_player_log_level, logger_name=logger_name)
         diamond_attack_kwargs = diamond_attack_kwargs or {}
         hoop_defence_kwargs = hoop_defence_kwargs or {}
         box_defence_kwargs = box_defence_kwargs or {}
@@ -404,7 +405,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                 if move is not None:
                     self.active_moves.append(move)
                     self.logger.info(
-                        "Move started: %s team=%s participants=%s carrier=%s",
+                        "Move started: %s team=%s participants=%s carrier=%s %s",
                         move.name, team, [player_id[-4:] for player_id in move.participant_ids],
-                        (self.logic.state.volleyball.holder_id or '')[-4:],
+                        (self.logic.state.volleyball.holder_id or '')[-4:], move.describe(),
                     )

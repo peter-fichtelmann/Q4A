@@ -50,4 +50,6 @@ def sweep_abandoned_tutorial_rooms(lobby_manager, grace_seconds: float = TUTORIA
             room.tutorial_abandoned_at = now
         elif now - abandoned_at > grace_seconds:
             del lobby_manager.rooms[room_id]
+            if getattr(room, 'room_jsonl_logger', None) is not None:
+                room.room_jsonl_logger.close() # also detaches the room's computer player log handler
             logger.info("Tutorial room removed (abandoned): %s", room_id)

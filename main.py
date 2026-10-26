@@ -983,6 +983,7 @@ async def websocket_lobby(websocket: WebSocket):
                     room.computer_player = room.computer_player_class(
                         room.game_logic,
                         computer_player_log_level=Config.COMPUTER_PLAYER_LOG_LEVEL,
+                        logger_name=room.room_jsonl_logger.computer_player_logger_name,
                         **Config.COMPUTER_PLAYER_KWARGS
                     )
 
