@@ -287,6 +287,14 @@ export function renderGame() {
 
       if (player.dodgeball_immunity) drawImmunityShield(ctx, px, py, Math.max(2, sizePx) * 0.8, colour_immunity_shield);
 
+      const humanName = State.showNames && !State.isTutorial ? State.humanNames[player.id] : null;
+      if (humanName) {
+        ctx.save(); ctx.globalAlpha = player.is_knocked_out ? 0.3 : 0.55; ctx.fillStyle = '#cccccc';
+        ctx.font = `${Math.max(9, Math.round(0.75 * Config.PLAYER_RADIUS * yScale))}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(humanName, px, py - Math.max(2, sizePx) - 3); ctx.restore();
+      }
+
       if (player.id === State.localPlayerId) {
         const lw = 0.15 * Config.PLAYER_RADIUS * xScale; ctx.save(); ctx.strokeStyle = colour_selected_player; ctx.lineWidth = lw;
         ctx.beginPath(); ctx.arc(px, py, Math.max(2, sizePx + lw), 0, Math.PI * 2); ctx.stroke(); ctx.restore();

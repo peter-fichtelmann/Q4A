@@ -109,6 +109,7 @@ export function handleMessage(message) {
     // Null for a spectator, who steers nobody.
     State.localPlayerId = message.controlled_player_id || null;
     State.isTutorial = !!message.is_tutorial;
+    State.humanNames = message.human_names || {};
     rememberServerUpdateTime();
     try { resizeCanvasToFit(); } catch (e) {}
     showPrompt();
@@ -127,6 +128,8 @@ export function handleMessage(message) {
     handleInbounding(message);
   } else if (message.type === 'game_paused') {
     applyPauseState(message);
+  } else if (message.type === 'human_names') {
+    State.humanNames = message.human_names || {};
   } else if (message.type === 'controlled_player') {
     State.localPlayerId = message.controlled_player_id || null;
   } else if (message.type === 'switch_player_failed') {

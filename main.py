@@ -169,6 +169,8 @@ class GameRoom:
         self.slot_entity_by_player: Dict[str, str] = {}
         # Connection player ids that turned the throw assist off (it is on by default).
         self.throw_assist_off_by: set = set()
+        # Last human_names map broadcast, to send a new one only when it changes.
+        self.last_human_names: Dict[str, str] = {}
 
     @staticmethod
     def _slot_id(team_label: str, role: str, index: int) -> str:
@@ -187,6 +189,14 @@ class GameRoom:
     def get_controlled_player_id(self, connection_player_id: str) -> str:
         """The entity a connection steers right now (its own player unless switched)."""
         return self.controlled_player_by_player.get(connection_player_id, connection_player_id)
+
+    def human_names(self) -> Dict[str, str]:
+        """Entity id -> name of the human steering it right now, for the clients' name labels."""
+        return {
+            entity_id: str(self.players[pid].get("name") or "")
+            for pid, entity_id in self.controlled_player_by_player.items()
+            if pid in self.players
+        }
 
     def process_human_throw(self, connection_player_id: str) -> bool:
         """Throw for a connection, rotated onto the intended pass/beat/shot unless it turned the throw assist off."""
@@ -1102,6 +1112,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 "controlled_player_id": room.controlled_player_by_player.get(player_id),
                 "is_tutorial": room.is_tutorial,
                 "paused": room.pause_state_message(),
+                "human_names": room.human_names(),
                 # send the fixed game tick duration once so the client can extrapolate between updates
                 "tick_time_seconds": (1.0 / Config.FPS) * Config.GAME_TIME_TO_REAL_TIME_RATIO,
             "players": list(room.players.values()),
@@ -1697,6 +1708,11 @@ async def game_loop_manager():
                         room.room_jsonl_logger.log_game_state_snapshot(room)
                 except Exception:
                     logger.exception('Failed to log game_state snapshot for room=%s', room.room_id)
+
+                human_names = room.human_names()
+                if human_names != room.last_human_names:
+                    room.last_human_names = human_names
+                    await broadcast_to_room(room, {"type": "human_names", "human_names": human_names})
 
                 # Broadcast state
                 await broadcast_to_room(room, {

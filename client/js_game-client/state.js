@@ -17,6 +17,9 @@ export const State = {
   paused: false,
   pausedAtMs: 0,
   isTutorial: false,
+  // Entity id -> name of the human steering it; drawn above the player when showNames is on.
+  humanNames: {},
+  showNames: true,
   mousePos: null,
   isTouchDevice: false,
   fullscreen: { isFullscreen: false, attempted: false, button: null },

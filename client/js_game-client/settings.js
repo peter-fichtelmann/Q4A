@@ -25,6 +25,17 @@ try {
   throwAssist = localStorage.getItem(THROW_ASSIST_STORAGE_KEY) !== 'off';
 } catch (e) {}
 
+// Names of the human players drawn above their players; on by default, kept across games.
+const SHOW_NAMES_STORAGE_KEY = 'q4a_show_names';
+try {
+  State.showNames = localStorage.getItem(SHOW_NAMES_STORAGE_KEY) !== 'off';
+} catch (e) {}
+
+function setShowNames(enabled) {
+  State.showNames = enabled;
+  try { localStorage.setItem(SHOW_NAMES_STORAGE_KEY, enabled ? 'on' : 'off'); } catch (e) {}
+}
+
 function send(type, fields = {}) {
   const socket = State.gameSocket;
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type, ...fields }));
@@ -78,6 +89,15 @@ function buildPanel() {
   assistLabel.appendChild(assistBox);
   assistLabel.appendChild(el('span', '', 'Throw assist (corrects passes, beats and shots by a few degrees)'));
   card.appendChild(assistLabel);
+
+  const namesLabel = el('label', 'display: flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer;');
+  const namesBox = el('input', 'width: 18px; height: 18px;');
+  namesBox.type = 'checkbox';
+  namesBox.checked = State.showNames;
+  namesBox.addEventListener('change', () => setShowNames(namesBox.checked));
+  namesLabel.appendChild(namesBox);
+  namesLabel.appendChild(el('span', '', 'Show names of human players above their players'));
+  card.appendChild(namesLabel);
 
   const lobbyBtn = el('button', BTN_CSS, 'Change game room (teams & positions)');
   lobbyBtn.addEventListener('click', showLobby);
