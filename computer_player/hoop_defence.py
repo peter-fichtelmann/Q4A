@@ -26,7 +26,8 @@ class HoopDefenceChaserKeeper(BaseStrategy):
           zone, which closes the side of the hoop nearer to the volleyball
         - `between_hoops_fraction`: if the volleyball's y is between the y of this hoop and a neighbouring
           hoop, this fraction of the way from the hoop's y to the volleyball's y, so the chaser can cover
-          both hoops
+          both hoops. Only one chaser stands between the same two hoops (the one of the hoop closest to the
+          volleyball); another chaser of these hoops is positioned at its hoop as without the fraction
 
     Hoop assignment: by default the hoop closest to the volleyball gets its closest chaser first, then the
     next hoop, which can swap chasers between hoops when the volleyball moves. With `stable_hoop_assignment`,
@@ -93,6 +94,7 @@ class HoopDefenceChaserKeeper(BaseStrategy):
                        reference_position: Optional[Vector2] = None):
         """Assign and steer chasers to defend hoop lanes based on proximity order."""
         move_around_hoop_blockage = self.move_around_hoop_blockages[team]
+        taken_between_pairs = set() # hoop pairs a chaser already stands between, so the next chaser of a pair stays at its hoop
         for hoop_id, chaser_id in self._assign_hoops(sorted_hoop_distances, chaser_hoop_squared_distances):
             chaser = self.logic.state.get_player(chaser_id)
             target_hoop = self.logic.state.hoops[hoop_id]
@@ -105,7 +107,7 @@ class HoopDefenceChaserKeeper(BaseStrategy):
                 else:
                     reference_x, reference_y = self.logic.basic_logic.get_update_position(volleyball, dt)
                 target_position, add_target_x_buffer = self._hoop_position(
-                    chaser, target_hoop, reference_x, reference_y, add_hoop_blockage_x, move_around_hoop_blockage)
+                    chaser, target_hoop, reference_x, reference_y, add_hoop_blockage_x, move_around_hoop_blockage, taken_between_pairs)
                 next_direction_to_hoop = Vector2(
                     target_position.x - next_chaser_position_x,
                     target_position.y - next_chaser_position_y
@@ -150,17 +152,31 @@ class HoopDefenceChaserKeeper(BaseStrategy):
                        reference_x: float,
                        reference_y: float,
                        add_hoop_blockage_x: float,
-                       move_around_hoop_blockage: MoveAroundHoopBlockage) -> Tuple[Vector2, bool]:
-        """Where the chaser defends `hoop` against a volleyball at the reference position, and whether the x buffer is still to be added."""
+                       move_around_hoop_blockage: MoveAroundHoopBlockage,
+                       taken_between_pairs: Optional[set] = None) -> Tuple[Vector2, bool]:
+        """
+        Where the chaser defends `hoop` against a volleyball at the reference position, and whether the x buffer is still to be added.
+        Only one chaser stands between the same two hoops: the pair is added to `taken_between_pairs`, and a chaser whose pair is
+        already in it is positioned at its hoop instead.
+        """
         side = 1 if reference_x > hoop.position.x else -1 # in front of or behind the hoop, towards the volleyball
         # the blockage zone widened by the buffer factors, like the corners of MoveAroundHoopBlockage
         buffered_x = add_hoop_blockage_x * move_around_hoop_blockage.move_buffer_factor_x
         buffered_y = (hoop.radius + chaser.radius) * move_around_hoop_blockage.move_buffer_factor_y
         if self.between_hoops_fraction is not None:
             offset_y = reference_y - hoop.position.y
-            if any(0 < abs(offset_y) < abs(other.position.y - hoop.position.y) and (other.position.y - hoop.position.y) * offset_y > 0
-                   for other in move_around_hoop_blockage.defence_hoops if other is not hoop):
-                return Vector2(hoop.position.x + side * buffered_x, hoop.position.y + self.between_hoops_fraction * offset_y), False
+            # the closest hoop on the volleyball's side of `hoop` beyond the volleyball's y
+            neighbours = [other for other in move_around_hoop_blockage.defence_hoops
+                          if other is not hoop
+                          and 0 < abs(offset_y) < abs(other.position.y - hoop.position.y)
+                          and (other.position.y - hoop.position.y) * offset_y > 0]
+            if neighbours:
+                neighbour = min(neighbours, key=lambda other: abs(other.position.y - hoop.position.y))
+                pair = frozenset((hoop.id, neighbour.id))
+                if taken_between_pairs is None or pair not in taken_between_pairs:
+                    if taken_between_pairs is not None:
+                        taken_between_pairs.add(pair)
+                    return Vector2(hoop.position.x + side * buffered_x, hoop.position.y + self.between_hoops_fraction * offset_y), False
         if self.orient_to_volleyball:
             dx = reference_x - hoop.position.x
             dy = reference_y - hoop.position.y
