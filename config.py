@@ -143,7 +143,7 @@ class Config:
         },
         'diamond_attack_kwargs': {
             'chaser_keeper': {
-                'chaser_evade_beater_weight': 12, # opponent evade vectors have magnitude weight / distance^2
+                'chaser_evade_beater_weight': 16, # opponent evade vectors have magnitude weight / distance^2
                 'chaser_evade_chaser_keeper_weight': 4,
                 'chaser_evade_opponent_max_magnitude': 2, # cap of each opponent's evade vector after the weight
                 'chaser_evade_teamate_chaser_keeper_weight': 1.5,
@@ -214,7 +214,7 @@ class Config:
         'intercept_margin': 0.0, # game seconds; every defender that reaches a pass/shot in flight at most this much after the receiver (or the hoop) goes for it (None: only the fastest player and the contester)
         'possession_kwargs': { # VolleyballPossessionCalculator, loose volleyball
             'possession_switch_margin': 0.0, # game seconds the other team has to be faster to take over the predicted possession
-            'loose_ball_contest_margin': 1.5, # game seconds; the other team's fastest player also races for the volleyball if at most this much slower (None: off)
+            'loose_ball_contest_margin': 0.45, # game seconds; the other team's fastest player also races for the volleyball if at most this much slower (None: off)
         },
         'dodge_kwargs': { # DodgeballDodger
             'dodge_horizon': 2.0, # game seconds; CPU players sidestep an opponent dodgeball that would hit them within this time (None: off)
@@ -240,7 +240,7 @@ class Config:
         },
         'moves': { # sampled by the ComputerPlayerOrchestrator; times in game seconds
             'volleyball_shift': {
-                'start_probability_per_second': 0.0, # probability that the move is tried within one game second
+                'start_probability_per_second': 0.2, # probability that the move is tried within one game second
                 'cooldown': 3, # after the move ended, before the same team may start it again
                 'max_duration': 12, # timeout
                 'attack_line_fraction': 0.6, # participants must be past 3/5 of the pitch seen from their own end
@@ -251,7 +251,7 @@ class Config:
                 'delay_of_game_fraction': 0.5, # stop once the delay of game timer reaches this fraction of the limit
             },
             'volleyball_drive': {
-                'start_probability_per_second': 0.0, # probability that the move is tried within one game second
+                'start_probability_per_second': 0.05, # probability that the move is tried within one game second
                 'cooldown': 3, # after the move ended, before the same team may start it again
                 'max_duration': 5 * GAME_TIME_TO_REAL_TIME_RATIO, # timeout, 5 real seconds
                 'min_chaser_keepers': 3, # chasers/keepers of the team not knocked out
