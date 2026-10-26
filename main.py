@@ -59,15 +59,17 @@ app.mount("/client", RevalidatedStaticFiles(directory="client"), name="client")
 DEFAULT_TEAM_NAMES = ("Team A", "Team B")
 MAX_PLAYER_NAME_LENGTH = 32
 MAX_TEAM_NAME_LENGTH = 24
+LANGUAGE_POLICY_ERROR = "That name goes against our language policy: foul language, slurs and hate symbols are not allowed. Please choose another one."
 
 
-def validate_display_name(raw, max_length: int) -> tuple[Optional[str], Optional[str]]:
-    """(cleaned name, None) for an acceptable player/team name, else (None, error for the client)."""
+def validate_display_name(raw, max_length: int) -> tuple[Optional[str], Optional[dict]]:
+    """(cleaned name, None) for an acceptable player/team name, else (None, update_failed fields for the client)."""
     name = clean_name(raw, max_length)
     if not name:
-        return None, "The name must not be empty."
+        return None, {"error": "The name must not be empty."}
     if check_name(name) is not None:
-        return None, "That name is not allowed. Please choose another one."
+        # "language_policy" makes the client show its red policy banner
+        return None, {"error": LANGUAGE_POLICY_ERROR, "reason": "language_policy"}
     return name, None
 
 
@@ -826,7 +828,7 @@ async def websocket_lobby(websocket: WebSocket):
                         if name is not None:
                             name, name_error = validate_display_name(name, MAX_PLAYER_NAME_LENGTH)
                             if name_error:
-                                await websocket.send_json({"type": "update_failed", "error": name_error, "field": "name"})
+                                await websocket.send_json({"type": "update_failed", **name_error, "field": "name"})
                                 continue
                         # Update fields in the room players dict
                         if name is not None:
@@ -903,7 +905,7 @@ async def websocket_lobby(websocket: WebSocket):
                     continue
                 team_name, name_error = validate_display_name(message.get("name", ""), MAX_TEAM_NAME_LENGTH)
                 if name_error:
-                    await websocket.send_json({"type": "update_failed", "error": name_error, "field": "team_name"})
+                    await websocket.send_json({"type": "update_failed", **name_error, "field": "team_name"})
                     continue
 
                 room.team_names[team] = team_name

@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="/client/styles.css">
 </head>
 <body>
+    <div id="policyBanner" class="policy-banner hidden" role="alert">
+        <span id="policyBannerText"></span>
+        <button type="button" class="policy-banner-close" onclick="hidePolicyBanner()" aria-label="Dismiss">&times;</button>
+    </div>
     <div class="container room-container">
         <h1>Room Lobby</h1>
         <h3 class="subtitle">Configure teams and roles before starting</h3>

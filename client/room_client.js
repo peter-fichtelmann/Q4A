@@ -51,7 +51,11 @@ function handleLobbyMessage(message) {
     } else if (message.type === 'attach_failed') {
         updateStatus(`Unable to attach to room: ${message.error}`, 'error');
     } else if (message.type === 'update_failed') {
-        updateStatus(message.error || 'Failed to update room assignment.', 'error');
+        if (message.reason === 'language_policy') {
+            showPolicyBanner(message.error);
+        } else {
+            updateStatus(message.error || 'Failed to update room assignment.', 'error');
+        }
         // A rejected name: put the accepted one back into the input.
         if (message.field === 'name') renderBoard();
         if (message.field === 'team_name') renderTeamNames(true);
@@ -496,6 +500,26 @@ function copyRoomId() {
 
 function goBackToLobby() {
     window.location.href = '/';
+}
+
+const POLICY_BANNER_MS = 10000;
+let policyBannerTimer = null;
+
+// Red banner across the top of the page for a name rejected by the language policy.
+function showPolicyBanner(message) {
+    const banner = document.getElementById('policyBanner');
+    if (!banner) return;
+    document.getElementById('policyBannerText').textContent = message
+        || 'That name goes against our language policy. Please choose another one.';
+    banner.classList.remove('hidden');
+    clearTimeout(policyBannerTimer);
+    policyBannerTimer = setTimeout(hidePolicyBanner, POLICY_BANNER_MS);
+}
+
+function hidePolicyBanner() {
+    clearTimeout(policyBannerTimer);
+    const banner = document.getElementById('policyBanner');
+    if (banner) banner.classList.add('hidden');
 }
 
 function updateStatus(message, type = 'info') {
