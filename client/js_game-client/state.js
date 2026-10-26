@@ -17,6 +17,8 @@ export const State = {
   paused: false,
   pausedAtMs: 0,
   isTutorial: false,
+  // Display names of team 0 and team 1, set in the room lobby.
+  teamNames: ['Team A', 'Team B'],
   // Entity id -> name of the human steering it; drawn above the player when showNames is on.
   humanNames: {},
   showNames: true,

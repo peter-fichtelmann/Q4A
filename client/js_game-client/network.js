@@ -109,6 +109,7 @@ export function handleMessage(message) {
     // Null for a spectator, who steers nobody.
     State.localPlayerId = message.controlled_player_id || null;
     State.isTutorial = !!message.is_tutorial;
+    if (Array.isArray(message.team_names)) State.teamNames = message.team_names;
     State.humanNames = message.human_names || {};
     rememberServerUpdateTime();
     try { resizeCanvasToFit(); } catch (e) {}
@@ -126,6 +127,8 @@ export function handleMessage(message) {
     handlePenaltyTurnover(message);
   } else if (message.type === 'inbounding') {
     handleInbounding(message);
+  } else if (message.type === 'team_names') {
+    if (Array.isArray(message.team_names)) State.teamNames = message.team_names;
   } else if (message.type === 'game_paused') {
     applyPauseState(message);
   } else if (message.type === 'human_names') {

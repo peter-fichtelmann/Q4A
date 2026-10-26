@@ -1,0 +1,51 @@
+# Harmless words that contain a blacklist entry. They are masked before the blacklist
+# is searched inside the name, so "Peacock" passes while "Cock" alone does not.
+# Same normalisation as blacklist.txt (case, accents and leetspeak do not matter).
+
+# cock
+peacock
+hancock
+woodcock
+cockpit
+cocktail
+cockatoo
+cockatiel
+cockroach
+cockney
+cockerel
+cocky
+shuttlecock
+hitchcock
+babcock
+alcock
+gamecock
+# cunt
+scunthorpe
+# shit
+shitake
+shiitake
+# rapist
+therapist
+therapists
+terapist
+# nazi
+nazir
+nazira
+ashkenazi
+# puta
+computa
+computadora
+disputa
+reputa
+imputa
+amputa
+diputa
+# arsch
+barsch
+marsch
+# hure
+churer
+# slut
+slutsk
+# ficker
+trafficker

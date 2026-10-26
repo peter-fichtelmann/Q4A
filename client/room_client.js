@@ -4,6 +4,7 @@ let currentPlayerId = null;
 let isCreator = false;
 let roomPlayers = [];
 let roomSlots = {};
+let teamNames = ['Team A', 'Team B'];
 
 function getRequiredParams() {
     const params = new URLSearchParams(window.location.search);
@@ -42,15 +43,18 @@ function handleLobbyMessage(message) {
         currentPlayerId = message.player_id;
         isCreator = Boolean(message.is_creator);
         renderRoomHeader();
-        applyRoomState(message.players || [], message.slots || {});
+        applyRoomState(message.players || [], message.slots || {}, message.team_names);
         toggleStartButton();
         updateStatus('Connected to room lobby.', 'success');
     } else if (message.type === 'players_updated') {
-        applyRoomState(message.players || [], message.slots || {});
+        applyRoomState(message.players || [], message.slots || {}, message.team_names);
     } else if (message.type === 'attach_failed') {
         updateStatus(`Unable to attach to room: ${message.error}`, 'error');
     } else if (message.type === 'update_failed') {
         updateStatus(message.error || 'Failed to update room assignment.', 'error');
+        // A rejected name: put the accepted one back into the input.
+        if (message.field === 'name') renderBoard();
+        if (message.field === 'team_name') renderTeamNames(true);
     } else if (message.type === 'start_failed') {
         updateStatus(message.error || 'Failed to start game.', 'error');
     } else if (message.type === 'start_successful') {
@@ -69,13 +73,63 @@ function renderRoomHeader() {
     if (roomIdEl) roomIdEl.textContent = currentRoom || '';
 }
 
-function applyRoomState(players, slots) {
+function applyRoomState(players, slots, names) {
     roomPlayers = players;
     roomSlots = slots;
+    if (Array.isArray(names) && names.length === 2) teamNames = names;
+    renderTeamNames(false);
     renderBoard();
     document.dispatchEvent(new CustomEvent('q4a:room_state', {
         detail: { players, slots, playerId: currentPlayerId }
     }));
+}
+
+function canRenameTeam(team) {
+    if (isCreator) return true;
+    const me = roomPlayers.find((p) => p.id === currentPlayerId);
+    return Boolean(me) && Number(me.team) === team && me.role !== 'spectator';
+}
+
+// The team headings: an input for the teams this player may rename, plain text otherwise.
+// An input that has focus is left alone unless `force`, so other players' updates do not
+// wipe what is being typed.
+function renderTeamNames(force) {
+    ['teamAName', 'teamBName'].forEach((elementId, team) => {
+        const heading = document.getElementById(elementId);
+        if (!heading) return;
+        const existing = heading.querySelector('.team-name-input');
+        if (!force && existing && document.activeElement === existing) return;
+
+        heading.innerHTML = '';
+        if (!canRenameTeam(team)) {
+            heading.textContent = teamNames[team];
+            return;
+        }
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'team-name-input';
+        input.maxLength = 24;
+        input.value = teamNames[team];
+        input.title = 'Rename team';
+
+        const submit = () => {
+            const newName = (input.value || '').trim();
+            if (!newName) {
+                input.value = teamNames[team];
+                return;
+            }
+            if (newName === teamNames[team]) return;
+            updateTeamName(team, newName);
+        };
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                input.blur();
+            }
+        });
+        input.addEventListener('blur', submit);
+        heading.appendChild(input);
+    });
 }
 
 function renderBoard() {
@@ -347,6 +401,18 @@ function updatePlayerName(name) {
         type: 'update_player',
         room_id: currentRoom,
         player_id: currentPlayerId,
+        name
+    }));
+}
+
+function updateTeamName(team, name) {
+    if (!currentRoom || !currentPlayerId || !lobbySocket) return;
+
+    lobbySocket.send(JSON.stringify({
+        type: 'update_team_name',
+        room_id: currentRoom,
+        player_id: currentPlayerId,
+        team,
         name
     }));
 }

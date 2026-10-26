@@ -428,6 +428,23 @@ input:focus, select:focus {
     color: #203050;
 }
 
+.team-name-input {
+    width: 90%;
+    max-width: 260px;
+    border: 1px dashed #6a7899;
+    border-radius: 6px;
+    padding: 2px 6px;
+    font: inherit;
+    text-align: center;
+    background: transparent;
+    color: inherit;
+}
+
+.team-name-input:hover {
+    border-style: solid;
+}
+
+.team-name-input:focus,
 .player-name-input:focus {
     outline: none;
     border-color: #3f6bff;

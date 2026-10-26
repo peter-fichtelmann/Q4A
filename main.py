@@ -30,6 +30,7 @@ from config import Config
 from room_jsonl_logger import RoomJsonlLogger
 from tutorial import setup_tutorial_room, mark_tutorial_room_abandoned, sweep_abandoned_tutorial_rooms
 import player_switch
+from name_filter import check_name, clean_name
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('quadball')
@@ -54,6 +55,21 @@ class RevalidatedStaticFiles(StaticFiles):
 
 # Serve static files
 app.mount("/client", RevalidatedStaticFiles(directory="client"), name="client")
+
+DEFAULT_TEAM_NAMES = ("Team A", "Team B")
+MAX_PLAYER_NAME_LENGTH = 32
+MAX_TEAM_NAME_LENGTH = 24
+
+
+def validate_display_name(raw, max_length: int) -> tuple[Optional[str], Optional[str]]:
+    """(cleaned name, None) for an acceptable player/team name, else (None, error for the client)."""
+    name = clean_name(raw, max_length)
+    if not name:
+        return None, "The name must not be empty."
+    if check_name(name) is not None:
+        return None, "That name is not allowed. Please choose another one."
+    return name, None
+
 
 # ==================== DATA MODELS ====================
 
@@ -103,6 +119,8 @@ class GameRoom:
         self.last_cpu_driven_ids: List[str] = []
         # Slot layout for room lobby drag/drop. value is player_id or None.
         self.slot_assignments: Dict[str, Optional[str]] = self._build_slot_assignments()
+        # Display names of team 0 and team 1, editable in the room lobby.
+        self.team_names: List[str] = list(DEFAULT_TEAM_NAMES)
         
         # Game state for this room
         self.game_state = GameState()
@@ -303,6 +321,13 @@ class GameRoom:
             info["team"] = new_entity.team
             info["role"] = new_entity.role.value
         return True, "ok"
+
+    def can_rename_team(self, player_id: str, team: int) -> bool:
+        """The room creator may rename both teams, everyone else only the team they play for."""
+        if player_id == self.creator_player_id:
+            return True
+        player = self.players.get(player_id)
+        return player is not None and player.get("team") == team
 
     def next_default_player_name(self) -> str:
         self.player_counter += 1
@@ -657,6 +682,7 @@ async def websocket_lobby(websocket: WebSocket):
                     "player_id": creator_player_id,
                     "players": room.lobby_players(),
                     "slots": room.slot_assignments,
+                    "team_names": room.team_names,
                     "tutorial": room.is_tutorial,
                 })
             
@@ -693,6 +719,7 @@ async def websocket_lobby(websocket: WebSocket):
                         "player_id": player_id,
                         "players": room.lobby_players(),
                         "slots": room.slot_assignments,
+                        "team_names": room.team_names,
                     })
                     # Notify other lobby connections in the room about the new player
                     await broadcast_lobby(room, {
@@ -700,6 +727,7 @@ async def websocket_lobby(websocket: WebSocket):
                         "room_id": room_id,
                         "players": room.lobby_players(),
                         "slots": room.slot_assignments,
+                        "team_names": room.team_names,
                     })
                 else:
                     await websocket.send_json({
@@ -731,6 +759,7 @@ async def websocket_lobby(websocket: WebSocket):
                     "is_creator": player_id == getattr(room, "creator_player_id", None),
                     "players": room.lobby_players(),
                     "slots": room.slot_assignments,
+                    "team_names": room.team_names,
                 })
 
             elif message_type == "set_room_slot":
@@ -763,6 +792,7 @@ async def websocket_lobby(websocket: WebSocket):
                     "room_id": room_id,
                     "players": room.lobby_players(),
                     "slots": room.slot_assignments,
+                    "team_names": room.team_names,
                 })
 
                 if room.game_started:
@@ -793,11 +823,16 @@ async def websocket_lobby(websocket: WebSocket):
                     if not player:
                         await websocket.send_json({"type": "update_failed", "error": "Player not found in room"})
                     else:
+                        if name is not None:
+                            name, name_error = validate_display_name(name, MAX_PLAYER_NAME_LENGTH)
+                            if name_error:
+                                await websocket.send_json({"type": "update_failed", "error": name_error, "field": "name"})
+                                continue
                         # Update fields in the room players dict
                         if name is not None:
-                            player["name"] = str(name)
+                            player["name"] = name
                             if player_id == getattr(room, "creator_player_id", None):
-                                room.creator_name = str(name)
+                                room.creator_name = name
                         if team is not None:
                             player["team"] = team
                         if role is not None:
@@ -848,7 +883,39 @@ async def websocket_lobby(websocket: WebSocket):
                             "room_id": room_id,
                             "players": room.lobby_players(),
                             "slots": room.slot_assignments,
+                            "team_names": room.team_names,
                         })
+
+            elif message_type == "update_team_name":
+                room_id = message.get("room_id")
+                player_id = message.get("player_id")
+                team = message.get("team")
+                room = lobby_manager.get_room(room_id)
+
+                if not room:
+                    await websocket.send_json({"type": "update_failed", "error": "Room not found"})
+                    continue
+                if team not in (0, 1):
+                    await websocket.send_json({"type": "update_failed", "error": "Invalid team", "field": "team_name"})
+                    continue
+                if not room.can_rename_team(player_id, team):
+                    await websocket.send_json({"type": "update_failed", "error": "Only the room creator or players of that team can rename it", "field": "team_name"})
+                    continue
+                team_name, name_error = validate_display_name(message.get("name", ""), MAX_TEAM_NAME_LENGTH)
+                if name_error:
+                    await websocket.send_json({"type": "update_failed", "error": name_error, "field": "team_name"})
+                    continue
+
+                room.team_names[team] = team_name
+                await broadcast_lobby(room, {
+                    "type": "players_updated",
+                    "room_id": room_id,
+                    "players": room.lobby_players(),
+                    "slots": room.slot_assignments,
+                    "team_names": room.team_names,
+                })
+                if room.game_started:
+                    await broadcast_to_room(room, {"type": "team_names", "team_names": room.team_names})
 
             elif message_type == "start_game":
                 # Room creator requests to start the game
@@ -1112,6 +1179,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 "controlled_player_id": room.controlled_player_by_player.get(player_id),
                 "is_tutorial": room.is_tutorial,
                 "paused": room.pause_state_message(),
+                "team_names": room.team_names,
                 "human_names": room.human_names(),
                 # send the fixed game tick duration once so the client can extrapolate between updates
                 "tick_time_seconds": (1.0 / Config.FPS) * Config.GAME_TIME_TO_REAL_TIME_RATIO,

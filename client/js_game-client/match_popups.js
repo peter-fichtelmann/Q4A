@@ -18,11 +18,10 @@
 // verdict — none of them reaches back here, so no cycle.
 
 import { Config } from './config.js';
+import { State } from './state.js';
 import { returnToLobby } from './network.js';
 import { onActivate } from './utils.js';
 import { speak } from './audio.js';
-
-const TEAM_LABELS = ['Team A', 'Team B'];
 
 let reviewBox = null;
 let gameOverBox = null;
@@ -119,12 +118,12 @@ export function teamScoreText(gameState, teamIndex) {
 }
 
 function spokenFinalScore(gameState) {
-  return `Game over! Final score: ${TEAM_LABELS[0]} ${teamScoreText(gameState, 0).replace('*', '')}, `
-    + `${TEAM_LABELS[1]} ${teamScoreText(gameState, 1).replace('*', '')}.`;
+  return `Game over! Final score: ${State.teamNames[0]} ${teamScoreText(gameState, 0).replace('*', '')}, `
+    + `${State.teamNames[1]} ${teamScoreText(gameState, 1).replace('*', '')}.`;
 }
 
 function scoreLine(gameState) {
-  return `A ${teamScoreText(gameState, 0)} - ${teamScoreText(gameState, 1)} B`;
+  return `${State.teamNames[0]} ${teamScoreText(gameState, 0)} - ${teamScoreText(gameState, 1)} ${State.teamNames[1]}`;
 }
 
 /** Stage both boxes for the current state. Safe to call on every frame. */
@@ -162,7 +161,7 @@ export function updateMatchPopups(gameState) {
   const remaining = Math.max(0, Number(gameState.flag_catch_continue_timer) || 0);
   const half = total / 2;
 
-  const lines = [`The flag was caught by ${TEAM_LABELS[caughtTeam]}, but was it a good catch?`];
+  const lines = [`The flag was caught by ${State.teamNames[caughtTeam]}, but was it a good catch?`];
   // Real seconds left until play resumes, so it counts down one whole number per
   // real second regardless of how fast the game clock itself runs.
   let countdownSeconds = null;

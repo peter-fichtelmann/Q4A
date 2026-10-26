@@ -6,6 +6,7 @@
 // `inbounding` (volleyball out of bounds): the voice calls the inbounding team.
 
 import { Config } from './config.js';
+import { State } from './state.js';
 import { speak } from './audio.js';
 
 const RULE_LABELS = {
@@ -27,8 +28,6 @@ function nowMs() {
 function ruleLabel(rule) {
   return RULE_LABELS[rule] || String(rule || 'Penalty').replace(/_/g, ' ');
 }
-
-const TEAM_LABELS = ['Team A', 'Team B'];
 
 /** "volleyball", "volleyball and dodgeball", "volleyball and two dodgeballs", ... */
 function countPhrase(items) {
@@ -54,7 +53,7 @@ export function handlePenaltyTurnover(message) {
 
 /** Handle an `inbounding` message: the volleyball went out of bounds. */
 export function handleInbounding(message) {
-  const team = TEAM_LABELS[message.team];
+  const team = State.teamNames[message.team];
   if (team) speak(`Inbounding ${team}`);
 }
 
