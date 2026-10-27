@@ -20,7 +20,8 @@ allowlist.txt and masked before the part-of-the-name search.
 The entries come from blacklist.txt (hand-written) and blacklist_external.txt (generated
 from better_profanity and LDNOOBW by build_external_blacklist.py). Entries with spaces
 are phrases and must match whole consecutive words. A name the blacklist lets through
-is finally scored by the alt-profanity-check model (see PROFANITY_MODEL_THRESHOLD).
+can finally be scored by the alt-profanity-check model, turned off by default (see
+PROFANITY_MODEL_ENABLED).
 """
 
 from __future__ import annotations
@@ -215,6 +216,9 @@ class NameFilter:
 # blacklist, for insults the blacklist does not list ("Stupid Seekers"). It only knows
 # English and also scores harmless words high ("die" is German "the", "Toro Negro"),
 # so the threshold is high and such words go into model_allowlist.txt.
+# Off: scikit-learn costs ~200 MB installed, seconds to load and memory on the server, for a
+# few English insults. To turn it on, set this True and `pip install alt-profanity-check==1.9.1`.
+PROFANITY_MODEL_ENABLED = False
 PROFANITY_MODEL_THRESHOLD = 0.9
 _MODEL_WORD = re.compile(r"[^\W_]+(?:'[^\W_]+)?")
 _POSSESSIVE = re.compile(r"'s$", re.IGNORECASE)
@@ -222,8 +226,10 @@ _predict_prob = None
 
 
 def _profanity_model():
-    """alt-profanity-check's predict_prob, or None when it is not installed (then only the blacklist is used)."""
+    """alt-profanity-check's predict_prob, or None when it is turned off or not installed (then only the blacklist is used)."""
     global _predict_prob
+    if not PROFANITY_MODEL_ENABLED:
+        return None
     if _predict_prob is None:
         try:
             from profanity_check import predict_prob

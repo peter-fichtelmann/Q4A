@@ -5,4 +5,3 @@ python-dotenv==1.0.0
 pydantic==2.4.2
 numba==0.64.0
 orjson==3.11.8
-alt-profanity-check==1.9.1

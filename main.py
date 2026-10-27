@@ -1628,7 +1628,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
 async def startup_event():
     """Start game loops for active rooms"""
     asyncio.create_task(game_loop_manager())
-    # Load the blacklist and the profanity model (scikit-learn takes a while) off the event loop,
+    # Load the blacklist (and the profanity model when enabled, scikit-learn takes seconds) off the event loop,
     # so the first name change does not stall the games.
     asyncio.get_running_loop().run_in_executor(None, warm_up_name_filter)
 
