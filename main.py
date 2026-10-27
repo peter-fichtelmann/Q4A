@@ -30,7 +30,7 @@ from config import Config
 from room_jsonl_logger import RoomJsonlLogger
 from tutorial import setup_tutorial_room, mark_tutorial_room_abandoned, sweep_abandoned_tutorial_rooms
 import player_switch
-from name_filter import check_name, clean_name
+from name_filter import check_name, clean_name, warm_up as warm_up_name_filter
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('quadball')
@@ -63,7 +63,10 @@ LANGUAGE_POLICY_ERROR = "That name goes against our language policy: foul langua
 
 
 def validate_display_name(raw, max_length: int) -> tuple[Optional[str], Optional[dict]]:
-    """(cleaned name, None) for an acceptable player/team name, else (None, update_failed fields for the client)."""
+    """(cleaned name, None) for an acceptable player/team name, else (None, update_failed fields for the client).
+
+    Call it in a worker thread: the first check loads the profanity model, which takes seconds.
+    """
     name = clean_name(raw, max_length)
     if not name:
         return None, {"error": "The name must not be empty."}
@@ -826,7 +829,7 @@ async def websocket_lobby(websocket: WebSocket):
                         await websocket.send_json({"type": "update_failed", "error": "Player not found in room"})
                     else:
                         if name is not None:
-                            name, name_error = validate_display_name(name, MAX_PLAYER_NAME_LENGTH)
+                            name, name_error = await asyncio.to_thread(validate_display_name, name, MAX_PLAYER_NAME_LENGTH)
                             if name_error:
                                 await websocket.send_json({"type": "update_failed", **name_error, "field": "name"})
                                 continue
@@ -903,7 +906,7 @@ async def websocket_lobby(websocket: WebSocket):
                 if not room.can_rename_team(player_id, team):
                     await websocket.send_json({"type": "update_failed", "error": "Only the room creator or players of that team can rename it", "field": "team_name"})
                     continue
-                team_name, name_error = validate_display_name(message.get("name", ""), MAX_TEAM_NAME_LENGTH)
+                team_name, name_error = await asyncio.to_thread(validate_display_name, message.get("name", ""), MAX_TEAM_NAME_LENGTH)
                 if name_error:
                     await websocket.send_json({"type": "update_failed", **name_error, "field": "team_name"})
                     continue
@@ -1625,6 +1628,9 @@ async def broadcast_to_room(room: GameRoom, message: dict):
 async def startup_event():
     """Start game loops for active rooms"""
     asyncio.create_task(game_loop_manager())
+    # Load the blacklist and the profanity model (scikit-learn takes a while) off the event loop,
+    # so the first name change does not stall the games.
+    asyncio.get_running_loop().run_in_executor(None, warm_up_name_filter)
 
 @app.get("/health-check")
 async def health_check():

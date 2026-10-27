@@ -1,0 +1,25 @@
+# Words the profanity model (alt-profanity-check) scores as foul although they are fine in a
+# player or team name. They are left out of the name before the model is asked; unlike
+# allowlist.txt they do not mask anything in the blacklist search.
+
+# not English: German "die" = "the", Spanish/Portuguese "negro" = "black", Spanish "semen" = "seed"
+die
+negro
+semen
+dame
+# identity terms
+gay
+gays
+lesbian
+lesbians
+queer
+homosexual
+bisexual
+trans
+# playful team names (Hell Hounds, Bloody Bludgers, Pig Pen, Ugly Ducklings, Jerk Chicken)
+white
+hell
+bloody
+pig
+ugly
+jerk

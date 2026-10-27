@@ -49,3 +49,7 @@ churer
 slutsk
 # ficker
 trafficker
+# Japanese words containing an entry
+ファックス
+ヌードル
+カントリー

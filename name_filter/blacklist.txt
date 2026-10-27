@@ -105,6 +105,24 @@ wetback
 =wog
 =killyourself
 =kys
+cumdumpster
+cumslut
+=minger
+tosspot
+wazzock
+twatwaffle
+douchenozzle
+assclown
+arsewipe
+dickwad
+dickweed
+ballbag
+cumbucket
+=incel
+killurself
+hang yourself
+go kill yourself
+=1488
 
 # --- Hate symbols, extremism ---
 hitler
@@ -162,8 +180,31 @@ spasti
 =titten
 =bumsen
 =drecksau
+vergewaltig
 =wixer
 =wixxer
+arschgesicht
+arschkriecher
+dreckskerl
+drecksack
+fickfresse
+=mistkerl
+miststück
+saftsack
+=spacko
+kotzbrocken
+pissnelke
+wichsgesicht
+leck mich
+fick dich
+verpiss dich
+hurenbock
+ficksau
+=kanacke
+kümmeltürke
+=polacke
+schlitzauge
+judenschwein
 
 # --- Dutch ---
 =kut
@@ -177,6 +218,12 @@ kankerlijer
 =godverdomme
 =flikker
 =mongool
+kankerhoer
+klerelijer
+tyfuslijer
+kutwijf
+hoerenzoon
+pleurislijer
 
 # --- French ---
 =putain
@@ -204,6 +251,12 @@ niquetamère
 =pédé
 =tapette
 =bougnoule
+ta gueule
+pétasse
+salopard
+=bamboula
+=youpin
+=bicot
 
 # --- Spanish ---
 =puta
@@ -234,6 +287,13 @@ chingatumadre
 =follar
 =mamada
 =mamaguevo
+malparido
+hijueputa
+=carajo
+=sudaca
+=culiao
+conchetumare
+=pelotudo
 
 # --- Italian ---
 =cazzo
@@ -256,6 +316,9 @@ porcodio
 =porcamadonna
 =dioporco
 =merda
+rompicoglioni
+succhiacazzi
+=ricchione
 
 # --- Portuguese ---
 =caralho
@@ -271,6 +334,12 @@ filhodaputa
 =arrombado
 =desgraça
 =otario
+=cuzão
+=babaca
+=vagabunda
+punheta
+punheteiro
+=xoxota
 
 # --- Polish ---
 kurwa
@@ -288,6 +357,13 @@ jebany
 =pizdy
 =skurwysyn
 skurwysyn
+skurwiel
+pierdolony
+kurwiszon
+=cwel
+=zjeb
+pizdzielec
+wypierdalaj
 
 # --- Russian / Ukrainian / Serbo-Croatian (Latin and Cyrillic) ---
 =blyat
@@ -330,6 +406,20 @@ pidoras
 говно
 залупа
 шлюха
+mudilo
+dolboeb
+=eblan
+долбоёб
+уёбок
+ебанутый
+пиздюк
+хуесос
+=гнида
+=падла
+=шалава
+=чмо
+=мразь
+пидрила
 
 # --- Czech / Slovak ---
 =kurva
@@ -391,12 +481,23 @@ götveren
 =ibne
 =kahpe
 =pezevenk
+=gavat
+ananı sikeyim
+=yavşak
+=şerefsiz
+dalyarak
+amına koyayım
+=sikik
 
 # --- Greek (Latin transliteration) ---
 =malaka
 malakas
 =poutana
 =gamoto
+=poustis
+=mouni
+=kariolis
+gamiesai
 
 # --- Arabic (Latin transliteration) ---
 sharmouta
@@ -406,6 +507,7 @@ kosomak
 =zebi
 =zamel
 =ibnelkalb
+=manyak
 
 # --- Hindi / Urdu (Latin transliteration) ---
 =chutiya
@@ -417,6 +519,9 @@ bhenchod
 =bhosdike
 bhosdi
 =lavda
+=lavde
+=jhatu
+teri maa ki
 
 # --- Chinese pinyin, Japanese, Korean romanisations ---
 caonima
@@ -430,3 +535,45 @@ caonima
 shibal
 =gaesaekki
 =byungsin
+sha bi
+ta ma de
+wangba dan
+
+# --- Korean ---
+지랄
+미친놈
+니애미
+
+# --- Japanese ---
+クソ野郎
+死ね
+=chinko
+
+# --- Vietnamese ---
+đụ má
+dit me
+
+# --- Indonesian / Malay ---
+=bangsat
+=kontol
+=memek
+=ngentot
+=goblok
+=jancok
+=pukimak
+
+# --- Tagalog ---
+=gago
+=tarantado
+=kupal
+=pakyu
+
+# --- Hebrew ---
+ben zona
+kus emek
+=זונה
+בן זונה
+
+# --- Persian (Latin) ---
+=koskesh
+=jende
