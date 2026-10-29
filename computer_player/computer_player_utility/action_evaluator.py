@@ -102,6 +102,7 @@ class ActionEvaluator:
                  shot_success_model: Optional[Dict[str, float]] = None, # fitted logistic coefficients on time_margin, distance, sin_angle (+ derived terms); None: (1 - risk(margin)) * sin(angle)
                  pass_completion_model: Optional[Dict[str, float]] = None, # fitted logistic coefficients on time_margin, distance, catch_time, strength_ratio (+ derived terms); None: 1 - risk(margin)
                  time_margin_clip: float = 3.0, # game seconds, time margins are clipped to +- this for the fitted models
+                 min_pass_completion: float = 0.0, # passes with a lower completion probability are never played
                  passing_squared_max_distance: float = 400,
                  passing_threshold: float = 0.95, # beam model only: pass completion is 1 above, 0 below this score
                  profile_call: Optional[Callable] = None,
@@ -134,6 +135,7 @@ class ActionEvaluator:
         self.shot_success_model = shot_success_model
         self.pass_completion_model = pass_completion_model
         self.time_margin_clip = time_margin_clip
+        self.min_pass_completion = min_pass_completion
         self.passing_squared_max_distance = passing_squared_max_distance
         self.passing_threshold = passing_threshold
         self.shooting_range = math.sqrt(score_attempter.score_squared_max_distance) - 0.05
@@ -257,7 +259,7 @@ class ActionEvaluator:
                    defenders: List[Player]) -> Optional[CarrierOption]:
         """The pass as an option with its value: completion * (1 - receiver's dodgeball risk) * possession value at the catch."""
         completion = self._pass_completion(pass_option, volleyball, carrier)
-        if completion <= 0:
+        if completion <= 0 or completion < self.min_pass_completion:
             return None
         receiver = self.logic.state.players[pass_option.receiver_id]
         catch_position = pass_option.predicted_receiver_position

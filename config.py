@@ -163,6 +163,7 @@ class Config:
             'decision_margin_relative': 0.1,
             'decision_temperature': 0.0, # > 0: softmax among the options within the decision margin of the best
             'max_pass_candidates': 3, # receivers evaluated in detail (chosen by the cheap estimate)
+            'min_pass_completion': 0.8, # passes below this completion probability are never played (value model vs rules: 0 -> -0.18..-0.34, 0.8 -> -0.07, 0.9 -> -0.19 goals per game)
             # logistic models fitted to 74k logged CPU passes/shots (900 headless games, rules / exploratory / value play, charged throws);
             # features: time margin (clipped to +-3 game s), distance (m), sin(angle to the hoop line) / catch time (game s), strength ratio, plus derived terms
             'shot_success_model': {"intercept": 1.45611, "time_margin": 7.99642, "distance": 0.20816, "sin_angle": -5.1274, "time_margin_sq": 0.06604, "time_margin_pos": -8.46336, "margin_capped": -0.99466, "distance_sq": 0.00061, "time_margin_x_distance": 0.00347, "sin_angle_sq": 3.08142, "time_margin_x_sin_angle": 0.74283},
