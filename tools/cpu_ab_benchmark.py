@@ -160,6 +160,8 @@ def play(seed: int, ticks: int, configs: dict, a_team: int) -> dict:
             outcome = None
             if state.score[team] > score[team]:
                 outcome = 'goal'
+            elif volleyball.holder_id in state.throw_charges:
+                pass # the throw is still being charged
             elif volleyball.holder_id is not None:
                 outcome = 'own' if state.players[volleyball.holder_id].team == team else 'intercepted'
             elif volleyball.is_dead or volleyball.turnover_to_player is not None or volleyball.inbounder is not None:

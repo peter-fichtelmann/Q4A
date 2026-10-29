@@ -399,7 +399,7 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             if pass_option is None:
                 continue # unreachable or through own hoops, look for next best player
             if self.pass_evaluator.is_safe(pass_option, self.passing_threshold, strict=True):
-                if self.logic.process_action_logic.process_throw_action(volleyball_holder.id, throw_direction=pass_option.throw_direction):
+                if self.pass_evaluator.throw(self.logic.process_action_logic, volleyball_holder, pass_option):
                     self.logger.info("Passing from player %s to player %s with position penalty %s and interception score %s", volleyball_holder.id, best_player_id, best_position_penalty, pass_option.interception_score)
                 return
 
@@ -450,7 +450,9 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             else: # already hold of volleyball
                 volleyball_holder = self.logic.state.players[volleyball.holder_id]
                 self.position_player(volleyball_holder) # position volleyball holder to evade opponents while holding the ball
-                if self.action_evaluator is not None and self.action_evaluator.enabled:
+                if self.logic.process_action_logic.is_charging_throw(volleyball_holder.id):
+                    pass # winding up a shot or pass already
+                elif self.action_evaluator is not None and self.action_evaluator.enabled:
                     if not volleyball.is_dead:
                         self.action_evaluator.decide_and_act(volleyball, volleyball_holder, self.roster)
                 else:

@@ -65,6 +65,9 @@ def apply_switch(room, connection_player_id: str, old_player_id: str, new_player
     new_player = state.get_player(new_player_id)
 
     room.controlled_player_by_player[connection_player_id] = new_player_id
+    # a throw being charged belongs to whoever started it
+    room.game_logic.process_action_logic.cancel_throw_charge(old_player_id)
+    room.game_logic.process_action_logic.cancel_throw_charge(new_player_id)
 
     if old_player is not None:
         apply_cpu_tuning(old_player)

@@ -1,6 +1,6 @@
 import { Config } from './config.js';
 import { State } from './state.js';
-import { sendPlayerInput, sendThrow } from './network.js';
+import { sendPlayerInput, sendThrowStart, sendThrowEnd } from './network.js';
 import { canClaim, sendClaim } from './claim.js';
 
 export const keys = {};
@@ -13,14 +13,17 @@ export function onKeyDown(e) {
   keys[e.key] = true;
   if (e.key === 'Escape') { document.dispatchEvent(new CustomEvent('settings-toggle')); return; }
   if (State.paused) return;
-  if (e.key === ' ') { e.preventDefault(); sendThrow(); }
+  if (e.key === ' ') { e.preventDefault(); if (!e.repeat) sendThrowStart(); }
   if (e.key === 'f' || e.key === 'F') { e.preventDefault(); document.dispatchEvent(new CustomEvent('fullscreen-toggle')); }
   if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); document.dispatchEvent(new CustomEvent('switch-player-same')); }
   if (e.key === 'e' || e.key === 'E') { e.preventDefault(); document.dispatchEvent(new CustomEvent('switch-player-next')); }
   if (e.key === 'c' || e.key === 'C') { e.preventDefault(); if (canClaim()) sendClaim(); }
 }
 
-export function onKeyUp(e) { keys[e.key] = false; }
+export function onKeyUp(e) {
+  keys[e.key] = false;
+  if (e.key === ' ') sendThrowEnd(); // also while paused, so a charge never hangs
+}
 
 export function update() {
   let dirX = 0, dirY = 0;

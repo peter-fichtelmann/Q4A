@@ -1,13 +1,102 @@
 import logging
 import math
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
 from config import Config
 from core.entities import Hoop, Player, PlayerRole, Vector2, VolleyBall
 from core.game_logic.utility_logic import UtilityLogic
 from core.game_logic.process_action_logic import ProcessActionLogic
-from computer_player.computer_player_utility.kinematics import TICK_DT, decay_table, first_throw_tick
+from computer_player.computer_player_utility.kinematics import TICK_DT, decay_table, first_throw_tick, player_position_at
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
+
+
+class ChargedThrow:
+    """
+    Throws take time: a throw is charged for one tick per strength step (ProcessActionLogic.start_throw_charge)
+    and only then leaves, `throw_charge_full_ticks` ticks for full strength. The computer players throw at full
+    strength, except very short passes, which arrive earlier with a shorter, weaker charge.
+
+    During the charge thrower, receiver and defenders keep moving, so (with MOTION_MODEL "analytic") the CPU aims
+    from where the ball will be at the release, at where the receiver will be then, gives the defenders the
+    charge time as well, and re-aims at every step of the charge (`reaim`).
+    """
+    @staticmethod
+    def release_ticks(state) -> int:
+        """Ticks until a full-strength throw started now leaves (0 with the legacy motion model, whose estimates ignore the charge)."""
+        return state.throw_charge_full_ticks if Config.MOTION_MODEL == "analytic" else 0
+
+    @staticmethod
+    def release_origin(thrower: Player, ball_position: Vector2, release_tick: float) -> Vector2:
+        """Where the held ball is after `release_tick` ticks, the thrower keeping its stick input (a held ball keeps its offset)."""
+        if release_tick <= 0:
+            return Vector2(ball_position.x, ball_position.y)
+        x, y = player_position_at(thrower, release_tick)
+        return Vector2(ball_position.x + x - thrower.position.x, ball_position.y + y - thrower.position.y)
+
+    @staticmethod
+    def released_ball(ball, origin: Vector2) -> SimpleNamespace:
+        """Stand-in of `ball` thrown from `origin`, for checks that only read the position and decay (throw_through_hoop, beam)."""
+        return SimpleNamespace(position=origin, deacceleration_rate=ball.deacceleration_rate)
+
+    @staticmethod
+    def fastest_release_ticks(full_ticks: int, full_velocity: float, deacceleration_rate: float, distance: float) -> int:
+        """
+        Charge ticks for a throw over `distance` that arrives first: charge ticks + flight ticks, the flight
+        with strength ticks / full_ticks of `full_velocity`. Only very short throws come out below full_ticks.
+        """
+        table = decay_table(deacceleration_rate)
+
+        def total_ticks(ticks):
+            speed = full_velocity * ticks / full_ticks
+            if speed <= 0:
+                return float('inf')
+            if table.c is None:
+                return ticks + distance / speed / table.dt
+            fraction = distance / (speed * table.c)
+            if fraction >= 1:
+                return float('inf') # stops before
+            return ticks + math.log(1 - fraction) / math.log(table.q)
+
+        best_ticks, best_total = full_ticks, total_ticks(full_ticks)
+        for ticks in range(full_ticks - 1, 0, -1): # unimodal: stop at the first worse charge
+            total = total_ticks(ticks)
+            if total >= best_total:
+                break
+            best_ticks, best_total = ticks, total
+        return best_ticks
+
+    @staticmethod
+    def reaim(state, cpu_player_id_set) -> None:
+        """
+        Re-aim the charged throws of CPU players at their targets (receiver, beat target or hoop) with the
+        remaining charge ticks, as thrower and target may have changed their input since the throw started.
+        """
+        if Config.MOTION_MODEL != "analytic":
+            return
+        for player_id, charge in state.throw_charges.items():
+            if player_id not in cpu_player_id_set or charge.direction is None or charge.target_id is None:
+                continue
+            remaining = charge.release_ticks - charge.ticks
+            thrower = state.players.get(player_id)
+            ball = state.balls.get(charge.ball_id)
+            if remaining <= 0 or thrower is None or ball is None:
+                continue
+            origin = ChargedThrow.release_origin(thrower, ball.position, remaining)
+            speed = ProcessActionLogic.effective_throw_velocity(thrower) * charge.release_ticks / state.throw_charge_full_ticks
+            hoop = state.hoops.get(charge.target_id)
+            if hoop is not None:
+                dx, dy = hoop.position.x - origin.x, hoop.position.y - origin.y
+                distance = math.hypot(dx, dy)
+                if distance > 0:
+                    charge.direction = Vector2(dx / distance * speed, dy / distance * speed)
+                continue
+            target = state.players.get(charge.target_id)
+            if target is None:
+                continue
+            direction, _, _ = ThrowDirector.throw_analytic_with_tick(thrower, target, origin, throw_velocity=speed, release_tick=remaining)
+            if direction is not None:
+                charge.direction = direction
 
 
 class MoveUtility:
@@ -132,20 +221,24 @@ class BeaterThrowDecider:
             dodgeball = state.balls.get(dodgeball_id)
             target = state.players.get(target_id)
             if (dodgeball is None or target is None or target.is_knocked_out
-                    or dodgeball.holder_id is not None or dodgeball.possession_team != team):
+                    or (dodgeball.holder_id is not None and dodgeball.holder_id not in state.throw_charges) # still charged: pending
+                    or dodgeball.possession_team != team):
                 del self.pending_throws[target_id]
 
     def throw_at(self, process_action_logic, beater: Player, target: Player) -> bool:
-        """Throw `beater`'s dodgeball at the moving `target` and remember the throw. Returns whether the throw happened."""
+        """Start a full-strength charged throw of `beater`'s dodgeball at the moving `target` and remember it. Returns whether the throw started."""
+        if process_action_logic.is_charging_throw(beater.id):
+            return False # already throwing
         if self._keeps_last_dodgeball(beater, target):
             return False
         dodgeball_id = beater.has_ball
         held_ball = self.state.balls.get(dodgeball_id) if self.state is not None else None
-        origin = held_ball.position if held_ball else beater.position
-        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target, origin)
+        release_tick = ChargedThrow.release_ticks(process_action_logic.state)
+        origin = ChargedThrow.release_origin(beater, held_ball.position if held_ball else beater.position, release_tick)
+        throw_direction = ThrowDirector.get_throw_direction_moving_receiver(beater, target, origin, release_tick=release_tick)
         if self.teammate_block_margin is not None and self._teammate_in_the_way(beater, target, origin, throw_direction, held_ball):
             return False
-        if not process_action_logic.process_throw_action(beater.id, throw_direction):
+        if not process_action_logic.start_throw_charge(beater.id, throw_direction, target_id=target.id):
             return False
         self.pending_throws[target.id] = (dodgeball_id, beater.team)
         return True
@@ -248,7 +341,7 @@ class ThrowDirector:
         return s_b_x, s_b_y, s_p_x, s_p_y, v_p_x, v_p_y, v_b_value_sq, root
 
     @staticmethod
-    def get_throw_direction_moving_receiver(player: Player, receiver: Player, origin: Optional[Vector2] = None):
+    def get_throw_direction_moving_receiver(player: Player, receiver: Player, origin: Optional[Vector2] = None, release_tick: int = 0):
         """
         Assume constant ball velocity. The throw velocity is the player's, but the ball starts at `origin`
         (the held ball's position, default the player's), so the throw line runs from there to the receiver.
@@ -269,11 +362,12 @@ class ThrowDirector:
 
             solutions = sp.nonlinsolve([eq1, eq2, eq3], (v_b_x, v_b_y, dt))
 
-        With MOTION_MODEL "analytic" the exact ball decay and receiver acceleration are used; if the
+        With MOTION_MODEL "analytic" the exact ball decay and receiver acceleration are used, and a charged
+        throw leaving `origin` in `release_tick` ticks aims at where the receiver will be by then; if the
         ball cannot reach the receiver, it falls back to the constant velocity solution (throw anyway).
         """
         if Config.MOTION_MODEL == "analytic":
-            throw_direction, _ = ThrowDirector._throw_analytic(player, receiver, origin)
+            throw_direction, _, _ = ThrowDirector.throw_analytic_with_tick(player, receiver, origin, release_tick=release_tick)
             if throw_direction is not None:
                 return throw_direction
         # # assume ball starts at player position
@@ -329,8 +423,12 @@ class ThrowDirector:
 
     @staticmethod
     def throw_analytic_with_tick(player: Player, receiver: Player, origin: Optional[Vector2] = None,
-                                 throw_velocity: Optional[float] = None) -> Tuple[Optional[Vector2], Optional[Vector2], Optional[float]]:
-        """Like _throw_analytic, plus the (fractional) tick at which the ball reaches the receiver (`throw_velocity` defaults to the player's)."""
+                                 throw_velocity: Optional[float] = None,
+                                 release_tick: int = 0) -> Tuple[Optional[Vector2], Optional[Vector2], Optional[float]]:
+        """
+        Like _throw_analytic, plus the (fractional) tick from now at which the ball reaches the receiver (`throw_velocity`
+        defaults to the player's). A charged throw leaves `origin` in `release_tick` ticks.
+        """
         origin = origin or player.position
         if throw_velocity is None:
             throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
@@ -341,6 +439,7 @@ class ThrowDirector:
             ball_table=decay_table(Config.BALL_DEACCELERATION_RATE),
             receiver=receiver,
             reach_distance=Config.THROW_CATCH_MARGIN_FACTOR * (receiver.radius + Config.VOLLEYBALL_RADIUS),
+            release_tick=release_tick,
         )
         if result is None:
             return None, None, None
@@ -433,9 +532,12 @@ class ScoreAttempter:
         """Time margin of a shot at each attack hoop in range, the larger the safer."""
         time_margins_dict = {}
         throw_velocity = ProcessActionLogic.effective_throw_velocity(volleyball_holder)
+        # the shot leaves after a full charge, from where the held ball is by then
+        release_tick = ChargedThrow.release_ticks(self.process_action_logic.state)
+        origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, release_tick)
         for hoop in attack_hoops:
-            dx = hoop.position.x - volleyball.position.x
-            dy = hoop.position.y - volleyball.position.y
+            dx = hoop.position.x - origin.x
+            dy = hoop.position.y - origin.y
             squared_distance = dx**2 + dy**2
             if squared_distance > self.score_squared_max_distance or squared_distance == 0:
                 continue
@@ -447,7 +549,8 @@ class ScoreAttempter:
                 continue # the ball stops before the hoop
             time_margins_dict[hoop.id] = self.interception_calculator.throw_time_margin(
                 volleyball, Vector2(throw_velocity * dx / distance, throw_velocity * dy / distance),
-                arrival_time, defending_chaser_keeper_ids, self.time_margin_cap)
+                release_tick * TICK_DT + arrival_time, defending_chaser_keeper_ids, self.time_margin_cap,
+                origin=origin, release_tick=release_tick)
         return time_margins_dict
 
     def get_intercepting_scores_for_hoops(self,
@@ -490,7 +593,9 @@ class ScoreAttempter:
                 volleyball_holder: Player,
                 attack_hoops: List[Hoop],
                 defending_chaser_keeper_ids: List[str]) -> bool:
-        """Shoot at the safest hoop when its score (interception score or time margin) is good enough. Returns True if a shot was taken."""
+        """Shoot at the safest hoop when its score (interception score or time margin) is good enough. Returns True if a shot was started."""
+        if self.process_action_logic.is_charging_throw(volleyball_holder.id):
+            return False # already throwing
         if self.use_time_margin:
             intercepting_scores_dict = self.get_time_margins_for_hoops(volleyball, volleyball_holder, attack_hoops, defending_chaser_keeper_ids)
         else:
@@ -512,13 +617,11 @@ class ScoreAttempter:
         return False
 
     def shoot(self, volleyball: VolleyBall, volleyball_holder: Player, hoop: Hoop, score: float) -> bool:
-        """Throw the volleyball at `hoop`. Returns False if the throw is refused (e.g. right after receiving a turnover ball)."""
-        # aim from the held ball, which is offset from the holder's centre by about the player radius
-        volleyball_holder.direction = Vector2(
-            hoop.position.x - volleyball.position.x,
-            hoop.position.y - volleyball.position.y
-        )
-        if self.process_action_logic.process_throw_action(volleyball_holder.id):
+        """Start a full-strength charged shot at `hoop`. Returns False if the throw is refused (e.g. right after receiving a turnover ball)."""
+        # aim from the held ball at the release, which is offset from the holder's centre by about the player radius
+        origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, ChargedThrow.release_ticks(self.process_action_logic.state))
+        throw_direction = Vector2(hoop.position.x - origin.x, hoop.position.y - origin.y)
+        if self.process_action_logic.start_throw_charge(volleyball_holder.id, throw_direction, target_id=hoop.id):
             self.logger.info("Scoring on hoop %s with interception score %s", hoop.id, score)
             return True
         return False
@@ -532,6 +635,8 @@ class PassOption:
     predicted_receiver_position: Vector2
     interception_score: float # the larger, the less likely the pass is intercepted (>= 1 outside the interception cone)
     time_margin: Optional[float] = None # game seconds the ball arrives before the fastest defender could reach it ('time_margin' model)
+    strength_ratio: float = 1.0 # charge of the throw; below 1 only for very short passes that arrive earlier that way
+    catch_time: Optional[float] = None # game seconds from now (charge + flight) until the ball reaches the receiver (analytic motion model)
 
 
 class PassEvaluator:
@@ -593,26 +698,48 @@ class PassEvaluator:
         """
         Throw direction, predicted receiver position and interception score of a pass.
 
+        The pass is a charged throw (see ChargedThrow): full strength, or a shorter charge if that reaches a
+        very close receiver earlier. With the analytic motion model it is aimed from the ball's position at the
+        release, and the time margin gives the defenders the charge time as well.
+
         Returns None if the ball cannot reach the receiver or the throw would go through own hoops.
         """
         time_margin = None
-        if self.use_time_margin:
-            throw_direction, predicted_receiver_position, catch_tick = ThrowDirector.throw_analytic_with_tick(volleyball_holder, receiver, volleyball.position)
+        catch_time = None
+        strength_ratio = 1.0
+        throw_velocity = ProcessActionLogic.effective_throw_velocity(volleyball_holder)
+        origin = volleyball.position
+        release_tick = 0
+        if Config.MOTION_MODEL == "analytic":
+            full_ticks = self.interception_calculator.logic.state.throw_charge_full_ticks
+            origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, full_ticks)
+            receiver_x, receiver_y = player_position_at(receiver, full_ticks)
+            release_tick = ChargedThrow.fastest_release_ticks(
+                full_ticks, throw_velocity, volleyball.deacceleration_rate, math.hypot(receiver_x - origin.x, receiver_y - origin.y))
+            if release_tick != full_ticks:
+                origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, release_tick)
+            strength_ratio = release_tick / full_ticks
+            throw_velocity *= strength_ratio
+            throw_direction, predicted_receiver_position, catch_tick = ThrowDirector.throw_analytic_with_tick(
+                volleyball_holder, receiver, origin, throw_velocity=throw_velocity, release_tick=release_tick)
+            if catch_tick is not None:
+                catch_time = catch_tick * TICK_DT
         else:
             throw_direction, predicted_receiver_position = ThrowDirector.get_throw_direction_and_position_moving_receiver(volleyball_holder, receiver, volleyball.position)
         if throw_direction is None:
             return None # ball cannot reach this player
+        released_ball = ChargedThrow.released_ball(volleyball, origin)
         # throw_direction still has the throw speed as magnitude here
-        if InterceptionCalculator.throw_through_hoop(volleyball, throw_direction, own_hoops):
+        if InterceptionCalculator.throw_through_hoop(released_ball, throw_direction, own_hoops):
             return None
         if self.use_time_margin:
             # throw_direction still has the throw speed as magnitude here
             time_margin = self.interception_calculator.throw_time_margin(
-                volleyball, throw_direction, catch_tick * TICK_DT, defending_chaser_keeper_ids, self.time_margin_cap,
-                receiver_id=receiver.id if self.active_receiver else None)
+                volleyball, throw_direction, catch_time, defending_chaser_keeper_ids, self.time_margin_cap,
+                receiver_id=receiver.id if self.active_receiver else None, origin=origin, release_tick=release_tick)
         # beam_cosine_angle normalizes throw_direction in place, which is then thrown as is
         beam_cosine_angle, beam_cosine_angle_player_id, _ = self.interception_calculator.beam_cosine_angle(
-            moving_entity=volleyball,
+            moving_entity=released_ball,
             intercepting_player_ids=defending_chaser_keeper_ids,
             target_position=predicted_receiver_position,
             moving_entity_target_vector=throw_direction
@@ -620,6 +747,13 @@ class PassEvaluator:
         interception_score = self.interception_calculator.interception_score_from_beam_cosine_angle(
             beam_cosine_angle=beam_cosine_angle,
             beam_angle_player_id=beam_cosine_angle_player_id,
-            mag_moving_entity_velocity=ProcessActionLogic.effective_throw_velocity(volleyball_holder),
+            mag_moving_entity_velocity=throw_velocity,
         )
-        return PassOption(receiver.id, throw_direction, predicted_receiver_position, interception_score, time_margin)
+        return PassOption(receiver.id, throw_direction, predicted_receiver_position, interception_score, time_margin,
+                          strength_ratio=strength_ratio, catch_time=catch_time)
+
+    @staticmethod
+    def throw(process_action_logic, volleyball_holder: Player, pass_option: PassOption) -> bool:
+        """Start the charged throw of `pass_option`. Returns False if refused (e.g. right after receiving a turnover ball, or already throwing)."""
+        return process_action_logic.start_throw_charge(
+            volleyball_holder.id, pass_option.throw_direction, pass_option.strength_ratio, target_id=pass_option.receiver_id)

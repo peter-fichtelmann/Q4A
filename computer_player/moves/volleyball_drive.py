@@ -204,6 +204,8 @@ class VolleyballDrive(Move):
         if holder.team != self.team:
             self.end(MoveStatus.FAILURE, "turnover")
             return
+        if self.logic.process_action_logic.is_charging_throw(holder_id):
+            return # the carrier is winding up a throw (charging), wait for the release
         if self.shot_taken:
             self.end(MoveStatus.FAILURE, "shot_missed")
             return
@@ -233,6 +235,8 @@ class VolleyballDrive(Move):
         volleyball = state.volleyball
         carrier = state.players[self.carrier_id]
         roster = ctx.rosters[self.team]
+        if self.logic.process_action_logic.is_charging_throw(carrier.id):
+            return # winding up the shot or pass, keep the input it was aimed with
         if self.orchestrator.score_attempter.attempt(volleyball, carrier, roster.opponent_hoops, roster.opponent_chaser_keeper_ids):
             self.shot_taken = True
             return
@@ -247,7 +251,7 @@ class VolleyballDrive(Move):
         if best is None:
             return # keep driving (or standing in the tackle) and look again next step
         pass_option, receiver_penalty = best
-        if not self.logic.process_action_logic.process_throw_action(carrier.id, throw_direction=pass_option.throw_direction):
+        if not self.orchestrator.pass_evaluator.throw(self.logic.process_action_logic, carrier, pass_option):
             return # refused e.g. right after receiving a turnover ball, try again next step
         self.logger.info(
             "VolleyballDrive pass (%s) from player %s to player %s, position penalty %.1f, interception score %.2f",

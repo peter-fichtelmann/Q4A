@@ -1,7 +1,8 @@
 import logging
-from typing import Optional
+import math
+from typing import Callable, Optional
 from core.game_logic.utility_logic import UtilityLogic
-from core.game_state import GameState
+from core.game_state import GameState, ThrowCharge
 from core.entities import Player, Ball, VolleyBall, DodgeBall, Vector2, PlayerRole, BallType
 
 BASE_LOGGER = logging.getLogger('quadball.game_logic')
@@ -23,47 +24,55 @@ class ProcessActionLogic:
         """
         self.state = game_state
         self.logger = logger or BASE_LOGGER
+        # (player, strength ratio) -> throw direction of a charged throw without a fixed direction,
+        # e.g. the throw assist of the human steering the player; None (or a None result): the player's direction
+        self.throw_direction_provider: Optional[Callable[[Player, float], Optional[Vector2]]] = None
 
-    def process_throw_action(self, player_id: str, throw_direction: Optional[Vector2] = None) -> bool:
+    def can_throw(self, player: Optional[Player]) -> bool:
+        """Whether `player` holds a ball it may throw right now."""
+        if not player or not player.has_ball:
+            return False
+        ball = self.state.get_ball(player.has_ball)
+        if not ball:
+            return False
+        if self.state.game_time < self.state.throw_blocked_until.get(player.id, float('-inf')):
+            # just received a turnover ball: a tackler still pressing the tackle (= throw) button must not throw it away
+            return False
+        if ball.ball_type == BallType.VOLLEYBALL and ball.is_dead:
+            # throwing dead volleyball is not allowed
+            return False
+        return True
+
+    def process_throw_action(self, player_id: str, throw_direction: Optional[Vector2] = None, strength_ratio: float = 1.0) -> bool:
         """
         Process a throw action by a player.
-        
+
         When a player throws:
         - Ball is released from their possession
-        - Ball velocity is set based on player's throw velocity and current direction
+        - Ball velocity is set based on player's throw velocity, the strength ratio and current direction
         - Catch cooldown is imposed (prevents immediately re-catching the ball)
         - Ball's previous_thrower_id is recorded (prevents bouncing off thrower immediately (dodgeballs only))
-        
+
         Args:
             player_id: The ID of the player throwing the ball
             throw_direction: The direction in which the ball is thrown
+            strength_ratio: Fraction of the full throw velocity (1: full velocity), from charging the throw
         Returns:
             True if throw was successful, False if player has no ball or doesn't exist
         """
         player = self.state.get_player(player_id)
-        if not player or not player.has_ball:
+        self.state.throw_charges.pop(player_id, None)
+        if not self.can_throw(player):
             return False
-        
         ball = self.state.get_ball(player.has_ball)
-        if not ball:
-            return False
-        
-        if self.state.game_time < self.state.throw_blocked_until.get(player.id, float('-inf')):
-            # just received a turnover ball: a tackler still pressing the tackle (= throw) button must not throw it away
-            return False
 
-        if ball.ball_type == BallType.VOLLEYBALL:
-            if ball.is_dead:
-                # throwing dead volleyball is not allowed
-                return False
-        
         # Release the ball; copy player's position so the ball doesn't share the same Vector2
         ball.previous_thrower_id = player.id # so dodgeball not bouncing off from thrower immediately
         ball.holder_id = None
         if throw_direction is None:
             throw_direction = player.direction
         mag_dir = UtilityLogic._magnitude(throw_direction)
-        throw_velocity = self.effective_throw_velocity(player)
+        throw_velocity = self.effective_throw_velocity(player) * strength_ratio
         if mag_dir > 1:
             throw_direction.x /= mag_dir
             throw_direction.y /= mag_dir
@@ -81,9 +90,87 @@ class ProcessActionLogic:
             player.catch_cooldown = 0.0
         player.has_ball = False
 
-        self.logger.info("Player %s threw %s", player_id, ball.id)
+        self.logger.info("Player %s threw %s with strength %.1f", player_id, ball.id, strength_ratio)
         return True
-    
+
+    def is_charging_throw(self, player_id: str) -> bool:
+        """Whether `player_id` is charging a throw (the ball is still held)."""
+        return player_id in self.state.throw_charges
+
+    def charge_ticks_for_strength(self, strength_ratio: float) -> int:
+        """Ticks of charging a throw of `strength_ratio` takes (at least one)."""
+        full_ticks = self.state.throw_charge_full_ticks
+        return min(full_ticks, max(1, math.ceil(strength_ratio * full_ticks - 1e-9)))
+
+    def start_throw_charge(self,
+                           player_id: str,
+                           throw_direction: Optional[Vector2] = None,
+                           strength_ratio: float = 1.0,
+                           target_id: Optional[str] = None) -> bool:
+        """
+        Start charging a throw: it fills one tick per update (process_throw_charges) and the ball leaves
+        once the charge reaches `strength_ratio` (rounded up to whole ticks), or when a human lets go
+        (release_throw_charge).
+
+        `throw_direction` fixes the direction (computer players, who may re-aim it during the charge at
+        `target_id`); None throws in the player's direction at release.
+
+        Returns False if the player cannot throw or already charges a throw.
+        """
+        player = self.state.get_player(player_id)
+        if player_id in self.state.throw_charges or not self.can_throw(player):
+            return False
+        self.state.throw_charges[player_id] = ThrowCharge(
+            ball_id=player.has_ball,
+            release_ticks=self.charge_ticks_for_strength(strength_ratio),
+            direction=throw_direction,
+            target_id=target_id,
+        )
+        return True
+
+    def release_throw_charge(self, player_id: str) -> bool:
+        """
+        A human let go of the throw action: throw with the strength charged so far.
+
+        A charge without a single tick yet is thrown at the end of the next update with one tick.
+        Returns whether the ball was thrown now.
+        """
+        charge = self.state.throw_charges.get(player_id)
+        if charge is None:
+            return False
+        if charge.ticks == 0:
+            charge.release_ticks = 1
+            return False
+        return self._throw_charged(player_id, charge)
+
+    def cancel_throw_charge(self, player_id: str) -> None:
+        """Drop a throw being charged without throwing (e.g. another player takes control)."""
+        self.state.throw_charges.pop(player_id, None)
+
+    def process_throw_charges(self) -> None:
+        """
+        Fill every throw being charged by one tick, at the end of each update, and release it once it
+        reaches its release ticks. A charge ends without a throw if the player no longer holds its ball.
+        """
+        for player_id, charge in list(self.state.throw_charges.items()):
+            player = self.state.get_player(player_id)
+            if player is None or player.has_ball != charge.ball_id or player.is_knocked_out:
+                del self.state.throw_charges[player_id]
+                continue
+            charge.ticks = min(charge.ticks + 1, self.state.throw_charge_full_ticks)
+            if charge.ticks >= charge.release_ticks:
+                self._throw_charged(player_id, charge)
+
+    def _throw_charged(self, player_id: str, charge: ThrowCharge) -> bool:
+        """Throw a charged ball with strength ticks / full ticks, in its fixed direction or the (assisted) player direction."""
+        strength_ratio = charge.ticks / self.state.throw_charge_full_ticks
+        throw_direction = charge.direction
+        if throw_direction is None and self.throw_direction_provider is not None:
+            player = self.state.get_player(player_id)
+            if player is not None:
+                throw_direction = self.throw_direction_provider(player, strength_ratio)
+        return self.process_throw_action(player_id, throw_direction, strength_ratio)
+
     @staticmethod
     def effective_throw_velocity(player: Player) -> float:
         """Throw velocity of `player` right now: tackled players throw at half velocity."""

@@ -190,6 +190,8 @@ class VolleyballShift(Move):
         if holder.team != self.team:
             self.end(MoveStatus.FAILURE, "turnover")
             return
+        if self.logic.process_action_logic.is_charging_throw(holder_id):
+            return # the carrier is winding up a throw (charging), wait for the release
         if self.shot_taken:
             self.end(MoveStatus.FAILURE, "shot_missed")
             return
@@ -227,6 +229,8 @@ class VolleyballShift(Move):
         roster = ctx.rosters[self.team]
         diamond = self.orchestrator.diamond_attack_chaser_keeper
         diamond.position_player(carrier)
+        if self.logic.process_action_logic.is_charging_throw(carrier.id):
+            return # winding up the shot or pass
         if self.orchestrator.score_attempter.attempt(volleyball, carrier, roster.opponent_hoops, roster.opponent_chaser_keeper_ids):
             self.shot_taken = True
             return
@@ -235,7 +239,7 @@ class VolleyballShift(Move):
             self.end(MoveStatus.FAILURE, "no_good_pass_option")
             return
         pass_option, receiver_penalty, carrier_penalty = best
-        if not self.logic.process_action_logic.process_throw_action(carrier.id, throw_direction=pass_option.throw_direction):
+        if not self.orchestrator.pass_evaluator.throw(self.logic.process_action_logic, carrier, pass_option):
             return # refused e.g. right after receiving a turnover ball, try again next step
         self.logger.info(
             "VolleyballShift pass %s from player %s to player %s, position penalty %.1f -> %.1f, interception score %.2f",

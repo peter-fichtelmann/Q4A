@@ -109,6 +109,7 @@ export function handleMessage(message) {
     // Null for a spectator, who steers nobody.
     State.localPlayerId = message.controlled_player_id || null;
     State.isTutorial = !!message.is_tutorial;
+    if (message.throw_charge_full_ticks) State.throwCharge.fullTicks = message.throw_charge_full_ticks;
     if (Array.isArray(message.team_names)) State.teamNames = message.team_names;
     State.humanNames = message.human_names || {};
     rememberServerUpdateTime();
@@ -206,6 +207,7 @@ export function handleMessage(message) {
         ? null
         : (State.playersOrder[incoming.controlled_index] || State.localPlayerId);
     }
+    if (incoming.throw_charge_ticks !== undefined) State.throwCharge.ticks = incoming.throw_charge_ticks;
     // Right after the merge, before the hooks below: if one of them throws, a stale
     // time would make the renderer extrapolate the fresh positions further and further.
     rememberServerUpdateTime();
@@ -243,10 +245,23 @@ export function sendPlayerInput(dirX, dirY) {
   }
 }
 
-export function sendThrow() {
+// The throw action is held to charge the throw: throw_start when pressed (also tackles), throw_end when
+// let go. The server throws on throw_end, or by itself once the charge is full.
+export function sendThrowStart() {
+  if (State.throwCharge.pressed) return;
+  State.throwCharge.pressed = true;
   const sock = State.gameSocket;
   if (sock && sock.readyState === WebSocket.OPEN) {
-    sock.send(JSON.stringify({ type: 'throw' }));
+    sock.send(JSON.stringify({ type: 'throw_start' }));
+  }
+}
+
+export function sendThrowEnd() {
+  if (!State.throwCharge.pressed) return;
+  State.throwCharge.pressed = false;
+  const sock = State.gameSocket;
+  if (sock && sock.readyState === WebSocket.OPEN) {
+    sock.send(JSON.stringify({ type: 'throw_end' }));
   }
 }
 
@@ -263,7 +278,7 @@ export function parseBinaryState(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     let off = 0;
     const version = dv.getUint8(off, true); off += 1;
-    if (version < 1 || version > 8) { console.warn('Unknown binary state version', version); return null; }
+    if (version < 1 || version > 9) { console.warn('Unknown binary state version', version); return null; }
     const playerCount = dv.getUint8(off, true); off += 1;
     const ballCount = dv.getUint8(off, true); off += 1;
     const gameTimeHalf = dv.getUint16(off, true); off += 2;
@@ -376,11 +391,16 @@ export function parseBinaryState(arrayBuffer) {
     if (version >= 5 && off < dv.byteLength) {
       controlled_index = dv.getUint8(off, true); off += 1;
     }
+    // Second per-client byte: ticks charged of the steered player's throw (0 = not charging).
+    let throw_charge_ticks;
+    if (version >= 9 && off < dv.byteLength) {
+      throw_charge_ticks = dv.getUint8(off, true); off += 1;
+    }
     return {
       players, balls, game_time: gameTime, score, delay_bin, possession_code,
       flag_runner, flag_runner_on_pitch, seeker_on_pitch,
       is_game_live, is_game_over, is_overtime, flag_catched_team,
-      flag_catch_continue_timer, set_score, third_dodgeball_team, third_dodgeball_id, stalled_countdown, controlled_index,
+      flag_catch_continue_timer, set_score, third_dodgeball_team, third_dodgeball_id, stalled_countdown, controlled_index, throw_charge_ticks,
     };
   } catch (err) { console.warn('Failed to parse binary state', err); return null; }
 }

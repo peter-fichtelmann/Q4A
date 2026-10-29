@@ -159,6 +159,9 @@ class GameLogic:
             
             # Check pitch boundaries
             self.boundary_logic._enforce_pitch_boundaries() # at least after free ways and position updates
+            # charged throws fill by one tick and leave once full (or at the strength a computer player chose),
+            # after possessions so a ball lost this tick ends its charge
+            self.process_action_logic.process_throw_charges()
         else:
             self.flag_runner_logic.continue_after_flag_catch(dt)
 

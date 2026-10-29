@@ -263,7 +263,7 @@ const sections = [
                     ? ['Walk into the ball to grab it. Face your', 'teammate and tap the right side to throw.']
                     : ['Walk into the ball to grab it. Face your', 'teammate and click (or Space) to throw.'],
                 interaction: 'server',
-                hint: { afterMs: 20000, text: 'Your throw flies in the direction you are moving/aiming.' },
+                hint: { afterMs: 20000, text: 'Hold to charge: the longer, the harder the throw (bars at the bottom).' },
                 progressUpdates: {
                     retry: { hint: 'Out of bounds! Try again.' },
                     scored: { hint: "Nice goal trainee, but let's pass first." },

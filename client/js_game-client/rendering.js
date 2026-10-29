@@ -139,6 +139,26 @@ function drawClaimLine(ctx, gs, worldToScreen, xScale, color) {
   }
 }
 
+// Light blue bars along the bottom of the screen, filled from left to right with each tick the steered
+// player charges a throw; all filled = full strength.
+function drawThrowChargeBars(ctx) {
+  const { ticks, fullTicks } = State.throwCharge;
+  if (!ticks || !fullTicks) return;
+  const margin = 8, gap = 4, height = 10;
+  const width = (Config.CANVAS_WIDTH - 2 * margin - (fullTicks - 1) * gap) / fullTicks;
+  const y = Config.CANVAS_HEIGHT - margin - height;
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(173, 216, 255, 0.9)';
+  for (let i = 0; i < fullTicks; i++) {
+    const x = margin + i * (width + gap);
+    ctx.fillStyle = i < ticks ? 'rgba(135, 206, 250, 0.95)' : 'rgba(135, 206, 250, 0.15)';
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+  }
+  ctx.restore();
+}
+
 export function drawOffScreenBallIndicators(offScreenBalls, xScale) {
   const ctx = State.ctx;
   if (!State.viewport.enabled || !State.gameState || !State.localPlayerId) return;
@@ -493,6 +513,7 @@ export function renderGame() {
   }
 
   if (State.viewport.enabled && offScreenBalls.length > 0) drawOffScreenBallIndicators(offScreenBalls, xScale);
+  drawThrowChargeBars(ctx);
 
   if (State.isTouchDevice && (State.joystick.active || State.joystick.opacity > 0)) {
     ctx.save(); ctx.globalAlpha = State.joystick.opacity;

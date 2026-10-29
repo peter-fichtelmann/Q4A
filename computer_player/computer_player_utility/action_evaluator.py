@@ -141,7 +141,7 @@ class ActionEvaluator:
             self.score_attempter.shoot(volleyball, carrier, chosen.hoop, chosen.score)
         elif chosen.kind == 'pass':
             pass_option = chosen.pass_option
-            if self.logic.process_action_logic.process_throw_action(carrier.id, throw_direction=pass_option.throw_direction):
+            if self.pass_evaluator.throw(self.logic.process_action_logic, carrier, pass_option):
                 self.logger.info("Passing from player %s to player %s with position penalty %s and interception score %s",
                                  carrier.id, pass_option.receiver_id, round(chosen.value, 3), pass_option.interception_score)
         return chosen

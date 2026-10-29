@@ -47,7 +47,10 @@ export function initializeCanvas() {
       State.mousePos = { x: Math.max(0, Math.min(px, State.canvas.width)), y: Math.max(0, Math.min(py, State.canvas.height)) };
     });
     State.canvas.addEventListener('mouseleave', () => { State.mousePos = null; });
-    State.canvas.addEventListener('click', (e) => { e.preventDefault(); Network.sendThrow(); });
+    // hold the mouse button to charge the throw; let go anywhere to throw
+    State.canvas.addEventListener('mousedown', (e) => { if (e.button !== 0) return; e.preventDefault(); if (!State.paused) Network.sendThrowStart(); });
+    window.addEventListener('mouseup', (e) => { if (e.button === 0) Network.sendThrowEnd(); });
+    window.addEventListener('blur', () => Network.sendThrowEnd());
   }
 
   if (State.isTouchDevice) {
@@ -58,7 +61,8 @@ export function initializeCanvas() {
         const pos = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
         let joystickStarted = false; let throwConducted = false;
         if (!joystickStarted && pos.x <= Config.CANVAS_WIDTH / 3) { Input.joystickStart(pos.x, pos.y, touch.identifier); joystickStarted = true; }
-        if (!throwConducted && pos.x > Config.CANVAS_WIDTH / 3) { Network.sendThrow(); throwConducted = true; }
+        // hold the touch to charge the throw; it leaves when this touch ends
+        if (!throwConducted && pos.x > Config.CANVAS_WIDTH / 3 && !State.throwCharge.pressed) { Network.sendThrowStart(); State.throwCharge.touchId = touch.identifier; throwConducted = true; }
       }
     });
     State.canvas.addEventListener('touchmove', (e) => {
@@ -76,14 +80,16 @@ export function initializeCanvas() {
       e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
-        if (State.joystick.active && touch.identifier === State.joystick.touchId) { Input.joystickEnd(); break; }
+        if (State.throwCharge.pressed && touch.identifier === State.throwCharge.touchId) { State.throwCharge.touchId = null; Network.sendThrowEnd(); }
+        if (State.joystick.active && touch.identifier === State.joystick.touchId) { Input.joystickEnd(); }
       }
     });
     State.canvas.addEventListener('touchcancel', (e) => {
       e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
-        if (State.joystick.active && touch.identifier === State.joystick.touchId) { Input.joystickEnd(); break; }
+        if (State.throwCharge.pressed && touch.identifier === State.throwCharge.touchId) { State.throwCharge.touchId = null; Network.sendThrowEnd(); }
+        if (State.joystick.active && touch.identifier === State.joystick.touchId) { Input.joystickEnd(); }
       }
     });
   }

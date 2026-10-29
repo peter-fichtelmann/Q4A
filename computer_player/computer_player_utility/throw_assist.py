@@ -52,24 +52,24 @@ class ThrowAssist:
         self.shot_search_step = Config.THROW_ASSIST_SHOT_SEARCH_STEP_DEG
         self.margin_cap = Config.THROW_ASSIST_TIME_MARGIN_CAP
 
-    def assisted_direction(self, player: Player) -> Optional[Vector2]:
-        """Throw direction for `player`'s throw with the magnitude of its stick input, or None to throw unchanged."""
-        option = self.best_option(player)
+    def assisted_direction(self, player: Player, strength_ratio: float = 1.0) -> Optional[Vector2]:
+        """Throw direction for `player`'s throw (charged to `strength_ratio`) with the magnitude of its stick input, or None to throw unchanged."""
+        option = self.best_option(player, strength_ratio)
         if option is None or option.angle == 0:
             return None
         raw = player.direction
         mag_raw = math.hypot(raw.x, raw.y)
         return Vector2(option.direction.x * mag_raw, option.direction.y * mag_raw)
 
-    def best_option(self, player: Player) -> Optional[ThrowAssistOption]:
+    def best_option(self, player: Player, strength_ratio: float = 1.0) -> Optional[ThrowAssistOption]:
         """The chosen option of `player`'s current throw, None if no option is within reach."""
-        options = self.options(player)
+        options = self.options(player, strength_ratio)
         if not options:
             return None
         return min(options, key=lambda option: (option.band, option.tier, option.angle))
 
-    def options(self, player: Player) -> List[ThrowAssistOption]:
-        """Every option within the rotation limits (empty if the player cannot throw)."""
+    def options(self, player: Player, strength_ratio: float = 1.0) -> List[ThrowAssistOption]:
+        """Every option within the rotation limits (empty if the player cannot throw); `strength_ratio` of the charged throw."""
         if not player.has_ball:
             return []
         ball = self.state.get_ball(player.has_ball)
@@ -83,8 +83,8 @@ class ThrowAssist:
         mag_raw = math.hypot(raw.x, raw.y)
         if mag_raw == 0:
             return []
-        # same speed as process_throw_action: stick inputs below 1 throw slower
-        speed = ProcessActionLogic.effective_throw_velocity(player) * min(mag_raw, 1.0)
+        # same speed as process_throw_action: stick inputs below 1 and shorter charges throw slower
+        speed = ProcessActionLogic.effective_throw_velocity(player) * strength_ratio * min(mag_raw, 1.0)
         raw_unit = Vector2(raw.x / mag_raw, raw.y / mag_raw)
         own_hoops = [hoop for hoop in self.state.hoops.values() if hoop.team == player.team]
         if ball.ball_type == BallType.VOLLEYBALL:

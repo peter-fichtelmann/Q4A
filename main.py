@@ -146,11 +146,13 @@ class GameRoom:
         self.game_state.stalled_volleyball_countdown = Config.STALLED_VOLLEYBALL_COUNTDOWN
         self.game_state.stalled_volleyball_tackle_grace = Config.STALLED_VOLLEYBALL_TACKLE_GRACE
         self.game_state.turnover_throw_block_time = Config.TURNOVER_THROW_BLOCK_TIME
+        self.game_state.throw_charge_full_ticks = Config.THROW_CHARGE_FULL_TICKS
         self.game_state.stalled_turnover_tackle_immunity_time = Config.STALLED_TURNOVER_TACKLE_IMMUNITY_TIME
         self.game_state.beat_attempt_time_limit = Config.BEAT_ATTEMPT_TIME_LIMIT
         self.game_state.flag_catch_continue_timer = Config.FLAG_CATCH_CONTINUE_TIMER
         self.game_state.flag_catch_continue_timer_total = Config.FLAG_CATCH_CONTINUE_TIMER
         self.game_logic = GameLogic(self.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
+        self.install_throw_direction_provider()
         self.client_connections: Dict[str, WebSocket] = {}
         self.player_to_client: Dict[str, str] = {}
         # Lobby websocket connections (for waiting-room updates)
@@ -221,15 +223,18 @@ class GameRoom:
             if pid in self.players
         }
 
-    def process_human_throw(self, connection_player_id: str) -> bool:
-        """Throw for a connection, rotated onto the intended pass/beat/shot unless it turned the throw assist off."""
-        controlled_player_id = self.get_controlled_player_id(connection_player_id)
-        throw_direction = None
-        if connection_player_id not in self.throw_assist_off_by:
-            player = self.game_state.get_player(controlled_player_id)
-            if player is not None and player.has_ball:
-                throw_direction = ThrowAssist(self.game_state, InterceptionCalculator(self.game_logic)).assisted_direction(player)
-        return self.game_logic.process_action_logic.process_throw_action(controlled_player_id, throw_direction)
+    def install_throw_direction_provider(self) -> None:
+        """Let charged throws of human-steered players use their throw assist at release (call after (re)building game_logic)."""
+        self.game_logic.process_action_logic.throw_direction_provider = self.human_throw_direction
+
+    def human_throw_direction(self, player: Player, strength_ratio: float) -> Optional[Vector2]:
+        """Direction of a charged throw by `player` at release: rotated onto the intended pass/beat/shot if a
+        connection steers it with the throw assist on, otherwise None (the player's direction)."""
+        connection_player_id = next(
+            (pid for pid, entity_id in self.controlled_player_by_player.items() if entity_id == player.id), None)
+        if connection_player_id is None or connection_player_id in self.throw_assist_off_by or not player.has_ball:
+            return None
+        return ThrowAssist(self.game_state, InterceptionCalculator(self.game_logic)).assisted_direction(player, strength_ratio)
 
     def _build_slot_assignments(self) -> Dict[str, Optional[str]]:
         slots: Dict[str, Optional[str]] = {}
@@ -1073,6 +1078,7 @@ async def websocket_lobby(websocket: WebSocket):
                     room.game_started = True
                     # reinitialize game logic system with all players and balls
                     room.game_logic = GameLogic(room.game_state, log_level=Config.GAME_LOGIC_UPDATE_LOG_LEVEL)
+                    room.install_throw_direction_provider()
 
                     # initialize computer player. The controlled ids are passed per make_move
                     # call, since which players the CPU drives changes with player switches.
@@ -1186,6 +1192,8 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                 "paused": room.pause_state_message(),
                 "team_names": room.team_names,
                 "human_names": room.human_names(),
+                # charge bars of a throw at full strength (one per tick)
+                "throw_charge_full_ticks": room.game_state.throw_charge_full_ticks,
                 # send the fixed game tick duration once so the client can extrapolate between updates
                 "tick_time_seconds": (1.0 / Config.FPS) * Config.GAME_TIME_TO_REAL_TIME_RATIO,
             "players": list(room.players.values()),
@@ -1248,7 +1256,7 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         room.throw_assist_off_by.add(player_id)
                     continue
 
-                if room.paused and message_type in ("player_input", "throw", "claim", "switch_player"):
+                if room.paused and message_type in ("player_input", "throw_start", "throw_end", "claim", "switch_player"):
                     continue
 
                 if message_type == "player_input":
@@ -1269,9 +1277,16 @@ async def websocket_game(websocket: WebSocket, room_id: str, player_id: str):
                         player.direction.x = float(direction_x)
                         player.direction.y = float(direction_y)
 
-                elif message_type == "throw":
-                    success_throw = room.process_human_throw(player_id)
-                    success_tackle = room.game_logic.process_action_logic.process_tackle_action(controlled_player_id)
+                elif message_type == "throw_start":
+                    # the throw (= tackle) action is pressed: tackle right away, and with a ball start charging
+                    # the throw, which leaves on throw_end or once full (see ProcessActionLogic.process_throw_charges)
+                    process_action_logic = room.game_logic.process_action_logic
+                    process_action_logic.cancel_throw_charge(controlled_player_id)
+                    process_action_logic.start_throw_charge(controlled_player_id)
+                    process_action_logic.process_tackle_action(controlled_player_id)
+
+                elif message_type == "throw_end":
+                    room.game_logic.process_action_logic.release_throw_charge(controlled_player_id)
 
                 elif message_type == "claim":
                     if getattr(room, 'claiming_enabled', True):
@@ -1382,7 +1397,7 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         """Build a compact binary representation of dynamic entities.
 
         Format (little-endian):
-        - uint8: version (8)
+        - uint8: version (9)
         - uint8: player_count
         - uint8: ball_count
         - float16: game_time
@@ -1404,9 +1419,10 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         - uint8 third dodgeball index into balls_order (255 = None)
         - uint8 stalled volleyball countdown (whole game seconds left, 0 = no countdown)
 
-        The caller appends one more uint8 per client: the index of the player that
-        client controls (255 = none). That trailing byte is the only per-client part
-        of the payload, so the rest is built once per room per tick.
+        The caller appends two more uint8 per client: the index of the player that
+        client controls (255 = none) and the ticks charged of that player's throw
+        (0 = not charging; version 9). These trailing bytes are the only per-client
+        part of the payload, so the rest is built once per room per tick.
 
         Clients must use the `players_order` and `balls_order` arrays sent in the
         initial_state message to map these items to entity ids.
@@ -1419,8 +1435,8 @@ async def broadcast_to_room(room: GameRoom, message: dict):
         balls = list(gs.balls.values())
 
         buf = bytearray()
-        # header (version 8 adds the stalled volleyball countdown)
-        buf += struct.pack('<B', 8)
+        # header (version 8 adds the stalled volleyball countdown, version 9 the per-client throw charge)
+        buf += struct.pack('<B', 9)
         buf += struct.pack('<B', len(players))
         buf += struct.pack('<B', len(balls))
         buf += struct.pack('<e', float(gs.game_time))
@@ -1572,11 +1588,13 @@ async def broadcast_to_room(room: GameRoom, message: dict):
     if message.get('type') == 'state_update':
         base_bytes = build_binary_state(room)
         for client_id, websocket in list(room.client_connections.items()):
-            # Only the trailing controlled-player index differs per client.
+            # Only the trailing controlled-player index and its throw charge differ per client.
             connection_player_id = room.game_client_player_ids.get(client_id)
             controlled_id = room.controlled_player_by_player.get(connection_player_id)
             controlled_index = room.player_index_by_id.get(controlled_id, 255)
-            payload_bytes = base_bytes + struct.pack('<B', controlled_index)
+            throw_charge = room.game_state.throw_charges.get(controlled_id)
+            charge_ticks = min(255, throw_charge.ticks) if throw_charge is not None else 0
+            payload_bytes = base_bytes + struct.pack('<BB', controlled_index, charge_ticks)
             try:
                 await websocket.send_bytes(payload_bytes)
                 # update counters per successful send

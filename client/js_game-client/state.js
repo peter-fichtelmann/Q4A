@@ -23,6 +23,9 @@ export const State = {
   humanNames: {},
   showNames: true,
   mousePos: null,
+  // Charged throw of the steered player: bars filled so far (one per server tick) out of fullTicks.
+  // pressed: the throw action (space, mouse button, right-side touch) is held down.
+  throwCharge: { ticks: 0, fullTicks: 10, pressed: false, touchId: null },
   isTouchDevice: false,
   fullscreen: { isFullscreen: false, attempted: false, button: null },
   playerSwitch: { buttons: {}, forbiddenTimers: {} },

@@ -27,7 +27,7 @@ from computer_player.moves.volleyball_block_drive import VolleyballBlockDrive
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 from computer_player.computer_player_utility.action_evaluator import ActionEvaluator
-from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, PassEvaluator, ScoreAttempter
+from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, ChargedThrow, PassEvaluator, ScoreAttempter
 
 
 @dataclass
@@ -81,6 +81,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  seeker_kwargs: Optional[Dict] = None,
                  beater_seeker_focus_kwargs: Optional[Dict] = None,
                  intercept_margin: Optional[float] = None, # game seconds; None: only the fastest player and the contester go for a loose volleyball
+                 charged_throw_kwargs: Optional[Dict] = None, # charged throws: 'unaware_ticks' (InterceptionCalculator.charge_unaware_ticks)
                  action_evaluator_kwargs: Optional[Dict] = None, # ActionEvaluator, decision_model 'rules' (default) or 'value'
                  moves: Optional[Dict[str, Dict]] = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
@@ -108,7 +109,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             for team in (0, 1)
         }
         self.rosters = {team: TeamRoster.build(state, team) for team in (0, 1)}
-        self.interception_calculator = InterceptionCalculator(logic=self.logic)
+        self.interception_calculator = InterceptionCalculator(
+            logic=self.logic, charge_unaware_ticks=(charged_throw_kwargs or {}).get('unaware_ticks'))
         self.possession_calculator = VolleyballPossessionCalculator(self.logic, self.interception_calculator, **(possession_kwargs or {}))
         self.beater_throw_decider = beater_throw_decider = BeaterThrowDecider(
             throw_threshold_volleyball_holder=beater_throw_threshold_volleyball_holder,
@@ -242,6 +244,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
         self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
         self._profile_call('orchestrator.dodgeball_dodger', self.dodgeball_dodger, self.cpu_players + self.cpu_seekers)
+        # after every input of this step is set: aim the charged throws with the inputs they will run on
+        self._profile_call('orchestrator.reaim_charged_throws', ChargedThrow.reaim, self.logic.state, self.cpu_player_id_set)
 
     def _anticipate_volleyball(self, possession: VolleyballPossession) -> Tuple[Vector2, Optional[str]]:
         """

@@ -4,6 +4,19 @@ import json
 from .entities import Player, Ball, Hoop, Vector2, PlayerRole, BallType, VolleyBall, DodgeBall, FlagRunner
 
 @dataclass
+class ThrowCharge:
+    """A throw being charged: the ball leaves once `ticks` reaches `release_ticks`, or earlier when a human lets go."""
+    ball_id: str
+    release_ticks: int                          # ticks of charging until the throw is released
+    ticks: int = 0                              # ticks charged so far; strength ratio = ticks / throw_charge_full_ticks
+    direction: Optional[Vector2] = None         # fixed throw direction (computer players); None: the player's direction at release
+    target_id: Optional[str] = None             # player or hoop a computer player aims at, to re-aim during the charge
+
+    def copy(self) -> 'ThrowCharge':
+        return ThrowCharge(self.ball_id, self.release_ticks, self.ticks,
+                           self.direction.copy() if self.direction is not None else None, self.target_id)
+
+@dataclass
 class GameState:
     """Central repository for all game data."""
     is_game_live: bool = True
@@ -43,6 +56,8 @@ class GameState:
     stalled_volleyball_tackle_grace: float = 2.0               # Game seconds without a new tackle after which the carrier counts as no longer tackled
     turnover_throw_block_time: float = 3.0                     # Game seconds a player receiving a turnover ball cannot throw it
     throw_blocked_until: Dict[str, float] = field(default_factory=dict)  # player id -> game time until which throwing is blocked
+    throw_charge_full_ticks: int = 10                          # ticks of charging until a throw has full strength
+    throw_charges: Dict[str, ThrowCharge] = field(default_factory=dict)  # player id -> throw being charged
     stalled_turnover_tackle_immunity_time: float = 1.5         # Game seconds the player receiving a stalled volleyball turnover cannot be tackled
     is_stalled_turnover_pending: bool = False                  # True while the volleyball in turnover was turned over for being stalled
     tackle_immune_until: Dict[str, float] = field(default_factory=dict)  # player id -> game time until which the player cannot be tackled
@@ -187,6 +202,8 @@ class GameState:
             stalled_volleyball_tackle_grace=self.stalled_volleyball_tackle_grace,
             turnover_throw_block_time=self.turnover_throw_block_time,
             throw_blocked_until=self.throw_blocked_until.copy(),
+            throw_charge_full_ticks=self.throw_charge_full_ticks,
+            throw_charges={player_id: charge.copy() for player_id, charge in self.throw_charges.items()},
             stalled_turnover_tackle_immunity_time=self.stalled_turnover_tackle_immunity_time,
             is_stalled_turnover_pending=self.is_stalled_turnover_pending,
             tackle_immune_until=self.tackle_immune_until.copy(),

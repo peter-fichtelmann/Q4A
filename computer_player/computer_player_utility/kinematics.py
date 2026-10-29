@@ -87,6 +87,20 @@ def player_position_at(player, n: float, direction=None) -> Tuple[float, float]:
             player.position.y + vy * tau + v_term[1] * run)
 
 
+def player_state_at(player, n: int) -> Tuple[float, float, float, float]:
+    """Predicted (x, y, vx, vy) of a player after n ticks holding the stick input constant."""
+    x, y = player_position_at(player, n)
+    q_n = decay_table(player.deacceleration_rate).q ** n
+    vx, vy = player.velocity.x * q_n, player.velocity.y * q_n
+    v_term = terminal_velocity(player, player.direction)
+    if v_term is not None:
+        vx += v_term[0] * (1 - q_n)
+        vy += v_term[1] * (1 - q_n)
+    elif x == player.position.x and y == player.position.y:
+        vx = vy = 0.0 # stopped (coasting below the minimum speed)
+    return x, y, vx, vy
+
+
 def first_interception_tick(
         player_x: float, player_y: float,
         player_vx: float, player_vy: float,
@@ -106,7 +120,10 @@ def first_interception_tick(
     in a constant direction adds up to R(n) = run_speed * (t_n - tau_p(n)) in any direction, so the set of
     reachable positions at tick n is the disc (C(n), R(n)). Interception at n is possible iff
 
-        |B(n) - C(n)| <= R(n) + reach_distance,   B(n) = b_0 + v_b * tau_b(n + target_tick_offset)
+        |B(n) - C(n)| <= R(n) + reach_distance,   B(n) = b_0 + v_b * tau_b(max(n + target_tick_offset, 0))
+
+    A negative target_tick_offset is a ball thrown -target_tick_offset ticks from now (a charged throw):
+    until then it stays at b_0.
 
     The first n is found by scanning with the largest step that cannot skip it: the distance from B(n) to
     the reach boundary shrinks by at most the ball's and the player's drift per tick plus the growth of R
@@ -125,7 +142,7 @@ def first_interception_tick(
         return None
 
     def gap(n):
-        tb = tau_b[n + target_tick_offset]
+        tb = tau_b[max(n + target_tick_offset, 0)]
         tp = tau_p[n]
         ex = target_x + target_vx * tb - player_x - player_vx * tp
         ey = target_y + target_vy * tb - player_y - player_vy * tp
@@ -140,7 +157,9 @@ def first_interception_tick(
     reach_growth = run_speed * dt # upper bound of R(n + 1) - R(n)
     n = 0
     while n < max_ticks:
-        closing = (target_speed * (tau_b[n + target_tick_offset + 1] - tau_b[n + target_tick_offset])
+        # before a delayed release the target's first-tick drift still bounds its future drift per tick
+        target_tick = max(n + target_tick_offset, 0)
+        closing = (target_speed * (tau_b[target_tick + 1] - tau_b[target_tick])
                    + player_speed * (tau_p[n + 1] - tau_p[n]) + reach_growth)
         distance = math.sqrt(g + reach * reach) - reach # to the reach boundary, > 0 here
         step = max(1, int(distance / closing)) if closing > 0 else max_ticks - n
@@ -168,24 +187,28 @@ def first_throw_tick(
         reach_distance: float,
         max_ticks: int = Config.MOTION_MODEL_MAX_TICKS,
         scan_step: int = Config.MOTION_MODEL_SCAN_STEP,
+        release_tick: int = 0,
         ) -> Optional[Tuple[float, float, float]]:
     """
     First (fractional) tick n at which a thrown ball can reach the receiver, assuming the receiver keeps
-    its stick input: throw_velocity * tau_b(n) + reach_distance >= |P(n) - S|.
+    its stick input: throw_velocity * tau_b(n - release_tick) + reach_distance >= |P(n) - S|.
 
-    Integer scan, then regula falsi on the fractional tick. Returns (n, receiver_x, receiver_y) with the
-    predicted receiver position P(n), or None if the ball cannot reach the receiver within max_ticks.
+    The ball leaves S (thrower_x, thrower_y) `release_tick` ticks from now (a charged throw), so n counts
+    from now and is at least release_tick. Integer scan of the flight ticks, then regula falsi on the
+    fractional tick. Returns (n, receiver_x, receiver_y) with the predicted receiver position P(n), or None
+    if the ball cannot reach the receiver within max_ticks of flight.
     """
     max_ticks = min(max_ticks, len(ball_table.tau) - 1)
 
-    def reach_gap(n, tau_ball):
-        px, py = player_position_at(receiver, n)
+    def reach_gap(m, tau_ball):
+        # m: flight ticks
+        px, py = player_position_at(receiver, m + release_tick)
         return throw_velocity * tau_ball + reach_distance - math.hypot(px - thrower_x, py - thrower_y), px, py
 
     previous = 0
-    h_previous = reach_distance - math.hypot(receiver.position.x - thrower_x, receiver.position.y - thrower_y)
+    h_previous, px, py = reach_gap(0, 0.0)
     if h_previous >= 0:
-        return 0, receiver.position.x, receiver.position.y
+        return release_tick, px, py
     n = 0
     while n < max_ticks:
         n = min(n + max(scan_step, n // 4), max_ticks)
@@ -199,6 +222,6 @@ def first_throw_tick(
                     high, h_high, px, py = middle, h_middle, px_middle, py_middle
                 else:
                     low, h_low = middle, h_middle
-            return high, px, py
+            return high + release_tick, px, py
         previous, h_previous = n, h
     return None

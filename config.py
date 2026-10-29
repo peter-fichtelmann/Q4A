@@ -42,6 +42,8 @@ class Config:
     PLAYER_DEACCELERATION_RATE = PLAYER_ACCELERATION / PLAYER_MAX_SPEED if MOTION_MODEL == "analytic" else PLAYER_DEACCELERATION_RATE_LEGACY
     MOTION_MODEL_MAX_TICKS = 400 # look-ahead horizon of analytic estimates in game ticks (60 game s, enough to cross the pitch)
     MOTION_MODEL_SCAN_STEP = 4 # initial tick step of the analytic root scan (refined by bisection), grows for far horizons
+    THROW_CHARGE_TIME_REAL = 0.5 # real seconds of holding the throw action until a throw has full strength (shorter: weaker throw)
+    THROW_CHARGE_FULL_TICKS = max(1, round(THROW_CHARGE_TIME_REAL * FPS)) # one charge bar per tick
     THROW_CATCH_MARGIN_FACTOR = 0.9 # analytic throws: ball has to reach within this fraction of the catch distance (receiver radius + ball radius)
     PLAYER_MIN_DIR = 0.6 # of 1 
 
@@ -228,6 +230,9 @@ class Config:
         },
         'beater_throw_threshold_volleyball_holder': 5, # distance in m for beater to throw at volleyball holder
         'beater_throw_threshold_loaded_beater': 4, # distance in m for beater to throw at loaded opponent beater
+        'charged_throw_kwargs': { # throws are charged (Config.THROW_CHARGE_TIME_REAL) before they leave
+            'unaware_ticks': None, # charge ticks the players keep their input before going for the ball in the throw estimates (None: the whole charge, nobody sees it; A/B: whole charge +1.48 vs 5 ticks, 5 ticks +1.27 vs 0)
+        },
         'intercept_margin': 0.0, # game seconds; every defender that reaches a pass/shot in flight at most this much after the receiver (or the hoop) goes for it (None: only the fastest player and the contester)
         'possession_kwargs': { # VolleyballPossessionCalculator, loose volleyball
             'possession_switch_margin': 0.0, # game seconds the other team has to be faster to take over the predicted possession

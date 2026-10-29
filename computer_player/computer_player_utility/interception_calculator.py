@@ -6,7 +6,7 @@ from core.entities import Hoop, Vector2
 from core.game_logic.utility_logic import UtilityLogic
 from core.game_logic.game_logic import GameLogic
 from computer_player.computer_player_utility.kinematics import (
-    TICK_DT, decay_table, first_interception_tick, terminal_speed
+    TICK_DT, decay_table, first_interception_tick, player_state_at, terminal_speed
 )
 
 class InterceptionCalculator:
@@ -33,10 +33,16 @@ class InterceptionCalculator:
         With motion_model "analytic", the exact closed-form tick motion (kinematics.py) replaces the
         constant-velocity assumptions: ball decay, player acceleration and current player velocity.
     """
-    def __init__(self, logic: GameLogic, motion_model: Optional[str] = None):
-        """Keep a reference to game state for player kinematics and lookups (motion_model defaults to Config.MOTION_MODEL)."""
+    def __init__(self, logic: GameLogic, motion_model: Optional[str] = None, charge_unaware_ticks: Optional[int] = None):
+        """
+        Keep a reference to game state for player kinematics and lookups (motion_model defaults to Config.MOTION_MODEL).
+
+        charge_unaware_ticks: ticks at the start of a charged throw during which the players keep their stick input
+        before they go for the ball (None: until the release, as nobody sees a throw being charged; 0: they react at once).
+        """
         self.logic = logic
         self.motion_model = Config.MOTION_MODEL if motion_model is None else motion_model
+        self.charge_unaware_ticks = charge_unaware_ticks
     
     def beam_cosine_angle(self,
                 moving_entity: object,
@@ -206,9 +212,14 @@ class InterceptionCalculator:
                                     moving_entity: object,
                                     intercepting_player_ids: List[str],
                                     max_ticks: int = Config.MOTION_MODEL_MAX_TICKS,
+                                    release_tick: int = 0,
                                     ) -> Tuple[float, str, Dict[str, float]]:
         """
         Analytic counterpart of line_interception (same return values, times in game seconds).
+
+        With `release_tick`, the moving entity is a charged throw that leaves its position that many ticks from
+        now (times still count from now). The players keep their stick input for `charge_unaware_ticks` of the
+        charge (at most until the release) and only then go for the ball; knocked out players head for their hoop from now.
 
         The moving entity decays exactly as in BasicLogic; players start from their current velocity and
         accelerate to their terminal speed (see kinematics.first_interception_tick). Knocked out players
@@ -221,6 +232,7 @@ class InterceptionCalculator:
         entity_table = decay_table(moving_entity.deacceleration_rate)
         entity_x, entity_y = moving_entity.position.x, moving_entity.position.y
         entity_vx, entity_vy = moving_entity.velocity.x, moving_entity.velocity.y
+        unaware_ticks = release_tick if self.charge_unaware_ticks is None else min(release_tick, self.charge_unaware_ticks)
         for player_id in intercepting_player_ids:
             player = self.logic.state.players[player_id]
             player_table = decay_table(player.deacceleration_rate)
@@ -228,7 +240,11 @@ class InterceptionCalculator:
             start_x, start_y = player.position.x, player.position.y
             start_vx, start_vy = player.velocity.x, player.velocity.y
             tick_offset = 0
-            if player.is_knocked_out:
+            if unaware_ticks > 0 and not player.is_knocked_out:
+                # unaware of the charged throw at first
+                start_x, start_y, start_vx, start_vy = player_state_at(player, unaware_ticks)
+                tick_offset = unaware_ticks
+            elif player.is_knocked_out:
                 hoop = self.logic.state.hoops[f'hoop_{player.team}_center']
                 hoop_result = first_interception_tick(
                     start_x, start_y, start_vx, start_vy, run_speed, player_table,
@@ -249,7 +265,7 @@ class InterceptionCalculator:
                 start_x, start_y, start_vx, start_vy, run_speed, player_table,
                 entity_x, entity_y, entity_vx, entity_vy, entity_table,
                 reach_distance=player.radius + moving_entity.radius,
-                target_tick_offset=tick_offset,
+                target_tick_offset=tick_offset - release_tick,
                 max_ticks=max_ticks,
             )
             if result is None:
@@ -267,7 +283,9 @@ class InterceptionCalculator:
                           arrival_time: float,
                           intercepting_player_ids: List[str],
                           margin_cap: float,
-                          receiver_id: Optional[str] = None) -> float:
+                          receiver_id: Optional[str] = None,
+                          origin: Optional[Vector2] = None,
+                          release_tick: int = 0) -> float:
         """
         Time margin of a throw (analytic motion model): game seconds the fastest intercepting player needs
         longer to reach the thrown ball than the ball needs to its target (`arrival_time`).
@@ -277,15 +295,21 @@ class InterceptionCalculator:
 
         With `receiver_id`, the receiver runs to the ball as well (like the defenders), so the ball's target
         time is the earlier of `arrival_time` and the receiver's own interception time.
+
+        A charged throw leaves from `origin` (default the ball's position) `release_tick` ticks from now;
+        `arrival_time` then counts from now as well, and the players move during the charge.
         """
         thrown_ball = ball.copy()
+        if origin is not None:
+            thrown_ball.position.x = origin.x
+            thrown_ball.position.y = origin.y
         thrown_ball.velocity.x = throw_velocity.x
         thrown_ball.velocity.y = throw_velocity.y
         if receiver_id is not None:
-            receiver_time, _, _ = self._line_interception_analytic(thrown_ball, [receiver_id], max_ticks=math.ceil(arrival_time / TICK_DT))
+            receiver_time, _, _ = self._line_interception_analytic(thrown_ball, [receiver_id], max_ticks=math.ceil(arrival_time / TICK_DT), release_tick=release_tick)
             arrival_time = min(arrival_time, receiver_time)
         max_ticks = math.ceil((arrival_time + margin_cap) / TICK_DT)
-        interception_time, _, _ = self._line_interception_analytic(thrown_ball, intercepting_player_ids, max_ticks=max_ticks)
+        interception_time, _, _ = self._line_interception_analytic(thrown_ball, intercepting_player_ids, max_ticks=max_ticks, release_tick=release_tick)
         return min(margin_cap, interception_time - arrival_time)
 
     @staticmethod

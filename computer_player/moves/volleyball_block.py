@@ -279,6 +279,8 @@ class VolleyballBlock(Move):
         if state.players[holder_id].team != self.team:
             self.end(MoveStatus.FAILURE, "turnover")
             return
+        if self.logic.process_action_logic.is_charging_throw(holder_id):
+            return # the carrier is winding up a throw (charging), wait for the release
         if self.shot_taken:
             self.end(MoveStatus.FAILURE, "shot_missed")
             return
@@ -326,6 +328,8 @@ class VolleyballBlock(Move):
         blocker = state.players[self.blocker_id]
         defender = state.players[self.defender_id]
         hoop = state.hoops[self.target_hoop_id]
+        if self.logic.process_action_logic.is_charging_throw(carrier.id):
+            return # winding up the shot, keep the input it was aimed with
         if self.orchestrator.score_attempter.attempt(volleyball, carrier, roster.opponent_hoops, roster.opponent_chaser_keeper_ids):
             self.shot_taken = True
             return
