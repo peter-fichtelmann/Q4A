@@ -97,10 +97,25 @@ class ProcessActionLogic:
         """Whether `player_id` is charging a throw (the ball is still held)."""
         return player_id in self.state.throw_charges
 
-    def charge_ticks_for_strength(self, strength_ratio: float) -> int:
-        """Ticks of charging a throw of `strength_ratio` takes (at least one)."""
+    @staticmethod
+    def min_strength_ratio(player: Player) -> float:
+        """Strength of an uncharged throw: the ball leaves at the player's max speed."""
+        throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
+        return min(1.0, player.max_speed / throw_velocity) if throw_velocity > 0 else 1.0
+
+    @staticmethod
+    def charged_strength_ratio(player: Player, ticks: int, full_ticks: int) -> float:
+        """Strength after `ticks` of charging: from min_strength_ratio (0 ticks) up to 1 (full_ticks)."""
+        min_ratio = ProcessActionLogic.min_strength_ratio(player)
+        return min_ratio + (1 - min_ratio) * min(ticks, full_ticks) / full_ticks
+
+    def charge_ticks_for_strength(self, player: Player, strength_ratio: float) -> int:
+        """Ticks of charging a throw of `strength_ratio` takes (0: thrown at once with min_strength_ratio)."""
         full_ticks = self.state.throw_charge_full_ticks
-        return min(full_ticks, max(1, math.ceil(strength_ratio * full_ticks - 1e-9)))
+        min_ratio = self.min_strength_ratio(player)
+        if min_ratio >= 1:
+            return 0
+        return min(full_ticks, max(0, math.ceil((strength_ratio - min_ratio) / (1 - min_ratio) * full_ticks - 1e-9)))
 
     def start_throw_charge(self,
                            player_id: str,
@@ -109,7 +124,7 @@ class ProcessActionLogic:
         """
         Start charging a throw: it fills one tick per update (process_throw_charges) and the ball leaves
         once the charge reaches `strength_ratio` (rounded up to whole ticks), or when a human lets go
-        (release_throw_charge).
+        (release_throw_charge). A strength that needs no tick (charged_strength_ratio) is thrown at once.
 
         The aim is fixed now: `throw_direction`, or else the throw_direction_provider's direction for a
         full-strength throw, or else the player's current direction.
@@ -123,25 +138,23 @@ class ProcessActionLogic:
             throw_direction = self.throw_direction_provider(player, 1.0)
         if throw_direction is None:
             throw_direction = player.direction.copy()
-        self.state.throw_charges[player_id] = ThrowCharge(
+        charge = ThrowCharge(
             ball_id=player.has_ball,
-            release_ticks=self.charge_ticks_for_strength(strength_ratio),
+            release_ticks=self.charge_ticks_for_strength(player, strength_ratio),
             direction=throw_direction,
         )
+        if charge.release_ticks == 0:
+            return self._throw_charged(player_id, charge)
+        self.state.throw_charges[player_id] = charge
         return True
 
     def release_throw_charge(self, player_id: str) -> bool:
         """
-        A human let go of the throw action: throw with the strength charged so far.
-
-        A charge without a single tick yet is thrown at the end of the next update with one tick.
-        Returns whether the ball was thrown now.
+        A human let go of the throw action: throw with the strength charged so far (min_strength_ratio
+        without a single tick yet). Returns whether the ball was thrown.
         """
         charge = self.state.throw_charges.get(player_id)
         if charge is None:
-            return False
-        if charge.ticks == 0:
-            charge.release_ticks = 1
             return False
         return self._throw_charged(player_id, charge)
 
@@ -164,8 +177,12 @@ class ProcessActionLogic:
                 self._throw_charged(player_id, charge)
 
     def _throw_charged(self, player_id: str, charge: ThrowCharge) -> bool:
-        """Throw a charged ball with strength ticks / full ticks in the direction fixed at the start of the charge."""
-        strength_ratio = charge.ticks / self.state.throw_charge_full_ticks
+        """Throw a charged ball with its charged strength in the direction fixed at the start of the charge."""
+        player = self.state.get_player(player_id)
+        if player is None:
+            self.state.throw_charges.pop(player_id, None)
+            return False
+        strength_ratio = self.charged_strength_ratio(player, charge.ticks, self.state.throw_charge_full_ticks)
         return self.process_throw_action(player_id, charge.direction, strength_ratio)
 
     @staticmethod

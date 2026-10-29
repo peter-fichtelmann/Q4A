@@ -8,7 +8,7 @@ class ThrowCharge:
     """A throw being charged: the ball leaves once `ticks` reaches `release_ticks`, or earlier when a human lets go."""
     ball_id: str
     release_ticks: int                          # ticks of charging until the throw is released
-    ticks: int = 0                              # ticks charged so far; strength ratio = ticks / throw_charge_full_ticks
+    ticks: int = 0                              # ticks charged so far (ProcessActionLogic.charged_strength_ratio)
     direction: Optional[Vector2] = None         # throw direction, fixed when the charge starts
 
     def copy(self) -> 'ThrowCharge':

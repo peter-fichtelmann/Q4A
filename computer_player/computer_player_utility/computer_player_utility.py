@@ -14,7 +14,8 @@ from computer_player.computer_player_utility.interception_calculator import Inte
 class ChargedThrow:
     """
     Throws take time: a throw is charged for one tick per strength step (ProcessActionLogic.start_throw_charge)
-    and only then leaves, `throw_charge_full_ticks` ticks for full strength. The computer players throw at full
+    and only then leaves, `throw_charge_full_ticks` ticks for full strength (an uncharged throw leaves at the
+    player's max speed). The computer players throw at full
     strength, except very short passes, which arrive earlier with a shorter, weaker charge.
 
     During the charge thrower, receiver and defenders keep moving, so (with MOTION_MODEL "analytic") the CPU aims
@@ -40,15 +41,17 @@ class ChargedThrow:
         return SimpleNamespace(position=origin, deacceleration_rate=ball.deacceleration_rate)
 
     @staticmethod
-    def fastest_release_ticks(full_ticks: int, full_velocity: float, deacceleration_rate: float, distance: float) -> int:
+    def fastest_release_ticks(thrower: Player, full_ticks: int, deacceleration_rate: float, distance: float) -> int:
         """
         Charge ticks for a throw over `distance` that arrives first: charge ticks + flight ticks, the flight
-        with strength ticks / full_ticks of `full_velocity`. Only very short throws come out below full_ticks.
+        with the charged strength (ProcessActionLogic.charged_strength_ratio). Only very short throws come out
+        below full_ticks; 0 ticks is a throw at once.
         """
         table = decay_table(deacceleration_rate)
+        full_velocity = ProcessActionLogic.effective_throw_velocity(thrower)
 
         def total_ticks(ticks):
-            speed = full_velocity * ticks / full_ticks
+            speed = full_velocity * ProcessActionLogic.charged_strength_ratio(thrower, ticks, full_ticks)
             if speed <= 0:
                 return float('inf')
             if table.c is None:
@@ -59,7 +62,7 @@ class ChargedThrow:
             return ticks + math.log(1 - fraction) / math.log(table.q)
 
         best_ticks, best_total = full_ticks, total_ticks(full_ticks)
-        for ticks in range(full_ticks - 1, 0, -1): # unimodal: stop at the first worse charge
+        for ticks in range(full_ticks - 1, -1, -1): # unimodal: stop at the first worse charge
             total = total_ticks(ticks)
             if total >= best_total:
                 break
@@ -683,10 +686,10 @@ class PassEvaluator:
             origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, full_ticks)
             receiver_x, receiver_y = player_position_at(receiver, full_ticks)
             release_tick = ChargedThrow.fastest_release_ticks(
-                full_ticks, throw_velocity, volleyball.deacceleration_rate, math.hypot(receiver_x - origin.x, receiver_y - origin.y))
+                volleyball_holder, full_ticks, volleyball.deacceleration_rate, math.hypot(receiver_x - origin.x, receiver_y - origin.y))
             if release_tick != full_ticks:
                 origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, release_tick)
-            strength_ratio = release_tick / full_ticks
+            strength_ratio = ProcessActionLogic.charged_strength_ratio(volleyball_holder, release_tick, full_ticks)
             throw_velocity *= strength_ratio
             throw_direction, predicted_receiver_position, catch_tick = ThrowDirector.throw_analytic_with_tick(
                 volleyball_holder, receiver, origin, throw_velocity=throw_velocity, release_tick=release_tick)
