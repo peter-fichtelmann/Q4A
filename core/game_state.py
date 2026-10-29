@@ -9,12 +9,11 @@ class ThrowCharge:
     ball_id: str
     release_ticks: int                          # ticks of charging until the throw is released
     ticks: int = 0                              # ticks charged so far; strength ratio = ticks / throw_charge_full_ticks
-    direction: Optional[Vector2] = None         # fixed throw direction (computer players); None: the player's direction at release
-    target_id: Optional[str] = None             # player or hoop a computer player aims at, to re-aim during the charge
+    direction: Optional[Vector2] = None         # throw direction, fixed when the charge starts
 
     def copy(self) -> 'ThrowCharge':
         return ThrowCharge(self.ball_id, self.release_ticks, self.ticks,
-                           self.direction.copy() if self.direction is not None else None, self.target_id)
+                           self.direction.copy() if self.direction is not None else None)
 
 @dataclass
 class GameState:

@@ -24,7 +24,7 @@ class ProcessActionLogic:
         """
         self.state = game_state
         self.logger = logger or BASE_LOGGER
-        # (player, strength ratio) -> throw direction of a charged throw without a fixed direction,
+        # (player, strength ratio) -> direction of a charged throw started without one, fixed at the start of the charge,
         # e.g. the throw assist of the human steering the player; None (or a None result): the player's direction
         self.throw_direction_provider: Optional[Callable[[Player, float], Optional[Vector2]]] = None
 
@@ -105,26 +105,28 @@ class ProcessActionLogic:
     def start_throw_charge(self,
                            player_id: str,
                            throw_direction: Optional[Vector2] = None,
-                           strength_ratio: float = 1.0,
-                           target_id: Optional[str] = None) -> bool:
+                           strength_ratio: float = 1.0) -> bool:
         """
         Start charging a throw: it fills one tick per update (process_throw_charges) and the ball leaves
         once the charge reaches `strength_ratio` (rounded up to whole ticks), or when a human lets go
         (release_throw_charge).
 
-        `throw_direction` fixes the direction (computer players, who may re-aim it during the charge at
-        `target_id`); None throws in the player's direction at release.
+        The aim is fixed now: `throw_direction`, or else the throw_direction_provider's direction for a
+        full-strength throw, or else the player's current direction.
 
         Returns False if the player cannot throw or already charges a throw.
         """
         player = self.state.get_player(player_id)
         if player_id in self.state.throw_charges or not self.can_throw(player):
             return False
+        if throw_direction is None and self.throw_direction_provider is not None:
+            throw_direction = self.throw_direction_provider(player, 1.0)
+        if throw_direction is None:
+            throw_direction = player.direction.copy()
         self.state.throw_charges[player_id] = ThrowCharge(
             ball_id=player.has_ball,
             release_ticks=self.charge_ticks_for_strength(strength_ratio),
             direction=throw_direction,
-            target_id=target_id,
         )
         return True
 
@@ -162,14 +164,9 @@ class ProcessActionLogic:
                 self._throw_charged(player_id, charge)
 
     def _throw_charged(self, player_id: str, charge: ThrowCharge) -> bool:
-        """Throw a charged ball with strength ticks / full ticks, in its fixed direction or the (assisted) player direction."""
+        """Throw a charged ball with strength ticks / full ticks in the direction fixed at the start of the charge."""
         strength_ratio = charge.ticks / self.state.throw_charge_full_ticks
-        throw_direction = charge.direction
-        if throw_direction is None and self.throw_direction_provider is not None:
-            player = self.state.get_player(player_id)
-            if player is not None:
-                throw_direction = self.throw_direction_provider(player, strength_ratio)
-        return self.process_throw_action(player_id, throw_direction, strength_ratio)
+        return self.process_throw_action(player_id, charge.direction, strength_ratio)
 
     @staticmethod
     def effective_throw_velocity(player: Player) -> float:

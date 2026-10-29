@@ -224,11 +224,11 @@ class GameRoom:
         }
 
     def install_throw_direction_provider(self) -> None:
-        """Let charged throws of human-steered players use their throw assist at release (call after (re)building game_logic)."""
+        """Let charged throws of human-steered players aim with their throw assist (call after (re)building game_logic)."""
         self.game_logic.process_action_logic.throw_direction_provider = self.human_throw_direction
 
     def human_throw_direction(self, player: Player, strength_ratio: float) -> Optional[Vector2]:
-        """Direction of a charged throw by `player` at release: rotated onto the intended pass/beat/shot if a
+        """Direction of a charged throw by `player`, fixed at the start of the charge: rotated onto the intended pass/beat/shot if a
         connection steers it with the throw assist on, otherwise None (the player's direction)."""
         connection_player_id = next(
             (pid for pid, entity_id in self.controlled_player_by_player.items() if entity_id == player.id), None)

@@ -27,7 +27,7 @@ from computer_player.moves.volleyball_block_drive import VolleyballBlockDrive
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
 from computer_player.computer_player_utility.action_evaluator import ActionEvaluator
-from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, ChargedThrow, PassEvaluator, ScoreAttempter
+from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, PassEvaluator, ScoreAttempter
 
 
 @dataclass
@@ -244,8 +244,6 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
         self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
         self._profile_call('orchestrator.dodgeball_dodger', self.dodgeball_dodger, self.cpu_players + self.cpu_seekers)
-        # after every input of this step is set: aim the charged throws with the inputs they will run on
-        self._profile_call('orchestrator.reaim_charged_throws', ChargedThrow.reaim, self.logic.state, self.cpu_player_id_set)
 
     def _anticipate_volleyball(self, possession: VolleyballPossession) -> Tuple[Vector2, Optional[str]]:
         """
