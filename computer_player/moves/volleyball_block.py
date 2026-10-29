@@ -330,7 +330,7 @@ class VolleyballBlock(Move):
         hoop = state.hoops[self.target_hoop_id]
         if self.logic.process_action_logic.is_charging_throw(carrier.id):
             return # winding up the shot, keep the input it was aimed with
-        if self.orchestrator.score_attempter.attempt(volleyball, carrier, roster.opponent_hoops, roster.opponent_chaser_keeper_ids):
+        if self.orchestrator.try_score(volleyball, carrier, roster):
             self.shot_taken = True
             return
         spot, lane = self.screen_points(carrier, defender, self.screen_side)

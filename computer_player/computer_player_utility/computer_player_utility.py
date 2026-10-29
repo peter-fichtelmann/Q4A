@@ -457,6 +457,7 @@ class ScoreAttempter:
                  min_shot_angle: float = 0.0,
                  angle_scaled_risk: bool = False,
                  shot_risk_time_scale: float = 0.5,
+                 shoot_standing: Optional[float] = None, # m; for hoops closer than this the shooter stops running (no stick input) for the charge, margins and aim assume it; None: never
                  logger: Optional[logging.Logger] = None):
         """Store the interception model and the shot thresholds."""
         self.interception_calculator = interception_calculator
@@ -471,6 +472,7 @@ class ScoreAttempter:
         self.min_shot_angle_tan = math.tan(math.radians(min_shot_angle))
         self.angle_scaled_risk = angle_scaled_risk
         self.shot_risk_time_scale = shot_risk_time_scale
+        self.shoot_standing = shoot_standing
         # interception risk allowed for a 90° shot
         if self.use_time_margin:
             self.straight_shot_risk = 1 / (1 + math.exp(shot_time_margin / shot_risk_time_scale))
@@ -495,6 +497,18 @@ class ScoreAttempter:
             return self.shot_risk_time_scale * math.log(1 / allowed_risk - 1)
         return 1 - allowed_risk
 
+    def _stands_for(self, volleyball: VolleyBall, hoop: Hoop) -> bool:
+        """Whether the shooter stops running for a shot at `hoop` (within `shoot_standing` of it)."""
+        return self.shoot_standing is not None and math.hypot(hoop.position.x - volleyball.position.x, hoop.position.y - volleyball.position.y) <= self.shoot_standing
+
+    def _release_origin(self, volleyball: VolleyBall, volleyball_holder: Player, hoop: Hoop, release_tick: float) -> Vector2:
+        """Where the shot at `hoop` leaves: the held ball after the charge, the shooter keeping its input or standing (`shoot_standing`)."""
+        shooter = volleyball_holder
+        if self._stands_for(volleyball, hoop):
+            shooter = volleyball_holder.copy()
+            shooter.direction = Vector2(0, 0)
+        return ChargedThrow.release_origin(shooter, volleyball.position, release_tick)
+
     def get_time_margins_for_hoops(self,
                                    volleyball: VolleyBall,
                                    volleyball_holder: Player,
@@ -505,8 +519,8 @@ class ScoreAttempter:
         throw_velocity = ProcessActionLogic.effective_throw_velocity(volleyball_holder)
         # the shot leaves after a full charge, from where the held ball is by then
         release_tick = ChargedThrow.release_ticks(self.process_action_logic.state)
-        origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, release_tick)
         for hoop in attack_hoops:
+            origin = self._release_origin(volleyball, volleyball_holder, hoop, release_tick)
             dx = hoop.position.x - origin.x
             dy = hoop.position.y - origin.y
             squared_distance = dx**2 + dy**2
@@ -590,8 +604,12 @@ class ScoreAttempter:
     def shoot(self, volleyball: VolleyBall, volleyball_holder: Player, hoop: Hoop, score: float) -> bool:
         """Start a full-strength charged shot at `hoop`. Returns False if the throw is refused (e.g. right after receiving a turnover ball)."""
         # aim from the held ball at the release, which is offset from the holder's centre by about the player radius
-        origin = ChargedThrow.release_origin(volleyball_holder, volleyball.position, ChargedThrow.release_ticks(self.process_action_logic.state))
+        origin = self._release_origin(volleyball, volleyball_holder, hoop, ChargedThrow.release_ticks(self.process_action_logic.state))
         throw_direction = Vector2(hoop.position.x - origin.x, hoop.position.y - origin.y)
+        if self._stands_for(volleyball, hoop):
+            # stop running for the charge (the orchestrator's hold_input_while_charging keeps it); a shooter running on
+            # bumps into a hoop defender and releases short of the predicted point, straight into that defender
+            volleyball_holder.direction = Vector2(0, 0)
         if self.process_action_logic.start_throw_charge(volleyball_holder.id, throw_direction):
             self.logger.info("Scoring on hoop %s with interception score %s", hoop.id, score)
             return True

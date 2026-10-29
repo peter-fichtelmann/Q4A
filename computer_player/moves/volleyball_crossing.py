@@ -341,8 +341,7 @@ class VolleyballCrossing(Move):
         if self.phase == "exit":
             holder = state.players[self._exit_holder_id()]
             exit_direction = self.exit_direction(-self.lateral_sign if self.released_by_pass else self.lateral_sign)
-            if volleyball.holder_id == holder.id and self.orchestrator.score_attempter.attempt(
-                    volleyball, holder, roster.opponent_hoops, roster.opponent_chaser_keeper_ids):
+            if volleyball.holder_id == holder.id and self.orchestrator.try_score(volleyball, holder, roster):
                 self.shot_taken = True
                 return
             # while the pass is in flight the receiver keeps the input the throw was aimed with
@@ -350,7 +349,7 @@ class VolleyballCrossing(Move):
             return
         carrier = state.players[self.carrier_id]
         receiver = state.players[self.receiver_id]
-        if self.orchestrator.score_attempter.attempt(volleyball, carrier, roster.opponent_hoops, roster.opponent_chaser_keeper_ids):
+        if self.orchestrator.try_score(volleyball, carrier, roster):
             self.shot_taken = True
             return
         crossing = self.crossing
@@ -402,7 +401,7 @@ class VolleyballCrossing(Move):
                 return
             pass_evaluator = self.orchestrator.pass_evaluator
             pass_option = pass_evaluator.evaluate(volleyball, carrier, receiver, roster.own_hoops, roster.opponent_chaser_keeper_ids)
-            if pass_option is not None and pass_evaluator.is_safe(pass_option, self.pass_interception_threshold):
+            if pass_option is not None and self.orchestrator.pass_is_good(volleyball, carrier, pass_option, roster, self.pass_interception_threshold):
                 if pass_evaluator.throw(self.logic.process_action_logic, carrier, pass_option):
                     self.decision = "pass"
                     self.released_by_pass = True

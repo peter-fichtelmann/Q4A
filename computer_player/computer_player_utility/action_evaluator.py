@@ -170,7 +170,7 @@ class ActionEvaluator:
     def _choose(self, options: List[CarrierOption]) -> CarrierOption:
         """Hold unless a shot or pass beats holding by the decision margin; optionally a softmax among the close ones."""
         hold = next(option for option in options if option.kind == 'hold')
-        threshold = hold.value * (1 + self.decision_margin_relative) + self.decision_margin
+        threshold = self._hold_threshold(hold)
         actions = [option for option in options if option.kind != 'hold' and option.value > threshold]
         if not actions:
             return hold
@@ -181,10 +181,51 @@ class ActionEvaluator:
         weights = [math.exp((option.value - best.value) / self.decision_temperature) for option in close]
         return random.choices(close, weights=weights)[0]
 
+    def _hold_threshold(self, hold: CarrierOption) -> float:
+        """Value a shot or pass must exceed to beat holding."""
+        return hold.value * (1 + self.decision_margin_relative) + self.decision_margin
+
+    # ---- entry points for the moves (their own pass/shot structure, decided by value) ----
+
+    def decide_shot(self, volleyball: VolleyBall, carrier: Player, roster: TeamRoster) -> bool:
+        """Shoot if shooting is the carrier's best option (passes and holding included). Returns whether a shot was started."""
+        options = self.profile_call('orchestrator.action_evaluator', self.evaluate_options, volleyball, carrier, roster)
+        chosen = self._choose(options)
+        if chosen.kind != 'shoot':
+            return False
+        return self.score_attempter.shoot(volleyball, carrier, chosen.hoop, chosen.score)
+
+    def best_pass(self, volleyball: VolleyBall, carrier: Player, roster: TeamRoster, receiver_ids: List[str]) -> Optional[CarrierOption]:
+        """The pass to one of `receiver_ids` with the highest value, if it beats holding; else None."""
+        defenders = self._defenders(roster)
+        hold = self.hold_option(volleyball, carrier, roster, defenders)
+        best = None
+        for receiver_id in receiver_ids:
+            pass_option = self.pass_evaluator.evaluate(volleyball, carrier, self.logic.state.players[receiver_id], roster.own_hoops, roster.opponent_chaser_keeper_ids)
+            option = self.pass_value(volleyball, carrier, pass_option, roster, defenders) if pass_option is not None else None
+            if option is not None and (best is None or option.value > best.value):
+                best = option
+        if best is None or best.value <= self._hold_threshold(hold):
+            return None
+        return best
+
+    def pass_beats_holding(self, volleyball: VolleyBall, carrier: Player, pass_option: PassOption, roster: TeamRoster) -> bool:
+        """Whether this pass is worth more than keeping the volleyball."""
+        defenders = self._defenders(roster)
+        option = self.pass_value(volleyball, carrier, pass_option, roster, defenders)
+        return option is not None and option.value > self._hold_threshold(self.hold_option(volleyball, carrier, roster, defenders))
+
+    # ---- values ----
+
+    def _defenders(self, roster: TeamRoster) -> List[Player]:
+        """Opponent chasers/keepers on stick."""
+        state = self.logic.state
+        return [state.players[player_id] for player_id in roster.opponent_chaser_keeper_ids if not state.players[player_id].is_knocked_out]
+
     def evaluate_options(self, volleyball: VolleyBall, carrier: Player, roster: TeamRoster) -> List[CarrierOption]:
         """Shoot options (one per hoop in range), the detailed pass candidates and hold, with their values."""
         state = self.logic.state
-        defenders = [state.players[player_id] for player_id in roster.opponent_chaser_keeper_ids if not state.players[player_id].is_knocked_out]
+        defenders = self._defenders(roster)
         options = []
 
         # shoot
@@ -204,36 +245,44 @@ class ActionEvaluator:
             candidates.append((cheap, player_id))
         candidates.sort(reverse=True)
         for _, player_id in candidates[:self.max_pass_candidates]:
-            receiver = state.players[player_id]
-            pass_option = self.pass_evaluator.evaluate(volleyball, carrier, receiver, roster.own_hoops, roster.opponent_chaser_keeper_ids)
-            if pass_option is None:
-                continue
-            completion = self._pass_completion(pass_option, volleyball, carrier)
-            if completion <= 0:
-                continue
-            catch_position = pass_option.predicted_receiver_position
-            catch_time = pass_option.catch_time # charge + flight
-            if catch_time is None: # legacy motion model
-                catch_time = self.interception_calculator.arrival_time(
-                    volleyball, ProcessActionLogic.effective_throw_velocity(carrier),
-                    math.hypot(catch_position.x - volleyball.position.x, catch_position.y - volleyball.position.y))
-            if catch_time == float('inf'):
-                continue
-            receiver_value = self.position_value(receiver, catch_position, catch_time, roster, defenders, detailed=True, ignore_dodgeballs=True)
-            beat = self.dodgeball_risk(receiver, catch_position, Vector2(0, 0), catch_time, roster)
-            value = completion * (1 - beat) * self._possession_value(receiver_value)
-            options.append(CarrierOption('pass', value, pass_option=pass_option,
-                                         details={'completion': completion, 'beat': beat, 'receiver_value': receiver_value}))
+            pass_option = self.pass_evaluator.evaluate(volleyball, carrier, state.players[player_id], roster.own_hoops, roster.opponent_chaser_keeper_ids)
+            option = self.pass_value(volleyball, carrier, pass_option, roster, defenders) if pass_option is not None else None
+            if option is not None:
+                options.append(option)
 
-        # hold
+        options.append(self.hold_option(volleyball, carrier, roster, defenders))
+        return options
+
+    def pass_value(self, volleyball: VolleyBall, carrier: Player, pass_option: PassOption, roster: TeamRoster,
+                   defenders: List[Player]) -> Optional[CarrierOption]:
+        """The pass as an option with its value: completion * (1 - receiver's dodgeball risk) * possession value at the catch."""
+        completion = self._pass_completion(pass_option, volleyball, carrier)
+        if completion <= 0:
+            return None
+        receiver = self.logic.state.players[pass_option.receiver_id]
+        catch_position = pass_option.predicted_receiver_position
+        catch_time = pass_option.catch_time # charge + flight
+        if catch_time is None: # legacy motion model
+            catch_time = self.interception_calculator.arrival_time(
+                volleyball, ProcessActionLogic.effective_throw_velocity(carrier),
+                math.hypot(catch_position.x - volleyball.position.x, catch_position.y - volleyball.position.y))
+        if catch_time == float('inf'):
+            return None
+        receiver_value = self.position_value(receiver, catch_position, catch_time, roster, defenders, detailed=True, ignore_dodgeballs=True)
+        beat = self.dodgeball_risk(receiver, catch_position, Vector2(0, 0), catch_time, roster)
+        value = completion * (1 - beat) * self._possession_value(receiver_value)
+        return CarrierOption('pass', value, pass_option=pass_option,
+                             details={'completion': completion, 'beat': beat, 'receiver_value': receiver_value})
+
+    def hold_option(self, volleyball: VolleyBall, carrier: Player, roster: TeamRoster, defenders: List[Player]) -> CarrierOption:
+        """Keeping the volleyball: (1 - P_lose) * possession value of the carrier one CPU step ahead."""
         ticks_ahead = Config.COMPUTER_PLAYER_TICK_RATE
         ahead_x, ahead_y = player_position_at(carrier, ticks_ahead)
         carrier_value = self.position_value(carrier, Vector2(ahead_x, ahead_y), ticks_ahead * TICK_DT, roster, defenders, detailed=True,
                                             ignore_dodgeballs=True)
         lose = self._lose_probability(volleyball, carrier, roster)
-        options.append(CarrierOption('hold', (1 - lose) * self._possession_value(self.hold_discount * carrier_value),
-                                     details={'lose': lose, 'carrier_value': carrier_value}))
-        return options
+        return CarrierOption('hold', (1 - lose) * self._possession_value(self.hold_discount * carrier_value),
+                             details={'lose': lose, 'carrier_value': carrier_value})
 
     def _possession_value(self, position_value: float) -> float:
         """Value of keeping the volleyball: the baseline goal probability of a possession plus the position's upside."""

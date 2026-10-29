@@ -154,6 +154,14 @@ class VolleyballShift(Move):
                 continue
             candidates.append((penalty, player_id))
         candidates.sort()
+        evaluator = self.orchestrator.action_evaluator
+        if evaluator.enabled:
+            # the candidate with the highest pass value, if it beats keeping the volleyball
+            best = evaluator.best_pass(volleyball, carrier, roster, [player_id for _, player_id in candidates])
+            if best is None:
+                return None
+            penalty = next(penalty for penalty, player_id in candidates if player_id == best.pass_option.receiver_id)
+            return best.pass_option, penalty, carrier_penalty
         for penalty, player_id in candidates:
             pass_option = pass_evaluator.evaluate(volleyball, carrier, state.players[player_id], roster.own_hoops, roster.opponent_chaser_keeper_ids)
             if pass_option is not None and pass_evaluator.is_safe(pass_option, self.pass_interception_threshold):
@@ -231,7 +239,7 @@ class VolleyballShift(Move):
         diamond.position_player(carrier)
         if self.logic.process_action_logic.is_charging_throw(carrier.id):
             return # winding up the shot or pass
-        if self.orchestrator.score_attempter.attempt(volleyball, carrier, roster.opponent_hoops, roster.opponent_chaser_keeper_ids):
+        if self.orchestrator.try_score(volleyball, carrier, roster):
             self.shot_taken = True
             return
         best = self.best_good_pass(ctx, carrier, diamond.evade_vectors)

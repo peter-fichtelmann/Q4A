@@ -81,6 +81,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  seeker_kwargs: Optional[Dict] = None,
                  beater_seeker_focus_kwargs: Optional[Dict] = None,
                  intercept_margin: Optional[float] = None, # game seconds; None: only the fastest player and the contester go for a loose volleyball
+                 hold_input_while_charging: bool = False, # a CPU player charging a throw keeps the stick input it had when the charge started (the aim assumes it)
                  charged_throw_kwargs: Optional[Dict] = None, # charged throws: 'unaware_ticks' (InterceptionCalculator.charge_unaware_ticks)
                  action_evaluator_kwargs: Optional[Dict] = None, # ActionEvaluator, decision_model 'rules' (default) or 'value'
                  moves: Optional[Dict[str, Dict]] = None,
@@ -162,6 +163,8 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         # the chaser/keeper defence strategy is chosen each time a team starts defending
         self.box_defence_probability = box_defence_probability
         self.intercept_margin = intercept_margin
+        self.hold_input_while_charging = hold_input_while_charging
+        self._charge_directions: Dict[str, Vector2] = {} # player id -> stick input at the start of its throw charge
         self.defence_chaser_keeper_strategies: Dict[int, BaseStrategy] = {}
         self.seeker_director = SeekerDirector(state, **(seeker_kwargs or {}))
         self.beater_seeker_focus = BeaterSeekerFocus(self.logic, beater_throw_decider, logger=self.logger, **(beater_seeker_focus_kwargs or {}))
@@ -243,6 +246,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
         for move in self.active_moves:
             self._profile_call(f'orchestrator.move.{move.name}', move.step, ctx)
         self.seeker_director.update_seeker_direction(dt, self.cpu_seekers)
+        self._hold_charging_input()
         self._profile_call('orchestrator.dodgeball_dodger', self.dodgeball_dodger, self.cpu_players + self.cpu_seekers)
 
     def _anticipate_volleyball(self, possession: VolleyballPossession) -> Tuple[Vector2, Optional[str]]:
@@ -270,6 +274,41 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             return
         aim = possession.contester_intercepting_position
         contester.direction = Vector2(aim.x - contester.position.x, aim.y - contester.position.y)
+
+    def try_score(self, volleyball, carrier, roster: TeamRoster) -> bool:
+        """Shoot if the decision model says so: the ActionEvaluator ('value') or the ScoreAttempter rules. Returns whether a shot was started."""
+        if self.action_evaluator.enabled:
+            return self.action_evaluator.decide_shot(volleyball, carrier, roster)
+        return self.score_attempter.attempt(volleyball, carrier, roster.opponent_hoops, roster.opponent_chaser_keeper_ids)
+
+    def pass_is_good(self, volleyball, carrier, pass_option, roster: TeamRoster, beam_threshold: float) -> bool:
+        """Whether a move should play this pass: it beats holding ('value'), or it is safe by the PassEvaluator rules."""
+        if self.action_evaluator.enabled:
+            return self.action_evaluator.pass_beats_holding(volleyball, carrier, pass_option, roster)
+        return self.pass_evaluator.is_safe(pass_option, beam_threshold)
+
+    def _hold_charging_input(self) -> None:
+        """
+        Keep the stick input of CPU players charging a throw. The throw is aimed when the charge starts, from where
+        the held ball will be at the release if the thrower keeps its input (ChargedThrow.release_origin); steering
+        the thrower elsewhere during the charge moves the release point and the throw misses, worst for close shots.
+        Runs after the strategies and moves, before dodging (dodging a dodgeball still wins).
+        """
+        if not self.hold_input_while_charging:
+            return
+        process_action_logic = self.logic.process_action_logic
+        held = {}
+        for player in self.cpu_players:
+            if not process_action_logic.is_charging_throw(player.id):
+                continue
+            direction = self._charge_directions.get(player.id)
+            if direction is None:
+                # the charge started in this step: its aim was computed with the input set in this step
+                direction = Vector2(player.direction.x, player.direction.y)
+            else:
+                player.direction = Vector2(direction.x, direction.y)
+            held[player.id] = direction
+        self._charge_directions = held
 
     def _steer_interceptors(self, possession: VolleyballPossession, steerable_id_set: set) -> None:
         """
