@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from core.entities import Player, PlayerRole, Vector2
 from core.game_logic.game_logic import GameLogic
@@ -54,30 +54,47 @@ class DodgeballDodger:
 
     def _dodge_direction(self, player: Player, dodgeball) -> Optional[Vector2]:
         """Unit direction perpendicular to the dodgeball's path, away from it, if the dodgeball would hit `player` soon."""
-        speed = math.hypot(dodgeball.velocity.x, dodgeball.velocity.y)
-        ux, uy = dodgeball.velocity.x / speed, dodgeball.velocity.y / speed
-        rx = player.position.x - dodgeball.position.x
-        ry = player.position.y - dodgeball.position.y
-        along = rx * ux + ry * uy
-        if along <= 0:
-            return None # behind the ball
-        table = decay_table(dodgeball.deacceleration_rate)
-        if table.c is None:
-            arrival_time = along / speed
-        else:
-            fraction = along / (speed * table.c)
-            if fraction >= 1:
-                return None # stops before reaching the player
-            arrival_time = math.log(1 - fraction) / math.log(table.q) * TICK_DT
+        approach = dodgeball_approach(player.position, player.velocity, player.deacceleration_rate, dodgeball)
+        if approach is None:
+            return None
+        arrival_time, lateral, ux, uy = approach
         if arrival_time > self.dodge_horizon:
             return None
-        # player drift until the ball arrives, without new input
-        tau_player = decay_table(player.deacceleration_rate).tau_at(arrival_time / TICK_DT)
-        rx += player.velocity.x * tau_player
-        ry += player.velocity.y * tau_player
-        lateral = rx * -uy + ry * ux # signed distance to the ball's line (left positive)
         if abs(lateral) > player.radius + dodgeball.radius + self.dodge_buffer:
             return None
         side = 1.0 if lateral >= 0 else -1.0
         self.logger.debug("Player %s dodges dodgeball %s arriving in %.2f s", player.id, dodgeball.id, arrival_time)
         return Vector2(-uy * side, ux * side)
+
+
+def dodgeball_approach(position: Vector2, velocity: Vector2, deacceleration_rate: float, dodgeball) -> Optional[Tuple[float, float, float, float]]:
+    """
+    Closest approach of a free dodgeball to a player at `position` drifting with `velocity` (no new input).
+
+    Returns (arrival time in game seconds along the ball's line, signed lateral distance to the line at
+    that time (left positive), unit direction x, y of the ball), or None if the ball does not move, is
+    already past the player or stops before reaching it. The ball's speed decays exactly as in BasicLogic.
+    """
+    speed = math.hypot(dodgeball.velocity.x, dodgeball.velocity.y)
+    if speed == 0:
+        return None
+    ux, uy = dodgeball.velocity.x / speed, dodgeball.velocity.y / speed
+    rx = position.x - dodgeball.position.x
+    ry = position.y - dodgeball.position.y
+    along = rx * ux + ry * uy
+    if along <= 0:
+        return None # behind the ball
+    table = decay_table(dodgeball.deacceleration_rate)
+    if table.c is None:
+        arrival_time = along / speed
+    else:
+        fraction = along / (speed * table.c)
+        if fraction >= 1:
+            return None # stops before reaching the player
+        arrival_time = math.log(1 - fraction) / math.log(table.q) * TICK_DT
+    # player drift until the ball arrives, without new input
+    tau_player = decay_table(deacceleration_rate).tau_at(arrival_time / TICK_DT)
+    rx += velocity.x * tau_player
+    ry += velocity.y * tau_player
+    lateral = rx * -uy + ry * ux # signed distance to the ball's line (left positive)
+    return arrival_time, lateral, ux, uy

@@ -26,6 +26,7 @@ from computer_player.moves.volleyball_block import VolleyballBlock
 from computer_player.moves.volleyball_block_drive import VolleyballBlockDrive
 from computer_player.computer_player_utility.move_around_hoop_blockage import MoveAroundHoopBlockage
 from computer_player.computer_player_utility.interception_calculator import InterceptionCalculator
+from computer_player.computer_player_utility.action_evaluator import ActionEvaluator
 from computer_player.computer_player_utility.computer_player_utility import BeaterThrowDecider, PassEvaluator, ScoreAttempter
 
 
@@ -80,6 +81,7 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
                  seeker_kwargs: Optional[Dict] = None,
                  beater_seeker_focus_kwargs: Optional[Dict] = None,
                  intercept_margin: Optional[float] = None, # game seconds; None: only the fastest player and the contester go for a loose volleyball
+                 action_evaluator_kwargs: Optional[Dict] = None, # ActionEvaluator, decision_model 'rules' (default) or 'value'
                  moves: Optional[Dict[str, Dict]] = None,
                  beater_throw_threshold_volleyball_holder: float = 5,
                  beater_throw_threshold_loaded_beater: float = 4,
@@ -129,6 +131,16 @@ class ComputerPlayerOrchestrator(ComputerPlayer):
             self.logic, move_around_hoop_blockages, self.score_attempter, self.pass_evaluator,
             logger=self.logger, **diamond_attack_kwargs.get('chaser_keeper', {})
         )
+        chaser_keeper_kwargs = diamond_attack_kwargs.get('chaser_keeper', {})
+        self.action_evaluator = ActionEvaluator(
+            self.logic, self.interception_calculator, self.score_attempter, self.pass_evaluator,
+            passing_squared_max_distance=chaser_keeper_kwargs.get('passing_squared_max_distance', self.diamond_attack_chaser_keeper.passing_squared_max_distance),
+            passing_threshold=chaser_keeper_kwargs.get('passing_threshold', self.diamond_attack_chaser_keeper.passing_threshold),
+            profile_call=self._profile_call,
+            logger=self.logger,
+            **(action_evaluator_kwargs or {})
+        )
+        self.diamond_attack_chaser_keeper.action_evaluator = self.action_evaluator
         self.diamond_attack_beater = DiamondAttackBeater(
             self.logic, beater_throw_decider, logger=self.logger, **diamond_attack_kwargs.get('beater', {})
         )

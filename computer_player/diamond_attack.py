@@ -85,6 +85,7 @@ class DiamondAttackChaserKeeper(BaseStrategy):
         self.move_around_hoop_blockages = move_around_hoop_blockages
         self.score_attempter = score_attempter
         self.pass_evaluator = pass_evaluator
+        self.action_evaluator = None # optional ActionEvaluator, set by the orchestrator; with decision_model 'value' it replaces shoot-then-pass
         self.chaser_evade_beater_weight = chaser_evade_beater_weight
         self.chaser_evade_chaser_keeper_weight = chaser_evade_chaser_keeper_weight
         self.chaser_evade_opponent_max_magnitude = chaser_evade_opponent_max_magnitude
@@ -449,9 +450,13 @@ class DiamondAttackChaserKeeper(BaseStrategy):
             else: # already hold of volleyball
                 volleyball_holder = self.logic.state.players[volleyball.holder_id]
                 self.position_player(volleyball_holder) # position volleyball holder to evade opponents while holding the ball
-                tries_to_score = self.score_attempter.attempt(volleyball, volleyball_holder, self.roster.opponent_hoops, self.roster.opponent_chaser_keeper_ids)
-                if not tries_to_score:
-                    self.player_passing(volleyball=volleyball, volleyball_holder=volleyball_holder)
+                if self.action_evaluator is not None and self.action_evaluator.enabled:
+                    if not volleyball.is_dead:
+                        self.action_evaluator.decide_and_act(volleyball, volleyball_holder, self.roster)
+                else:
+                    tries_to_score = self.score_attempter.attempt(volleyball, volleyball_holder, self.roster.opponent_hoops, self.roster.opponent_chaser_keeper_ids)
+                    if not tries_to_score:
+                        self.player_passing(volleyball=volleyball, volleyball_holder=volleyball_holder)
         for player_id in controlled_ids:
             if player_id != next_volleyball_holder_id: # dealing with volleyball holder before
                 player = self.logic.state.players[player_id]

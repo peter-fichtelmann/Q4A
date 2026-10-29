@@ -141,6 +141,23 @@ class Config:
             'pass_time_margin': 0.25, # game seconds, pass if the receiver reaches the ball at least this much before the fastest defender ('time_margin' model; tuned with intercept_margin on)
             'active_receiver': True, # the receiver runs to the ball like the defenders, instead of keeping its stick input
         },
+        'action_evaluator_kwargs': { # ActionEvaluator: the base attack's carrier rates shoot, pass and hold as goal probabilities
+            'decision_model': 'rules', # 'rules': shoot if safe enough, else pass to the first safe receiver by position penalty; 'value': ActionEvaluator
+            'near_hoop_distance': 12.0, # m, receivers/carriers closer than this to an opponent hoop get the detailed shot model, farther ones a cheap estimate
+            'pass_risk_time_scale': 0.25, # game seconds, logistic scale turning the pass time margin into an interception risk
+            'reach_risk_time_scale': 0.5, # game seconds, logistic scale of the race to the shooting spot against the defenders
+            'approach_decay': 8.0, # m, value decay with the distance still to run to the shooting spot
+            'pressure_distance': 4.0, # m, an opponent chaser/keeper closer than this lowers the value
+            'held_risk_distance': 5.0, # m, a loaded opponent beater this far away means dodgeball risk 0.5 (closer more)
+            'held_risk_width': 1.0, # m, logistic width of the held dodgeball risk
+            'flying_risk_horizon': 2.0, # game seconds, opponent dodgeballs in flight arriving later are ignored
+            'flying_risk_undodgeable': 1.0, # dodgeball risk of a flying dodgeball the player cannot sidestep in time
+            'flying_risk_dodgeable': 0.3, # dodgeball risk of a flying dodgeball the player can sidestep
+            'hold_discount': 0.9, # holding the volleyball is worth this fraction of the carrier's position value
+            'decision_margin': 0.05, # a shot or pass must beat holding by this much
+            'decision_temperature': 0.0, # > 0: softmax among the options within the decision margin of the best
+            'max_pass_candidates': 3, # receivers evaluated in detail (chosen by the cheap estimate)
+        },
         'diamond_attack_kwargs': {
             'chaser_keeper': {
                 'chaser_evade_beater_weight': 16, # opponent evade vectors have magnitude weight / distance^2
