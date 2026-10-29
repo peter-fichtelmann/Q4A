@@ -163,6 +163,10 @@ class Config:
             'decision_margin_relative': 0.1,
             'decision_temperature': 0.0, # > 0: softmax among the options within the decision margin of the best
             'max_pass_candidates': 3, # receivers evaluated in detail (chosen by the cheap estimate)
+            # logistic models fitted to 74k logged CPU passes/shots (900 headless games, rules / exploratory / value play, charged throws);
+            # features: time margin (clipped to +-3 game s), distance (m), sin(angle to the hoop line) / catch time (game s), strength ratio, plus derived terms
+            'shot_success_model': {"intercept": 1.45611, "time_margin": 7.99642, "distance": 0.20816, "sin_angle": -5.1274, "time_margin_sq": 0.06604, "time_margin_pos": -8.46336, "margin_capped": -0.99466, "distance_sq": 0.00061, "time_margin_x_distance": 0.00347, "sin_angle_sq": 3.08142, "time_margin_x_sin_angle": 0.74283},
+            'pass_completion_model': {"intercept": 6.81163, "time_margin": 2.7471, "distance": 0.03301, "catch_time": -0.82446, "strength_ratio": -16.32672, "time_margin_sq": -0.65543, "time_margin_pos": 1.93795, "margin_capped": 0.72382, "distance_sq": 0.00487, "time_margin_x_distance": 0.04753, "catch_time_sq": 0.03035, "time_margin_x_catch_time": 0.07193, "strength_ratio_sq": 12.3361, "time_margin_x_strength_ratio": -3.12282},
         },
         'diamond_attack_kwargs': {
             'chaser_keeper': {

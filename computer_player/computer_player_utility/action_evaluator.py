@@ -42,8 +42,11 @@ class ActionEvaluator:
 
     All values estimate the probability that the option leads to a goal soon.
 
-    Shot at hoop h:  S = (1 - risk(shot time margin, tau_shot)) * sin(angle to the hoop line)
+    Shot at hoop h:  S = (1 - risk(shot time margin, tau_shot)) * sin(angle to the hoop line), or with
+        `shot_success_model` a logistic model fitted to logged shot outcomes (goal or not)
         (`min_shot_angle` and the shooting range of the ScoreAttempter apply).
+    Pass completion: 1 - risk(pass time margin, tau_pass), or with `pass_completion_model` a logistic model
+        fitted to logged pass outcomes (caught by the own team or not).
 
     Value of having the volleyball at a position, V, in two tiers by the distance to the closest
     opponent hoop:
@@ -96,6 +99,9 @@ class ActionEvaluator:
                  decision_margin_relative: float = 0.1,
                  decision_temperature: float = 0.0, # > 0: softmax among the options within decision_margin of the best
                  max_pass_candidates: int = 3, # receivers evaluated in detail, chosen by an optimistic cheap value
+                 shot_success_model: Optional[Dict[str, float]] = None, # fitted logistic coefficients on time_margin, distance, sin_angle (+ derived terms); None: (1 - risk(margin)) * sin(angle)
+                 pass_completion_model: Optional[Dict[str, float]] = None, # fitted logistic coefficients on time_margin, distance, catch_time, strength_ratio (+ derived terms); None: 1 - risk(margin)
+                 time_margin_clip: float = 3.0, # game seconds, time margins are clipped to +- this for the fitted models
                  passing_squared_max_distance: float = 400,
                  passing_threshold: float = 0.95, # beam model only: pass completion is 1 above, 0 below this score
                  profile_call: Optional[Callable] = None,
@@ -125,6 +131,9 @@ class ActionEvaluator:
         self.decision_margin_relative = decision_margin_relative
         self.decision_temperature = decision_temperature
         self.max_pass_candidates = max_pass_candidates
+        self.shot_success_model = shot_success_model
+        self.pass_completion_model = pass_completion_model
+        self.time_margin_clip = time_margin_clip
         self.passing_squared_max_distance = passing_squared_max_distance
         self.passing_threshold = passing_threshold
         self.shooting_range = math.sqrt(score_attempter.score_squared_max_distance) - 0.05
@@ -199,7 +208,7 @@ class ActionEvaluator:
             pass_option = self.pass_evaluator.evaluate(volleyball, carrier, receiver, roster.own_hoops, roster.opponent_chaser_keeper_ids)
             if pass_option is None:
                 continue
-            completion = self._pass_completion(pass_option)
+            completion = self._pass_completion(pass_option, volleyball, carrier)
             if completion <= 0:
                 continue
             catch_position = pass_option.predicted_receiver_position
@@ -230,11 +239,47 @@ class ActionEvaluator:
         """Value of keeping the volleyball: the baseline goal probability of a possession plus the position's upside."""
         return self.possession_value + (1 - self.possession_value) * position_value
 
-    def _pass_completion(self, pass_option: PassOption) -> float:
-        """Probability that the pass reaches the receiver."""
+    def _pass_completion(self, pass_option: PassOption, volleyball: VolleyBall, passer: Player) -> float:
+        """Probability that the pass reaches the receiver: the fitted model if given, else the logistic of the time margin."""
         if pass_option.time_margin is not None:
+            if self.pass_completion_model is not None:
+                target = pass_option.predicted_receiver_position
+                return self._fitted_probability(self.pass_completion_model, {
+                    'time_margin': pass_option.time_margin,
+                    'distance': math.hypot(target.x - volleyball.position.x, target.y - volleyball.position.y),
+                    'catch_time': pass_option.catch_time or 0.0,
+                    'strength_ratio': pass_option.strength_ratio,
+                })
             return 1 - logistic_risk(pass_option.time_margin, self.pass_risk_time_scale)
         return 1.0 if pass_option.interception_score > self.passing_threshold else 0.0
+
+    def _fitted_probability(self, model: Dict[str, float], base: Dict[str, float]) -> float:
+        """
+        Logistic model sigmoid(intercept + sum of coefficient * feature). Features are the `base` values
+        (time margin clipped to +-`time_margin_clip`) and derived terms named by the model:
+        '<name>_sq' (square), 'time_margin_x_<name>' (product with the time margin),
+        'time_margin_pos' (positive part of the time margin), 'margin_capped' (1 if the margin is at the clip).
+        """
+        base = dict(base)
+        margin = base['time_margin'] = min(self.time_margin_clip, max(-self.time_margin_clip, base['time_margin']))
+        z = 0.0
+        for name, coefficient in model.items():
+            if name == 'intercept':
+                value = 1.0
+            elif name in base:
+                value = base[name]
+            elif name == 'time_margin_pos':
+                value = max(margin, 0.0)
+            elif name == 'margin_capped':
+                value = 1.0 if margin >= self.time_margin_clip - 1e-9 else 0.0
+            elif name.endswith('_sq'):
+                value = base[name[:-3]] ** 2
+            elif name.startswith('time_margin_x_'):
+                value = margin * base[name[len('time_margin_x_'):]]
+            else:
+                raise ValueError(f"unknown feature {name} in a fitted model")
+            z += coefficient * value
+        return 1 - logistic_risk(z, 1.0)
 
     def _lose_probability(self, volleyball: VolleyBall, carrier: Player, roster: TeamRoster) -> float:
         """Probability of losing the volleyball while holding it: dodgeballs, stalled volleyball and delay of game."""
@@ -269,7 +314,13 @@ class ActionEvaluator:
                 continue
             score = scores[hoop.id]
             dx, dy = hoop.position.x - position.x, hoop.position.y - position.y
-            sin_angle = abs(dx) / math.hypot(dx, dy)
+            distance = math.hypot(dx, dy)
+            sin_angle = abs(dx) / distance
+            if attempter.use_time_margin and self.shot_success_model is not None:
+                values.append((hoop, score, self._fitted_probability(self.shot_success_model, {
+                    'time_margin': score, 'distance': distance, 'sin_angle': sin_angle,
+                })))
+                continue
             if attempter.use_time_margin:
                 success = 1 - logistic_risk(score, attempter.shot_risk_time_scale)
             else:
