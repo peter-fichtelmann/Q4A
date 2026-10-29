@@ -149,6 +149,8 @@ class Config:
             'pass_risk_time_scale': 0.25, # game seconds, logistic scale turning the pass time margin into an interception risk
             'reach_risk_time_scale': 0.5, # game seconds, logistic scale of the race to the shooting spot against the defenders
             'approach_decay': 8.0, # m, value decay with the distance still to run to the shooting spot
+            'far_shot_success': 0.7, # assumed shot success from the shooting spot for positions beyond near_hoop_distance (cheap estimate)
+            'tier_blend_width': 2.0, # m, near and far values are blended linearly over this band around near_hoop_distance (continuous value)
             'pressure_distance': 4.0, # m, an opponent chaser/keeper closer than this lowers the value
             'held_risk_distance': 5.0, # m, a loaded opponent beater this far away means dodgeball risk 0.5 (closer more)
             'held_risk_width': 1.0, # m, logistic width of the held dodgeball risk
@@ -156,7 +158,9 @@ class Config:
             'flying_risk_undodgeable': 1.0, # dodgeball risk of a flying dodgeball the player cannot sidestep in time
             'flying_risk_dodgeable': 0.3, # dodgeball risk of a flying dodgeball the player can sidestep
             'hold_discount': 0.9, # holding the volleyball is worth this fraction of the carrier's position value
-            'decision_margin': 0.05, # a shot or pass must beat holding by this much
+            'possession_value': 0.45, # goal probability of keeping the volleyball anywhere (about the measured goals per possession); a lost pass or missed shot ends it
+            'decision_margin': 0.005, # a shot or pass must beat hold * (1 + decision_margin_relative) + decision_margin
+            'decision_margin_relative': 0.1,
             'decision_temperature': 0.0, # > 0: softmax among the options within the decision margin of the best
             'max_pass_candidates': 3, # receivers evaluated in detail (chosen by the cheap estimate)
         },
