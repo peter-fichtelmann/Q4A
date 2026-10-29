@@ -99,9 +99,11 @@ class ProcessActionLogic:
 
     @staticmethod
     def min_strength_ratio(player: Player) -> float:
-        """Strength of an uncharged throw: the ball leaves at the player's max speed."""
-        throw_velocity = ProcessActionLogic.effective_throw_velocity(player)
-        return min(1.0, player.max_speed / throw_velocity) if throw_velocity > 0 else 1.0
+        """
+        Strength of an uncharged throw: the ball leaves at the player's max speed (tackled players: half
+        of it, as the strength scales the effective throw velocity, which is halved as well).
+        """
+        return min(1.0, player.max_speed / player.throw_velocity) if player.throw_velocity > 0 else 1.0
 
     @staticmethod
     def charged_strength_ratio(player: Player, ticks: int, full_ticks: int) -> float:

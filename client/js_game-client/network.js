@@ -207,7 +207,15 @@ export function handleMessage(message) {
         ? null
         : (State.playersOrder[incoming.controlled_index] || State.localPlayerId);
     }
-    if (incoming.throw_charge_ticks !== undefined) State.throwCharge.ticks = incoming.throw_charge_ticks;
+    if (incoming.throw_charge_ticks !== undefined) {
+      const charge = State.throwCharge;
+      if (charge.ticks > 0 && incoming.throw_charge_ticks === 0) {
+        // the charge ended (thrown): keep showing its bars for a while
+        charge.endedTicks = charge.ticks;
+        charge.endedAt = performance.now();
+      }
+      charge.ticks = incoming.throw_charge_ticks;
+    }
     // Right after the merge, before the hooks below: if one of them throws, a stale
     // time would make the renderer extrapolate the fresh positions further and further.
     rememberServerUpdateTime();

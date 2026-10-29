@@ -140,14 +140,28 @@ function drawClaimLine(ctx, gs, worldToScreen, xScale, color) {
 }
 
 // Light blue bars along the bottom of the screen, filled from left to right with each tick the steered
-// player charges a throw; all filled = full strength.
+// player charges a throw; all filled = full strength. After the throw they stay for THROW_BARS_HOLD_MS
+// and then fade out over THROW_BARS_FADE_MS.
+const THROW_BARS_HOLD_MS = 500;
+const THROW_BARS_FADE_MS = 500;
+
 function drawThrowChargeBars(ctx) {
-  const { ticks, fullTicks } = State.throwCharge;
+  const { fullTicks, endedTicks, endedAt } = State.throwCharge;
+  let ticks = State.throwCharge.ticks;
+  let alpha = 1;
+  if (!ticks && endedAt !== null) {
+    const elapsed = performance.now() - endedAt;
+    if (elapsed < THROW_BARS_HOLD_MS + THROW_BARS_FADE_MS) {
+      ticks = endedTicks;
+      alpha = Math.min(1, 1 - (elapsed - THROW_BARS_HOLD_MS) / THROW_BARS_FADE_MS);
+    }
+  }
   if (!ticks || !fullTicks) return;
   const margin = 8, gap = 4, height = 10;
   const width = (Config.CANVAS_WIDTH - 2 * margin - (fullTicks - 1) * gap) / fullTicks;
   const y = Config.CANVAS_HEIGHT - margin - height;
   ctx.save();
+  ctx.globalAlpha = alpha;
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(173, 216, 255, 0.9)';
   for (let i = 0; i < fullTicks; i++) {
